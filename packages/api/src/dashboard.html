@@ -410,12 +410,19 @@
         const json = await res.json();
         const select = document.getElementById('global-colegio-select');
         if (json.data && json.data.length > 0) {
+          const currentId = String(colegioFiltroActual);
           select.innerHTML = `
             <option value="all">TODOS LOS COLEGIOS</option>
-            ${json.data.map(c => `<option value="${c.id}" ${c.nombre === 'CAMBRIDGE' ? 'selected' : ''}>Colegio ${c.nombre}</option>`).join('')}
+            ${json.data.map(c => `<option value="${c.id}">Colegio ${c.nombre}</option>`).join('')}
           `;
-          const selectedOpt = select.options[select.selectedIndex];
-          colegioFiltroActual = selectedOpt ? selectedOpt.value : 'all';
+          
+          const hasCurrentOption = Array.from(select.options).some(opt => opt.value === currentId);
+          if (hasCurrentOption && currentId !== 'all') {
+            select.value = currentId;
+          } else {
+            select.value = json.data[0].id;
+            colegioFiltroActual = String(json.data[0].id);
+          }
         }
       } catch (e) { console.error(e); }
     }
@@ -425,10 +432,55 @@
       cargarResumen();
       cargarInventario();
       cargarMatrizConsolidada();
+      
       const tabAdmin = document.getElementById('tab-admin-colegio');
       if (tabAdmin && tabAdmin.classList.contains('active')) {
+        if (val === 'all') {
+          alert('⚠️ "TODOS LOS COLEGIOS" es una vista agrupada global. Se seleccionará automáticamente un Colegio específico para la configuración.');
+          const select = document.getElementById('global-colegio-select');
+          for (let opt of select.options) {
+            if (opt.value && opt.value !== 'all') {
+              colegioFiltroActual = opt.value;
+              select.value = opt.value;
+              break;
+            }
+          }
+        }
         cargarConfigAdminColegio();
       }
+    }
+
+    async function cargarConfigAdminColegio() {
+      const select = document.getElementById('global-colegio-select');
+      
+      if (!colegioFiltroActual || colegioFiltroActual === 'all') {
+        let foundRealSchool = null;
+        for (let opt of select.options) {
+          if (opt.value && opt.value !== 'all') {
+            foundRealSchool = opt.value;
+            select.value = opt.value;
+            break;
+          }
+        }
+        if (foundRealSchool) {
+          colegioFiltroActual = foundRealSchool;
+        } else {
+          alert('⚠️ Selecciona un colegio específico para abrir la configuración.');
+          return;
+        }
+      }
+
+      try {
+        const res = await fetch('/api/colegios/' + colegioFiltroActual + '/config');
+        const json = await res.json();
+        if (json.success) {
+          adminConfigData = json;
+          renderAdminTelas();
+          renderAdminPrendas();
+          renderAdminTallas();
+          renderAdminPerfilColegio();
+        }
+      } catch (e) { console.error('Error al cargar config admin:', e); }
     }
 
     function fmtNum(val) {
