@@ -270,12 +270,12 @@
             </div>
 
             <div style="max-height: 540px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
-              <table class="table-compact-auto" style="width:100%;">
+              <table class="table-compact-auto" style="width:100%; min-width:650px;">
                 <thead>
                   <tr>
-                    <th style="width:70px; text-align:center;">Orden</th>
-                    <th style="text-align:left;">Nombre / Descripción de la Tela</th>
-                    <th style="width:70px; text-align:center;">Activo</th>
+                    <th style="width:80px; text-align:center;">Orden</th>
+                    <th style="text-align:left; padding-left:0.75rem; font-size:0.85rem;">Nombre / Descripción de la Tela</th>
+                    <th style="width:80px; text-align:center;">Activo</th>
                   </tr>
                 </thead>
                 <tbody id="tb-admin-telas-body">
@@ -1820,8 +1820,8 @@
             <button class="btn-move" onclick="moverTelaUp(${idx})" ${idx === 0 ? 'disabled style="opacity:0.3;"' : ''}>▲</button>
             <button class="btn-move" onclick="moverTelaDown(${idx})" ${idx === telas.length - 1 ? 'disabled style="opacity:0.3;"' : ''}>▼</button>
           </td>
-          <td>
-            <input type="text" id="at-desc-${t.id}" class="cell-editable-sm" style="width:100%; font-weight:600; color:#f8fafc;" value="${t.descripcion}">
+          <td style="padding: 0.35rem 0.5rem;">
+            <input type="text" id="at-desc-${t.id}" class="cell-editable-sm" style="width:100%; font-weight:600; font-size:0.92rem; padding:0.4rem 0.65rem; color:#f8fafc;" value="${t.descripcion}">
           </td>
           <td style="text-align:center;">
             <input type="checkbox" id="at-act-${t.id}" ${t.activo !== false ? 'checked' : ''}>
