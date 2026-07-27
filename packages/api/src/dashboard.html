@@ -778,7 +778,7 @@
       const tbody = document.getElementById('tb-inputs-body');
       const tableElem = document.getElementById('tb-inputs-table');
 
-      tableElem.className = (concept === 'Tela' || concept === 'ManoDeObra' || concept === 'FijVar' || (concept === 'Acc' && currentAccSubView === 'aux')) ? 'table-compact-auto' : (concept === 'PesoMatPrima' ? 'table-consolidada-fixed' : '');
+      tableElem.className = (concept === 'Tela' || concept === 'ManoDeObra' || concept === 'FijVar' || concept === 'DesgloseProducto' || (concept === 'Acc' && currentAccSubView === 'aux')) ? 'table-compact-auto' : (concept === 'PesoMatPrima' ? 'table-consolidada-fixed' : '');
 
       // Hide fijos split wrapper when not on fijosXprenda
       const fijosWrapper = document.getElementById('fijos-split-wrapper');
@@ -992,42 +992,53 @@
         `;
       } else if (concept === 'DesgloseProducto') {
         tableElem.className = 'table-compact-auto';
-        const res = await fetch('/api/inputs/desglose-inteligente-producto?colegioId=' + colegioFiltroActual);
-        const json = await res.json();
+        try {
+          const res = await fetch('/api/inputs/desglose-inteligente-producto?colegioId=' + colegioFiltroActual);
+          const json = await res.json();
 
-        thead.innerHTML = `
-          <tr>
-            <th style="width:50px; text-align:center;">ITEM</th>
-            <th style="text-align:left; min-width:200px;">DETALLE DE LA PRENDA</th>
-            <th style="text-align:left; background:#1e293b; color:#38bdf8;">🧵 TELA ASIGNADA</th>
-            <th style="text-align:right; background:#1e293b; color:#38bdf8; width:110px;">COSTO TELA</th>
-            <th style="text-align:left; background:#0f172a; color:#34d399; min-width:320px;">📦 ACCESORIOS UTILIZADOS (FILTRADO INTELIGENTE)</th>
-            <th style="text-align:right; background:#0f172a; color:#34d399; width:110px;">COSTO ACC.</th>
-            <th style="text-align:right; color:#fbbf24; width:110px;">MANO DE OBRA</th>
-            <th style="text-align:right; color:#a78bfa; width:110px;">FIJOS & INDIR.</th>
-            <th style="text-align:right; background:#059669; color:#ffffff; font-weight:800; width:140px;">COSTO TOTAL PRODUCCIÓN</th>
-          </tr>
-        `;
-
-        tbody.innerHTML = json.data.map(p => {
-          const accChips = p.accesoriosIntervinientes.length > 0
-            ? p.accesoriosIntervinientes.map(a => `<span class="badge-tag" style="background:#10b98118; color:#34d399; border-color:#05966933; font-size:0.75rem; padding:0.15rem 0.45rem; margin:2px; display:inline-block;" title="Costo Unitario: Bs. ${a.costoUnitarioBs.toFixed(3)} / ${a.unidadCompra}">• ${a.cantidad}× ${a.nombre} (Bs. ${a.costoTotalBs.toFixed(2)})</span>`).join('')
-            : '<span style="color:#64748b; font-size:0.78rem; font-style:italic;">(Sin accesorios)</span>';
-
-          return `
+          thead.innerHTML = `
             <tr>
-              <td style="text-align:center;"><span class="col-item">${p.itemNumero}</span></td>
-              <td title="${p.descripcion}"><strong>${p.descripcion}</strong></td>
-              <td style="background:#1e293b11;"><strong style="color:#38bdf8;">${p.tela.nombre}</strong></td>
-              <td style="text-align:right; background:#1e293b11;"><strong style="color:#38bdf8;">Bs. ${p.tela.costoTelaBs.toFixed(2)}</strong></td>
-              <td style="background:#0f172a11;">${accChips}</td>
-              <td style="text-align:right; background:#0f172a11;"><strong style="color:#34d399;">Bs. ${p.subtotalAccesoriosBs.toFixed(2)}</strong></td>
-              <td style="text-align:right;"><strong style="color:#fbbf24;">Bs. ${p.manoDeObra.totalManoObraBs.toFixed(2)}</strong></td>
-              <td style="text-align:right;"><strong style="color:#a78bfa;">Bs. ${p.fijosEIndirectos.totalFijosBs.toFixed(2)}</strong></td>
-              <td style="text-align:right; background:#05966915;"><strong style="font-size:0.98rem; color:#34d399; font-weight:800;">Bs. ${p.costoTotalProduccionBs.toFixed(2)}</strong></td>
+              <th style="width:50px; text-align:center;">ITEM</th>
+              <th style="text-align:left; min-width:200px;">DETALLE DE LA PRENDA</th>
+              <th style="text-align:left; background:#1e293b; color:#38bdf8;">🧵 TELA ASIGNADA</th>
+              <th style="text-align:right; background:#1e293b; color:#38bdf8; width:110px;">COSTO TELA</th>
+              <th style="text-align:left; background:#0f172a; color:#34d399; min-width:320px;">📦 ACCESORIOS UTILIZADOS (FILTRADO INTELIGENTE)</th>
+              <th style="text-align:right; background:#0f172a; color:#34d399; width:110px;">COSTO ACC.</th>
+              <th style="text-align:right; color:#fbbf24; width:110px;">MANO DE OBRA</th>
+              <th style="text-align:right; color:#a78bfa; width:110px;">FIJOS & INDIR.</th>
+              <th style="text-align:right; background:#059669; color:#ffffff; font-weight:800; width:140px;">COSTO TOTAL PRODUCCIÓN</th>
             </tr>
           `;
-        }).join('');
+
+          tbody.innerHTML = (json.data || []).map(p => {
+            const accChips = (p.accesoriosIntervinientes && p.accesoriosIntervinientes.length > 0)
+              ? p.accesoriosIntervinientes.map(a => `<span class="badge-tag" style="background:#10b98118; color:#34d399; border-color:#05966933; font-size:0.75rem; padding:0.15rem 0.45rem; margin:2px; display:inline-block;" title="Costo Unitario: Bs. ${(a.costoUnitarioBs || 0).toFixed(3)} / ${a.unidadCompra}">• ${a.cantidad}× ${a.nombre} (Bs. ${(a.costoTotalBs || 0).toFixed(2)})</span>`).join('')
+              : '<span style="color:#64748b; font-size:0.78rem; font-style:italic;">(Sin accesorios)</span>';
+
+            const moCost = (p.manoDeObra && typeof p.manoDeObra.totalManoObraBs === 'number') ? p.manoDeObra.totalManoObraBs : 15.0;
+            const fijosCost = (p.fijosEIndirectos && typeof p.fijosEIndirectos.totalFijosBs === 'number') ? p.fijosEIndirectos.totalFijosBs : 1.5;
+            const telaCost = (p.tela && typeof p.tela.costoTelaBs === 'number') ? p.tela.costoTelaBs : 0.0;
+            const accCost = typeof p.subtotalAccesoriosBs === 'number' ? p.subtotalAccesoriosBs : 0.0;
+            const totalProd = (typeof p.costoTotalProduccionBs === 'number' && !isNaN(p.costoTotalProduccionBs)) ? p.costoTotalProduccionBs : (telaCost + accCost + moCost + fijosCost);
+
+            return `
+              <tr>
+                <td style="text-align:center;"><span class="col-item">${p.itemNumero}</span></td>
+                <td title="${p.descripcion}"><strong>${p.descripcion}</strong></td>
+                <td style="background:#1e293b11;"><strong style="color:#38bdf8;">${p.tela ? p.tela.nombre : '-'}</strong></td>
+                <td style="text-align:right; background:#1e293b11;"><strong style="color:#38bdf8;">Bs. ${telaCost.toFixed(2)}</strong></td>
+                <td style="background:#0f172a11;">${accChips}</td>
+                <td style="text-align:right; background:#0f172a11;"><strong style="color:#34d399;">Bs. ${accCost.toFixed(2)}</strong></td>
+                <td style="text-align:right;"><strong style="color:#fbbf24;">Bs. ${moCost.toFixed(2)}</strong></td>
+                <td style="text-align:right;"><strong style="color:#a78bfa;">Bs. ${fijosCost.toFixed(2)}</strong></td>
+                <td style="text-align:right; background:#05966915;"><strong style="font-size:0.98rem; color:#34d399; font-weight:800;">Bs. ${totalProd.toFixed(2)}</strong></td>
+              </tr>
+            `;
+          }).join('');
+        } catch (err) {
+          console.error(err);
+          tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:2rem; color:var(--danger);">Error al cargar desglose por producto</td></tr>';
+        }
       } else if (concept === 'Acc') {
         if (currentAccSubView === 'aux') {
           const res = await fetch('/api/inputs/tabla-auxiliar-accesorios?colegioId=' + colegioFiltroActual);

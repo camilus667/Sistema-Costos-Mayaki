@@ -696,6 +696,13 @@ api.put('/peso-mat-prima', async (c) => {
       });
       saveDbToDisk();
     }
+    return c.json({ success: true, message: 'Peso de materia prima actualizado' });
+  } catch (e) {
+    console.error('Error actualizando peso materia prima:', e);
+    return c.json({ success: false, error: String(e) }, 500);
+  }
+});
+
 // GET /api/inputs/desglose-inteligente-producto - Matriz inteligente de costos involucrados por producto (Solo Tela asignada + Accesorios intervinientes > 0 + M.O. + Fijos)
 api.get('/desglose-inteligente-producto', async (c) => {
   const db = (c as any).db;
@@ -808,8 +815,8 @@ api.get('/desglose-inteligente-producto', async (c) => {
 
     const moObj = moList.find((m: any) => m.productoId === p.id);
     const factorComp = p.factorComplejidad || 1;
-    const costoCorte = moObj ? moObj.costoCorte : 3.0;
-    const costoConfeccion = moObj ? moObj.costoConfeccion : 12.0;
+    const costoCorte = (moObj && typeof moObj.costoCorte === 'number' && !isNaN(moObj.costoCorte)) ? Number(moObj.costoCorte) : 3.0;
+    const costoConfeccion = (moObj && typeof moObj.costoConfeccion === 'number' && !isNaN(moObj.costoConfeccion)) ? Number(moObj.costoConfeccion) : 12.0;
     const totalManoObraBs = parseFloat(((costoCorte + costoConfeccion) * factorComp).toFixed(2));
 
     const totalFijosBs = parseFloat(costoFijoPrenda.toFixed(2));
