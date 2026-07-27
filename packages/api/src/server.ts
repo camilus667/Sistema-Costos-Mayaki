@@ -47,6 +47,20 @@ app.get('/styles.css', async (c) => {
   }
 });
 
+// Servir Favicon
+const faviconSvgPath = path.join(__dirname, 'public', 'favicon.svg');
+app.get('/favicon.svg', async (c) => {
+  try {
+    const fs = await import('fs/promises');
+    const svg = await fs.readFile(faviconSvgPath, 'utf8');
+    c.header('Content-Type', 'image/svg+xml');
+    return c.body(svg);
+  } catch (err) {
+    return c.text('Not found', 404);
+  }
+});
+app.get('/favicon.ico', (c) => c.redirect('/favicon.svg'));
+
 // Dashboard HTML en la raíz y /dashboard
 app.get('/', async (c) => {
   try {

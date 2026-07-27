@@ -1,14 +1,18 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistema de Gestión de Uniformes Escolares - Cambridge & Multi-Colegio</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">  <link rel="stylesheet" href="/styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/styles.css">
 </head>
-</head>
+
 <body>
 
   <header>
@@ -18,13 +22,14 @@
         <p>Gestión Multi-Colegio & Motor de Costos de Uniformes</p>
       </div>
     </div>
-    
+
     <div class="header-controls">
       <label style="font-size: 0.8rem; color: var(--text-muted);">Colegio Activo:</label>
       <select id="global-colegio-select" class="colegio-selector" onchange="cambiarColegioGlobal(this.value)">
         <option value="all">TODOS LOS COLEGIOS</option>
       </select>
-      <button class="btn-icon-admin" onclick="switchTab('admin-colegio')" title="Centro de Configuración y Administración del Colegio">⚙️ Configuración</button>
+      <button class="btn-icon-admin" onclick="switchTab('admin-colegio')"
+        title="Centro de Configuración y Administración del Colegio">⚙️ Configuración</button>
       <div class="status-badge">
         <div class="status-dot"></div>
         <span id="env-status">sql.js / D1 Activo</span>
@@ -45,7 +50,7 @@
 
     <!-- TAB 1: RESUMEN GENERAL AVANZADO (KPIS ESTANDARIZADOS Y CLAROS) -->
     <div id="tab-resumen" class="tab-content active">
-      
+
       <!-- FILA DE KPIS EJECUTIVOS FINANCIEROS -->
       <div class="grid-stats">
         <div class="stat-card">
@@ -71,7 +76,8 @@
         <div class="stat-card stat-card-success">
           <span class="stat-title">GANANCIA BRUTA PROYECTADA</span>
           <span class="stat-value" id="st-ganancia-kpi">Bs. 0.00</span>
-          <span class="stat-subtext" id="st-ganancia-sub" style="color:var(--success); font-weight:600;">+0.0% ganancia sobre inversión</span>
+          <span class="stat-subtext" id="st-ganancia-sub" style="color:var(--success); font-weight:600;">+0.0% ganancia
+            sobre inversión</span>
         </div>
       </div>
 
@@ -95,7 +101,9 @@
               </tr>
             </thead>
             <tbody id="tb-resumen-prendas">
-              <tr><td colspan="8" style="text-align:center; padding: 2rem;">Cargando resumen ejecutivo de prendas...</td></tr>
+              <tr>
+                <td colspan="8" style="text-align:center; padding: 2rem;">Cargando resumen ejecutivo de prendas...</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -105,30 +113,40 @@
     <!-- TAB 2: COSTOS DE PRODUCCION -->
     <div id="tab-inputs-excel" class="tab-content">
       <div class="panel">
-        <div style="display: flex; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1.25rem;">
-          <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0; white-space: nowrap;">Costos de Producción</h2>
+        <div
+          style="display: flex; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1.25rem;">
+          <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0; white-space: nowrap;">Costos de
+            Producción</h2>
           <div class="excel-tabs-bar" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">
             <button class="excel-tab active" onclick="switchInputConcept('Tela', this)">Tela</button>
             <button class="excel-tab" onclick="switchInputConcept('PesoMatPrima', this)">PesoMatPrima</button>
             <button class="excel-tab" onclick="switchInputConcept('Acc', this)">Acc (Tabla Auxiliar & Uso)</button>
             <button class="excel-tab" onclick="switchInputConcept('ManoDeObra', this)">ManoDeObra</button>
-            <button class="excel-tab" onclick="switchInputConcept('fijosXprenda', this)">fijosXprenda & Indirectos</button>
+            <button class="excel-tab" onclick="switchInputConcept('fijosXprenda', this)">fijosXprenda &
+              Indirectos</button>
           </div>
         </div>
 
-        <div id="acc-view-selector" style="display:none; margin-bottom:1rem; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+        <div id="acc-view-selector"
+          style="display:none; margin-bottom:1rem; gap:0.5rem; align-items:center; flex-wrap:wrap;">
           <span style="font-size:0.78rem; color:var(--text-muted); font-weight:600;">Vista Hoja Acc:</span>
-          <button class="subview-btn active" id="btn-acc-aux" onclick="toggleAccSubView('aux')">1. Tabla Auxiliar (Costos)</button>
-          <button class="subview-btn" id="btn-acc-matriz" onclick="toggleAccSubView('matriz')">2. Matriz por Prenda (Uso)</button>
+          <button class="subview-btn active" id="btn-acc-aux" onclick="toggleAccSubView('aux')">1. Tabla Auxiliar
+            (Costos)</button>
+          <button class="subview-btn" id="btn-acc-matriz" onclick="toggleAccSubView('matriz')">2. Matriz por Prenda
+            (Uso)</button>
         </div>
 
         <div class="table-container">
           <table id="tb-inputs-table">
             <thead id="th-inputs-head">
-              <tr><th>Cargando hoja de datos fijos...</th></tr>
+              <tr>
+                <th>Cargando hoja de datos fijos...</th>
+              </tr>
             </thead>
             <tbody id="tb-inputs-body">
-              <tr><td style="text-align:center; padding: 2rem;">Selecciona una hoja de datos fijos...</td></tr>
+              <tr>
+                <td style="text-align:center; padding: 2rem;">Selecciona una hoja de datos fijos...</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -139,8 +157,10 @@
     <!-- TAB 3: MATRICES CONSOLIDADAS -->
     <div id="tab-matriz-excel" class="tab-content">
       <div class="panel">
-        <div style="display: flex; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1.25rem;">
-          <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0; white-space: nowrap;">Matrices Consolidadas</h2>
+        <div
+          style="display: flex; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1.25rem;">
+          <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0; white-space: nowrap;">Matrices
+            Consolidadas</h2>
           <div class="excel-tabs-bar" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">
             <button class="excel-tab active" onclick="switchExcelConcept('costoBruto', this)">CostoBruto</button>
             <button class="excel-tab" onclick="switchExcelConcept('precioVenta', this)">PrecioDeVenta</button>
@@ -165,7 +185,9 @@
               </tr>
             </thead>
             <tbody id="tb-consolidada-body">
-              <tr><td colspan="19" style="text-align:center; padding: 2rem;">Cargando matriz consolidada...</td></tr>
+              <tr>
+                <td colspan="19" style="text-align:center; padding: 2rem;">Cargando matriz consolidada...</td>
+              </tr>
             </tbody>
             <tfoot id="tf-consolidada-foot">
             </tfoot>
@@ -177,11 +199,15 @@
     <!-- TAB 4: MATRIZ POR PRENDA INDIVIDUAL -->
     <div id="tab-matriz-tallas" class="tab-content">
       <div class="panel">
-        <div style="display: flex; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1.25rem;">
-          <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0; white-space: nowrap;">Matriz de Costos por Prenda</h2>
+        <div
+          style="display: flex; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1.25rem;">
+          <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0; white-space: nowrap;">Matriz de
+            Costos por Prenda</h2>
           <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <label for="select-matriz-producto" style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); white-space: nowrap;">Prenda:</label>
-            <select id="select-matriz-producto" class="colegio-selector" style="min-width: 280px;" onchange="generarMatrizPrenda()">
+            <label for="select-matriz-producto"
+              style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); white-space: nowrap;">Prenda:</label>
+            <select id="select-matriz-producto" class="colegio-selector" style="min-width: 280px;"
+              onchange="generarMatrizPrenda()">
               <option value="">Cargando lista de uniformes...</option>
             </select>
           </div>
@@ -222,7 +248,9 @@
               </tr>
             </thead>
             <tbody id="tb-inventario">
-              <tr><td colspan="7" style="text-align:center; padding: 1.5rem;">Cargando inventario con stock físico...</td></tr>
+              <tr>
+                <td colspan="7" style="text-align:center; padding: 1.5rem;">Cargando inventario con stock físico...</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -232,17 +260,23 @@
     <!-- TAB 6: CENTRO DE CONFIGURACIÓN Y ADMINISTRACIÓN DEL COLEGIO (PÁGINA INDEPENDIENTE) -->
     <div id="tab-admin-colegio" class="tab-content">
       <div class="panel">
-        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #334155; padding-bottom: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+        <div
+          style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #334155; padding-bottom: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
           <div style="display:flex; align-items:center; gap:0.75rem;">
-            <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0;">⚙️ Configuración y Administración del Colegio</h2>
-            <span id="modal-colegio-name-badge" class="badge-tag" style="background:#10b98122; color:#34d399; border-color:#05966944; font-size:0.85rem; padding:0.25rem 0.65rem;">CAMBRIDGE</span>
+            <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0;">⚙️ Configuración</h2>
+            <span id="modal-colegio-name-badge" class="badge-tag"
+              style="background:#10b98122; color:#34d399; border-color:#05966944; font-size:0.85rem; padding:0.25rem 0.65rem;">CAMBRIDGE</span>
           </div>
 
           <div class="admin-tabs-bar" style="border-bottom:none; margin:0; padding:0;">
-            <button class="admin-tab-btn active" id="btn-atab-telas" onclick="switchAdminTab('telas')">🧵 Telas del Colegio</button>
-            <button class="admin-tab-btn" id="btn-atab-prendas" onclick="switchAdminTab('prendas')">👔 Prendas & Reordenamiento</button>
-            <button class="admin-tab-btn" id="btn-atab-tallas" onclick="switchAdminTab('tallas')">📏 Tallas Habilitadas</button>
-            <button class="admin-tab-btn" id="btn-atab-colegios" onclick="switchAdminTab('colegios')">🏛️ Perfil & Nuevos Colegios</button>
+            <button class="admin-tab-btn active" id="btn-atab-telas" onclick="switchAdminTab('telas')">🧵 Telas del
+              Colegio</button>
+            <button class="admin-tab-btn" id="btn-atab-prendas" onclick="switchAdminTab('prendas')">👔 Prendas &
+              Reordenamiento</button>
+            <button class="admin-tab-btn" id="btn-atab-tallas" onclick="switchAdminTab('tallas')">📏 Tallas
+              Habilitadas</button>
+            <button class="admin-tab-btn" id="btn-atab-colegios" onclick="switchAdminTab('colegios')">🏛️ Perfil &
+              Nuevos Colegios</button>
           </div>
         </div>
 
@@ -250,19 +284,26 @@
           <!-- SUBTAB 1: TELAS DEL COLEGIO -->
           <div id="admin-sec-telas">
             <div style="display:flex; align-items:center; justify-content:flex-end; margin-bottom:0.75rem; gap:0.6rem;">
-              <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.45rem 0.85rem;" onclick="mostrarFormNuevaTela()">+ Dar de Alta Nueva Tela</button>
-              <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; font-size:0.78rem; padding:0.45rem 0.95rem;" onclick="guardarConfigTelasAdmin()">💾 Guardar Orden y Cambios de Telas</button>
+              <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.45rem 0.85rem;"
+                onclick="mostrarFormNuevaTela()">+ Dar de Alta Nueva Tela</button>
+              <button class="btn"
+                style="background:#38bdf8; color:#0f172a; font-weight:800; font-size:0.78rem; padding:0.45rem 0.95rem;"
+                onclick="guardarConfigTelasAdmin()">💾 Guardar</button>
             </div>
 
-            <div id="form-nueva-tela-container" style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
-              <h4 style="margin-top:0; margin-bottom:0.75rem; color:#34d399; font-size:0.9rem;">✨ Registrar Nueva Tela para este Colegio</h4>
+            <div id="form-nueva-tela-container"
+              style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
+              <h4 style="margin-top:0; margin-bottom:0.75rem; color:#34d399; font-size:0.9rem;">✨ Registrar Nueva Tela
+                para este Colegio</h4>
               <div style="display:grid; grid-template-columns: 1fr auto; gap:0.75rem; align-items:end;">
                 <div>
                   <label style="font-size:0.72rem; color:#94a3b8;">Nombre / Descripción de la Tela *</label>
-                  <input type="text" id="nt-desc" class="cell-editable-sm" style="width:100%; font-weight:600;" placeholder="Ej. Gabardina 100% Algodón">
+                  <input type="text" id="nt-desc" class="cell-editable-sm" style="width:100%; font-weight:600;"
+                    placeholder="Ej. Gabardina 100% Algodón">
                 </div>
                 <div>
-                  <button class="btn" style="padding:0.45rem 1rem;" onclick="crearNuevaTelaAdmin()">Guardar Tela</button>
+                  <button class="btn" style="padding:0.45rem 1rem;" onclick="crearNuevaTelaAdmin()">Guardar
+                    Tela</button>
                 </div>
               </div>
             </div>
@@ -272,12 +313,15 @@
                 <thead>
                   <tr>
                     <th style="width:80px; text-align:center;">Orden</th>
-                    <th style="text-align:left; padding-left:0.75rem; font-size:0.9rem; min-width:550px;">Nombre / Descripción de la Tela</th>
+                    <th style="text-align:left; padding-left:0.75rem; font-size:0.9rem; min-width:550px;">Nombre /
+                      Descripción de la Tela</th>
                     <th style="width:80px; text-align:center;">Activo</th>
                   </tr>
                 </thead>
                 <tbody id="tb-admin-telas-body">
-                  <tr><td colspan="3" style="text-align:center; padding:2rem;">Cargando telas del colegio...</td></tr>
+                  <tr>
+                    <td colspan="3" style="text-align:center; padding:2rem;">Cargando telas del colegio...</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -286,20 +330,28 @@
           <!-- SUBTAB 2: PRENDAS & REORDENAMIENTO -->
           <div id="admin-sec-prendas" style="display:none;">
             <div style="display:flex; align-items:center; justify-content:flex-end; margin-bottom:0.75rem; gap:0.6rem;">
-              <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.45rem 0.85rem;" onclick="mostrarFormNuevaPrenda()">+ Dar de Alta Nueva Prenda</button>
-              <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; font-size:0.78rem; padding:0.45rem 0.95rem;" onclick="guardarConfigPrendasAdmin()">💾 Guardar Reordenamiento y Cambios</button>
+              <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.45rem 0.85rem;"
+                onclick="mostrarFormNuevaPrenda()">+ Dar de Alta Nueva Prenda</button>
+              <button class="btn"
+                style="background:#38bdf8; color:#0f172a; font-weight:800; font-size:0.78rem; padding:0.45rem 0.95rem;"
+                onclick="guardarConfigPrendasAdmin()">💾 Guardar</button>
             </div>
 
-            <div id="form-nueva-prenda-container" style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
-              <h4 style="margin-top:0; margin-bottom:0.75rem; color:#38bdf8; font-size:0.9rem;">✨ Registrar Nueva Prenda para este Colegio</h4>
-              <div style="display:grid; grid-template-columns: 80px 1fr 340px 100px auto; gap:0.75rem; align-items:end;">
+            <div id="form-nueva-prenda-container"
+              style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
+              <h4 style="margin-top:0; margin-bottom:0.75rem; color:#38bdf8; font-size:0.9rem;">✨ Registrar Nueva Prenda
+                para este Colegio</h4>
+              <div
+                style="display:grid; grid-template-columns: 80px 1fr 340px 100px auto; gap:0.75rem; align-items:end;">
                 <div>
                   <label style="font-size:0.72rem; color:#94a3b8;">Item N°</label>
-                  <input type="number" id="np-item" class="cell-editable-sm" style="width:100%; text-align:center;" value="28">
+                  <input type="number" id="np-item" class="cell-editable-sm" style="width:100%; text-align:center;"
+                    value="28">
                 </div>
                 <div>
                   <label style="font-size:0.72rem; color:#94a3b8;">Descripción Prenda</label>
-                  <input type="text" id="np-desc" class="cell-editable-sm" style="width:100%; font-weight:600;" placeholder="Ej. Chaleco de invierno">
+                  <input type="text" id="np-desc" class="cell-editable-sm" style="width:100%; font-weight:600;"
+                    placeholder="Ej. Chaleco de invierno">
                 </div>
                 <div>
                   <label style="font-size:0.72rem; color:#94a3b8;">Tela Asignada</label>
@@ -309,10 +361,12 @@
                 </div>
                 <div>
                   <label style="font-size:0.72rem; color:#94a3b8;">Factor Comp.</label>
-                  <input type="number" id="np-factor" class="cell-editable-sm" style="width:100%; text-align:center;" value="1" step="0.1">
+                  <input type="number" id="np-factor" class="cell-editable-sm" style="width:100%; text-align:center;"
+                    value="1" step="0.1">
                 </div>
                 <div>
-                  <button class="btn" style="padding:0.45rem 1rem;" onclick="crearNuevaPrendaAdmin()">Guardar Prenda</button>
+                  <button class="btn" style="padding:0.45rem 1rem;" onclick="crearNuevaPrendaAdmin()">Guardar
+                    Prenda</button>
                 </div>
               </div>
             </div>
@@ -330,7 +384,9 @@
                   </tr>
                 </thead>
                 <tbody id="tb-admin-prendas-body">
-                  <tr><td colspan="6" style="text-align:center; padding:2rem;">Cargando catálogo de prendas...</td></tr>
+                  <tr>
+                    <td colspan="6" style="text-align:center; padding:2rem;">Cargando catálogo de prendas...</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -339,17 +395,21 @@
           <!-- SUBTAB 3: TALLAS HABILITADAS -->
           <div id="admin-sec-tallas" style="display:none;">
             <div style="display:flex; justify-content:flex-end; margin-bottom:0.75rem;">
-              <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; font-size:0.78rem; padding:0.45rem 0.95rem;" onclick="guardarTallasAdmin()">💾 Guardar Configuración de Tallas</button>
+              <button class="btn"
+                style="background:#38bdf8; color:#0f172a; font-weight:800; font-size:0.78rem; padding:0.45rem 0.95rem;"
+                onclick="guardarTallasAdmin()">💾 Guardar</button>
             </div>
 
-            <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap:0.75rem;" id="container-admin-tallas">
+            <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap:0.75rem;"
+              id="container-admin-tallas">
               <!-- Tallas cargadas por JS -->
             </div>
           </div>
 
           <!-- SUBTAB 4: COLEGIOS & PERFIL -->
           <div id="admin-sec-colegios" style="display:none;">
-            <div style="background:#1e293b; padding:1.25rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.5rem;">
+            <div
+              style="background:#1e293b; padding:1.25rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.5rem;">
               <h4 style="margin-top:0; color:#f8fafc;">🏛️ Datos del Colegio Activo</h4>
               <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
                 <div>
@@ -377,14 +437,16 @@
               <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
                 <div>
                   <label style="font-size:0.78rem; color:#94a3b8;">Nombre del Nuevo Colegio *</label>
-                  <input type="text" id="ncol-nombre" class="cell-editable-sm" style="width:100%;" placeholder="Ej. Colegio San Agustín">
+                  <input type="text" id="ncol-nombre" class="cell-editable-sm" style="width:100%;"
+                    placeholder="Ej. Colegio San Agustín">
                 </div>
                 <div>
                   <label style="font-size:0.78rem; color:#94a3b8;">NIT</label>
                   <input type="text" id="ncol-nit" class="cell-editable-sm" style="width:100%;" placeholder="Opcional">
                 </div>
               </div>
-              <button class="btn" style="background:#059669;" onclick="crearNuevoColegioAdmin()">Crear Colegio e Inicializar Catálogo</button>
+              <button class="btn" style="background:#059669;" onclick="crearNuevoColegioAdmin()">Crear Colegio e
+                Inicializar Catálogo</button>
             </div>
           </div>
         </div>
@@ -415,7 +477,7 @@
             <option value="all">TODOS LOS COLEGIOS</option>
             ${json.data.map(c => `<option value="${c.id}">Colegio ${c.nombre}</option>`).join('')}
           `;
-          
+
           const hasCurrentOption = Array.from(select.options).some(opt => opt.value === currentId);
           if (hasCurrentOption && currentId !== 'all') {
             select.value = currentId;
@@ -432,7 +494,7 @@
       cargarResumen();
       cargarInventario();
       cargarMatrizConsolidada();
-      
+
       const tabAdmin = document.getElementById('tab-admin-colegio');
       if (tabAdmin && tabAdmin.classList.contains('active')) {
         if (val === 'all') {
@@ -452,7 +514,7 @@
 
     async function cargarConfigAdminColegio() {
       const select = document.getElementById('global-colegio-select');
-      
+
       if (!colegioFiltroActual || colegioFiltroActual === 'all') {
         let foundRealSchool = null;
         for (let opt of select.options) {
@@ -501,7 +563,7 @@
     function getUnidadCompraSelectHtml(id, currentVal) {
       const options = ['unidad', 'par', 'metro', 'millar', 'ciento', 'paquete', 'rollo', 'carrete', 'docena', 'global'];
       const norm = (currentVal || 'unidad').trim().toLowerCase();
-      
+
       let allOpts = [...options];
       if (norm && !allOpts.includes(norm)) {
         allOpts.push(norm);
@@ -562,7 +624,7 @@
         if (!td || !table.classList.contains('table-compact-acc')) return;
 
         const colIndex = td.cellIndex;
-        
+
         table.querySelectorAll('.col-active').forEach(el => el.classList.remove('col-active'));
         table.querySelectorAll('.cell-active').forEach(el => el.classList.remove('cell-active'));
 
@@ -586,10 +648,10 @@
     function switchTab(tabId) {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-      
+
       const targetBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick') && b.getAttribute('onclick').includes(tabId));
       if (targetBtn) targetBtn.classList.add('active');
-      
+
       const targetTab = document.getElementById('tab-' + tabId);
       if (targetTab) targetTab.classList.add('active');
 
@@ -642,7 +704,7 @@
       try {
         const res = await fetch('/api/dashboard-resumen?colegioId=' + colegioFiltroActual);
         const data = await res.json();
-        
+
         document.getElementById('st-prendas-kpi').textContent = data.productosCount || 0;
         document.getElementById('st-variaciones-sub').textContent = `${data.variacionesCount || 0} variaciones por talla`;
         document.getElementById('st-stock-kpi').textContent = fmtNum(data.totalStockUnidades) + ' u';
@@ -677,7 +739,7 @@
             return `<option value="${p.id}" data-color="${marginColor}" style="color: ${marginColor}; background: #0d131f; font-weight: 600;">#${p.itemNumero} - ${p.descripcion}${marginText}</option>`;
           }).join('');
           if (currentSel) selectProd.value = currentSel;
-          
+
           generarMatrizPrenda();
         }
       } catch (e) { console.error(e); }
@@ -750,7 +812,7 @@
             <td><strong>${(t.pesoMtLineal || (t.anchoMts * t.densidadGm2)).toFixed(0)} g</strong></td>
             <td>${getInputHtml(t.precioCompra, '0.1', `id="precio-${t.id}" onchange="guardarTelaLive('${t.id}')"`)}</td>
             <td><strong>Bs. ${(t.precioBsKg || t.precioCompra).toFixed(1)}</strong></td>
-            <td><strong style="color:var(--warning);">Bs. ${(t.precioBsG || (t.precioCompra/1000)).toFixed(3)}</strong></td>
+            <td><strong style="color:var(--warning);">Bs. ${(t.precioBsG || (t.precioCompra / 1000)).toFixed(3)}</strong></td>
           </tr>
         `).join('');
       } else if (concept === 'PesoMatPrima') {
@@ -760,7 +822,7 @@
 
         const res = await fetch('/api/inputs/peso-mat-prima?colegioId=' + colegioFiltroActual);
         const json = await res.json();
-        
+
         const mermaVal = json.mermaGlobalPct || 8;
         if (mermaContainer) {
           mermaContainer.innerHTML = `
@@ -793,12 +855,12 @@
             <td><span class="col-item">${p.itemNumero}</span></td>
             <td title="${p.descripcion}" style="text-align:left; overflow:hidden; text-overflow:ellipsis;"><strong>${p.descripcion}</strong></td>
             ${json.tallas.map(t => {
-              const rec = p.tallas[t.codigo] || { pesoExacto: 0, pesoConMerma: 0 };
-              const exacto = Math.round(rec.pesoExacto || 0);
-              const conMerma = Math.round(rec.pesoConMerma || 0);
-              const cellKey = `${p.productoId}_${t.codigo}`;
+          const rec = p.tallas[t.codigo] || { pesoExacto: 0, pesoConMerma: 0 };
+          const exacto = Math.round(rec.pesoExacto || 0);
+          const conMerma = Math.round(rec.pesoConMerma || 0);
+          const cellKey = `${p.productoId}_${t.codigo}`;
 
-              return `<td style="text-align:center; padding:0.05rem;">
+          return `<td style="text-align:center; padding:0.05rem;">
                 <div class="acc-cell-wrapper">
                   <span class="acc-qty-badge" id="badge-peso-${cellKey}" title="Peso Real sin merma" style="${exacto > 0 ? '' : 'display:none;'}">${exacto > 0 ? exacto : ''}</span>
                   <span class="acc-cost-display" id="disp-peso-${cellKey}">${conMerma > 0 ? conMerma : '-'}</span>
@@ -816,7 +878,7 @@
                          onchange="recalcularPesoLive('${p.productoId}', '${t.codigo}', this)">
                 </div>
               </td>`;
-            }).join('')}
+        }).join('')}
           </tr>
         `).join('');
       } else if (concept === 'ManoDeObra') {
@@ -842,7 +904,7 @@
       } else if (concept === 'fijosXprenda') {
         const res = await fetch('/api/inputs/fijos-x-prenda?colegioId=' + colegioFiltroActual);
         const json = await res.json();
-        
+
         let fijosContainer = document.getElementById('fijos-split-wrapper');
         if (!fijosContainer) {
           fijosContainer = document.createElement('div');
@@ -973,21 +1035,21 @@
               <th style="width:130px; text-align:left; vertical-align:middle;">DETALLE DE PRENDA</th>
               <th style="width:62px; color:var(--warning); border-right:2px solid var(--border); text-align:right; padding-right:0.25rem; vertical-align:middle;">Total Acc.</th>
               ${json.accesorios.map(a => {
-                const info = accInfoMap[a] || {};
-                const uCost = info.costoUnitarioBs || 0;
-                const udComp = info.unidadCompra || 'unidad';
-                const cantUd = info.cantidadXUd || 1;
-                const costoUd = (info.costoUdCompra && info.costoUdCompra > 0) ? info.costoUdCompra : (uCost * cantUd);
+            const info = accInfoMap[a] || {};
+            const uCost = info.costoUnitarioBs || 0;
+            const udComp = info.unidadCompra || 'unidad';
+            const cantUd = info.cantidadXUd || 1;
+            const costoUd = (info.costoUdCompra && info.costoUdCompra > 0) ? info.costoUdCompra : (uCost * cantUd);
 
-                const tooltipText = `ACCESORIO: ${a}\n-----------------------------------\n• UNIDAD DE COMPRA: ${udComp}\n• Cant. x Ud. Compra: ${cantUd}\n• COSTO "Ud. Compra" (Bs.): Bs. ${costoUd.toFixed(2)}\n-----------------------------------\n📌 COSTO UNITARIO FINAL: Bs. ${uCost.toFixed(4)}/u`;
+            const tooltipText = `ACCESORIO: ${a}\n-----------------------------------\n• UNIDAD DE COMPRA: ${udComp}\n• Cant. x Ud. Compra: ${cantUd}\n• COSTO "Ud. Compra" (Bs.): Bs. ${costoUd.toFixed(2)}\n-----------------------------------\n📌 COSTO UNITARIO FINAL: Bs. ${uCost.toFixed(4)}/u`;
 
-                return `<th title="${tooltipText}" style="text-align:center; font-size:0.58rem; cursor:help;">
+            return `<th title="${tooltipText}" style="text-align:center; font-size:0.58rem; cursor:help;">
                   <div class="th-flex-wrapper">
                     <span class="header-title-text">${abrevAccHeader(a)}</span>
                     <span class="header-unit-cost">${uCost > 0 ? uCost.toFixed(2) : '-'}</span>
                   </div>
                 </th>`;
-              }).join('')}
+          }).join('')}
             </tr>
           `;
 
@@ -999,17 +1061,17 @@
                 <strong style="color:var(--warning);" id="total-acc-row-${p.itemNumero}">${p.totalAccesoriosBs.toFixed(2)}</strong>
               </td>
               ${json.accesorios.map(a => {
-                const info = accInfoMap[a] || {};
-                const uCost = info.costoUnitarioBs || 0;
-                const qty = p.unidades ? (p.unidades[a] || 0) : 0;
-                const cost = p.accesorios ? (p.accesorios[a] || 0) : 0;
-                const accId = a.replace(/[^a-zA-Z0-9]/g, '_');
+            const info = accInfoMap[a] || {};
+            const uCost = info.costoUnitarioBs || 0;
+            const qty = p.unidades ? (p.unidades[a] || 0) : 0;
+            const cost = p.accesorios ? (p.accesorios[a] || 0) : 0;
+            const accId = a.replace(/[^a-zA-Z0-9]/g, '_');
 
-                if (cost === 0 && qty === 0) return '<td style="text-align:center; color: var(--text-muted);">-</td>';
+            if (cost === 0 && qty === 0) return '<td style="text-align:center; color: var(--text-muted);">-</td>';
 
-                const tooltipText = `${a}:\n${qty} unidades × Bs. ${uCost.toFixed(3)}/u = Bs. ${cost.toFixed(2)}`;
+            const tooltipText = `${a}:\n${qty} unidades × Bs. ${uCost.toFixed(3)}/u = Bs. ${cost.toFixed(2)}`;
 
-                return `<td style="text-align:center; padding:0.05rem;" title="${tooltipText}">
+            return `<td style="text-align:center; padding:0.05rem;" title="${tooltipText}">
                   <div class="acc-cell-wrapper">
                     ${qty > 0 ? `<span class="acc-qty-badge" id="badge-${p.itemNumero}-${accId}">${qty}</span>` : `<span class="acc-qty-badge" id="badge-${p.itemNumero}-${accId}" style="display:none;"></span>`}
                     <span class="acc-cost-display" id="costdisp-${p.itemNumero}-${accId}">${cost > 0 ? cost.toFixed(2) : '-'}</span>
@@ -1025,7 +1087,7 @@
                            onchange="recalcularMatrizAccLive(${p.itemNumero}, '${a.replace(/'/g, "\\'")}', ${uCost}, this)">
                   </div>
                 </td>`;
-              }).join('')}
+          }).join('')}
             </tr>
           `).join('');
         }
@@ -1404,8 +1466,8 @@
         <th>ITEM</th>
         <th>DETALLE DEL UNIFORME</th>
         ${tallas.map(t => `<th style="text-align:center; padding:0.4rem 0.15rem;">${t.codigo}</th>`).join('')}
-        ${showSubtotalColumn 
-          ? `<th style="text-align:right; color:var(--warning); border-left:2px solid var(--border); padding-right:0.4rem;">${currentExcelConcept === 'inventarioUnidades' ? 'SUBTOTAL' : 'SUBTOTAL Bs'}</th>` 
+        ${showSubtotalColumn
+          ? `<th style="text-align:right; color:var(--warning); border-left:2px solid var(--border); padding-right:0.4rem;">${currentExcelConcept === 'inventarioUnidades' ? 'SUBTOTAL' : 'SUBTOTAL Bs'}</th>`
           : '<th style="border-left:2px solid transparent;"></th>'}
       `;
 
@@ -1545,12 +1607,12 @@
           if (titulo) titulo.textContent = `Matriz de Costos por Talla: ${json.producto.descripcion} (#${json.producto.itemNumero})`;
 
           const tallas = json.data;
-          
+
           const activeProducedTallas = tallas.filter(t => t.costoTotal > 0 && t.margenPorcentaje !== null && t.margenPorcentaje !== undefined && t.margenPorcentaje !== 0);
           if (activeProducedTallas.length > 0) {
             const realAvgMargin = activeProducedTallas.reduce((sum, t) => sum + t.margenPorcentaje, 0) / activeProducedTallas.length;
             const marginColor = getMarginColor(realAvgMargin);
-            
+
             if (selectElem && selectElem.selectedIndex >= 0) {
               const opt = selectElem.options[selectElem.selectedIndex];
               if (opt) {
@@ -1561,7 +1623,7 @@
               }
             }
           }
-          
+
           let htmlHead = `<tr><th>Concepto / Talla</th>${tallas.map(t => `<th style="text-align:center;">${t.tallaCodigo}</th>`).join('')}</tr>`;
           document.querySelector('#matriz-container table thead').innerHTML = htmlHead;
 
@@ -1758,7 +1820,7 @@
       const temp = prods[idx];
       prods[idx] = prods[idx - 1];
       prods[idx - 1] = temp;
-      
+
       prods.forEach((p, i) => p.orden = i + 1);
       renderAdminPrendas();
     }
@@ -1872,7 +1934,7 @@
       const temp = telas[idx];
       telas[idx] = telas[idx - 1];
       telas[idx - 1] = temp;
-      
+
       telas.forEach((t, i) => t.orden = i + 1);
       renderAdminTelas();
       renderAdminPrendas();
@@ -2050,4 +2112,5 @@
     });
   </script>
 </body>
+
 </html>
