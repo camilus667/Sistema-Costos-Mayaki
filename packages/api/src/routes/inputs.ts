@@ -703,22 +703,46 @@ api.put('/peso-mat-prima', async (c) => {
   }
 });
 
-// GET /api/inputs/desglose-inteligente-producto - Matriz inteligente de costos involucrados por producto (Solo Tela asignada + Accesorios intervinientes > 0 + M.O. + Fijos)
+// GET /api/inputs/desglose-inteligente-producto - Matriz inteligente de costos por producto+talla
+// Query params:
+//   colegioId: filtro de colegio (o 'all')
+//   tallaId:   (opcional) filtra el costo para esa talla específica
+//              Si se omite, devuelve la primera talla disponible de cada producto
 api.get('/desglose-inteligente-producto', async (c) => {
   const db = (c as any).db;
   const colegioId = c.req.query('colegioId');
+  const tallaIdParam = c.req.query('tallaId') || null;
 
   let prodQuery = db.select().from(productos);
   if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
   const allProds = await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero));
 
-  let telasList = await db.select().from(telas);
-  let accList = await db.select().from(accesorios);
-  let moList = await db.select().from(manoObra);
-  let indirectosList = await db.select().from(costosIndirectos);
+  const telasList   = await db.select().from(telas);
+  const accList     = await db.select().from(accesorios);
+  const moList      = await db.select().from(manoObra);
+  const indirectosList = await db.select().from(costosIndirectos);
+  const pesoList    = await db.select().from(pesoMateriaPrima);
+  const tallasList  = await db.select().from(tallas);
 
   const telaMap = new Map<string, any>();
   telasList.forEach((t: any) => telaMap.set(t.id, t));
+
+  const tallaMap = new Map<string, any>();
+  tallasList.forEach((t: any) => tallaMap.set(t.id, t));
+
+  // Mapa: productoId -> [ { tallaId, pesoGramos, ... } ]
+  const pesoByProd = new Map<string, any[]>();
+  pesoList.forEach((r: any) => {
+    if (!pesoByProd.has(r.productoId)) pesoByProd.set(r.productoId, []);
+    pesoByProd.get(r.productoId)!.push(r);
+  });
+
+  // Mapa: productoId -> [ { tallaId, costoBs } ]
+  const moByProd = new Map<string, any[]>();
+  moList.forEach((m: any) => {
+    if (!moByProd.has(m.productoId)) moByProd.set(m.productoId, []);
+    moByProd.get(m.productoId)!.push(m);
+  });
 
   const inputs = loadExcelInputs();
   const accRows = inputs ? inputs.accRows : [];
@@ -748,7 +772,7 @@ api.get('/desglose-inteligente-producto', async (c) => {
       if (typeof val === 'number') return [val];
       const str = String(val).trim();
       if (str.includes('-')) {
-        const parts = str.split('-').map(p => parseInt(p.trim())).filter(p => !isNaN(p));
+        const parts = str.split('-').map((p: string) => parseInt(p.trim())).filter((p: number) => !isNaN(p));
         if (parts.length === 2) {
           const nums = [];
           for (let i = parts[0]; i <= parts[1]; i++) nums.push(i);
@@ -768,9 +792,7 @@ api.get('/desglose-inteligente-producto', async (c) => {
             const mapForProduct = itemAccUsageMap.get(itemNum)!;
             accHeaders.forEach((h: string, idx: number) => {
               const qty = Number(r[2 + idx]) || 0;
-              if (qty > 0) {
-                mapForProduct.set(h, qty);
-              }
+              if (qty > 0) mapForProduct.set(h, qty);
             });
           }
         });
@@ -785,8 +807,32 @@ api.get('/desglose-inteligente-producto', async (c) => {
     const telaObj = p.telaId ? telaMap.get(p.telaId) : null;
     const precioTelaBsG = telaObj ? (telaObj.precioBsG || (telaObj.precioCompra / 1000) || 0.1475) : 0.1475;
     const nombreTela = telaObj ? telaObj.descripcion : 'Tasa Promedio Catálogo (0.148 Bs/g)';
-    const pesoEstimadoGramos = 250;
-    const costoTelaBs = parseFloat((pesoEstimadoGramos * precioTelaBsG).toFixed(2));
+
+    const pesosDeEsteProd = pesoByProd.get(p.id) || [];
+    const tallasDisponibles = pesosDeEsteProd
+      .map((row: any) => {
+        const tallaObj = tallaMap.get(row.tallaId);
+        return tallaObj ? {
+          tallaId: row.tallaId,
+          codigo: tallaObj.codigo,
+          nombre: tallaObj.nombre,
+          orden: tallaObj.orden,
+          pesoGramos: row.pesoGramos ?? row.pesoConMerma ?? 0,
+          pesoExactoGramos: row.pesoExactoGramos ?? 0,
+        } : null;
+      })
+      .filter(Boolean)
+      .sort((a: any, b: any) => a.orden - b.orden);
+
+    let tallaSeleccionada: any = null;
+    if (tallaIdParam) {
+      tallaSeleccionada = tallasDisponibles.find((t: any) => t.tallaId === tallaIdParam) || tallasDisponibles[0] || null;
+    } else {
+      tallaSeleccionada = tallasDisponibles[0] || null;
+    }
+
+    const pesoGramos = tallaSeleccionada ? tallaSeleccionada.pesoGramos : 250;
+    const costoTelaBs = parseFloat((pesoGramos * precioTelaBsG).toFixed(2));
 
     const usageMap = itemAccUsageMap.get(p.itemNumero) || new Map<string, number>();
     const accesoriosIntervinientes: any[] = [];
@@ -796,63 +842,71 @@ api.get('/desglose-inteligente-producto', async (c) => {
       const matchedAcc = accList.find((a: any) => a.descripcion === accHeaderName || a.codigo === accHeaderName);
       const codeNum = matchedAcc ? parseInt(matchedAcc.codigo || '') : null;
       const auxInfo = codeNum ? auxMap.get(String(codeNum)) : null;
-
       const costoUnitarioBs = auxInfo ? auxInfo.costoUnitarioBs : (matchedAcc?.costoUnitarioBs || 0.5);
       const unidadCompra = auxInfo ? auxInfo.unidadCompra : (matchedAcc?.unidadCompra || 'unidad');
-      const costoTotalBs = parseFloat((qty * costoUnitarioBs).toFixed(2));
-
+      const costoTotalBs = parseFloat((qty * costoUnitarioBs).toFixed(3));
       subtotalAccesoriosBs += costoTotalBs;
-      accesoriosIntervinientes.push({
-        nombre: accHeaderName,
-        unidadCompra,
-        costoUnitarioBs,
-        cantidad: qty,
-        costoTotalBs
-      });
+      accesoriosIntervinientes.push({ nombre: accHeaderName, unidadCompra, costoUnitarioBs, cantidad: qty, costoTotalBs });
     });
-
     subtotalAccesoriosBs = parseFloat(subtotalAccesoriosBs.toFixed(2));
 
-    const moObj = moList.find((m: any) => m.productoId === p.id);
-    const factorComp = p.factorComplejidad || 1;
-    const costoCorte = (moObj && typeof moObj.costoCorte === 'number' && !isNaN(moObj.costoCorte)) ? Number(moObj.costoCorte) : 3.0;
-    const costoConfeccion = (moObj && typeof moObj.costoConfeccion === 'number' && !isNaN(moObj.costoConfeccion)) ? Number(moObj.costoConfeccion) : 12.0;
-    const totalManoObraBs = parseFloat(((costoCorte + costoConfeccion) * factorComp).toFixed(2));
+    const moParaEsteProd = moByProd.get(p.id) || [];
+    let totalManoObraBs: number;
+    let costoCorte = 0;
+    let costoConfeccion = 0;
+
+    if (tallaSeleccionada) {
+      const moRow = moParaEsteProd.find((m: any) => m.tallaId === tallaSeleccionada.tallaId);
+      if (moRow && typeof moRow.costoBs === 'number' && !isNaN(moRow.costoBs)) {
+        totalManoObraBs = parseFloat(moRow.costoBs.toFixed(2));
+        costoCorte = 0;
+        costoConfeccion = totalManoObraBs;
+      } else {
+        const valores = moParaEsteProd.map((m: any) => m.costoBs).filter((v: any) => typeof v === 'number' && !isNaN(v));
+        totalManoObraBs = valores.length > 0
+          ? parseFloat((valores.reduce((a: number, b: number) => a + b, 0) / valores.length).toFixed(2))
+          : 15.0;
+        costoConfeccion = totalManoObraBs;
+      }
+    } else {
+      totalManoObraBs = 15.0;
+      costoConfeccion = 15.0;
+    }
 
     const totalFijosBs = parseFloat(costoFijoPrenda.toFixed(2));
-
     const costoTotalProduccionBs = parseFloat((costoTelaBs + subtotalAccesoriosBs + totalManoObraBs + totalFijosBs).toFixed(2));
 
     return {
       productoId: p.id,
       itemNumero: p.itemNumero,
       descripcion: p.descripcion,
+      tallasDisponibles,
+      tallaActual: tallaSeleccionada
+        ? { tallaId: tallaSeleccionada.tallaId, codigo: tallaSeleccionada.codigo, nombre: tallaSeleccionada.nombre }
+        : null,
       tela: {
         nombre: nombreTela,
-        precioBsG: precioTelaBsG,
-        pesoEstimadoGramos,
-        costoTelaBs
+        precioBsGramo: precioTelaBsG,
+        pesoGramos,
+        costoTelaBs,
       },
       accesoriosIntervinientes,
       subtotalAccesoriosBs,
       manoDeObra: {
         costoCorte,
         costoConfeccion,
-        factorComp,
-        totalManoObraBs
+        totalManoObraBs,
       },
       fijosEIndirectos: {
-        costoFijoPrendaBs: costoFijoPrenda,
-        totalFijosBs
+        fijosXprenda: costoFijoPrenda,
+        indirectosXprenda: 0,
+        totalFijosBs,
       },
-      costoTotalProduccionBs
+      costoTotalProduccionBs,
     };
   });
 
-  return c.json({
-    success: true,
-    data
-  });
+  return c.json({ success: true, data });
 });
 
 export default api;
