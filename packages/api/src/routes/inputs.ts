@@ -737,6 +737,18 @@ api.get('/desglose-inteligente-producto', async (c) => {
     pesoByProd.get(r.productoId)!.push(r);
   });
 
+  // Mapa rápido: `productoId|tallaId` -> pesoGramos
+  const pesoPorProdTalla = new Map<string, number>();
+  pesoList.forEach((r: any) => {
+    const key = `${r.productoId}|${r.tallaId}`;
+    pesoPorProdTalla.set(key, r.pesoGramos ?? r.pesoConMerma ?? 0);
+  });
+
+  // Tallas activas del colegio (para poblar siempre el dropdown aunque no haya peso)
+  const tallasActivasColegio = tallasList
+    .filter((t: any) => t.activo !== false && (!colegioId || colegioId === 'all' || t.colegioId === colegioId))
+    .sort((a: any, b: any) => a.orden - b.orden);
+
   // Mapa: productoId -> [ { tallaId, costoBs } ]
   const moByProd = new Map<string, any[]>();
   moList.forEach((m: any) => {
@@ -808,28 +820,33 @@ api.get('/desglose-inteligente-producto', async (c) => {
     const precioTelaBsG = telaObj ? (telaObj.precioBsG || (telaObj.precioCompra / 1000) || 0.1475) : 0.1475;
     const nombreTela = telaObj ? telaObj.descripcion : 'Tasa Promedio Catálogo (0.148 Bs/g)';
 
+    // tallasDisponibles = TODAS las tallas activas del colegio, con peso real si existe o null si no
     const pesosDeEsteProd = pesoByProd.get(p.id) || [];
-    const tallasDisponibles = pesosDeEsteProd
-      .map((row: any) => {
-        const tallaObj = tallaMap.get(row.tallaId);
-        return tallaObj ? {
-          tallaId: row.tallaId,
-          codigo: tallaObj.codigo,
-          nombre: tallaObj.nombre,
-          orden: tallaObj.orden,
-          pesoGramos: row.pesoGramos ?? row.pesoConMerma ?? 0,
-          pesoExactoGramos: row.pesoExactoGramos ?? 0,
-        } : null;
-      })
-      .filter(Boolean)
-      .sort((a: any, b: any) => a.orden - b.orden);
+    const pesosPorTallaMap = new Map<string, number>();
+    pesosDeEsteProd.forEach((row: any) => {
+      pesosPorTallaMap.set(row.tallaId, row.pesoGramos ?? row.pesoConMerma ?? 0);
+    });
+
+    const tallasDisponibles = tallasActivasColegio.map((tallaObj: any) => ({
+      tallaId: tallaObj.id,
+      codigo: tallaObj.codigo,
+      nombre: tallaObj.nombre,
+      orden: tallaObj.orden,
+      pesoGramos: pesosPorTallaMap.has(tallaObj.id) ? pesosPorTallaMap.get(tallaObj.id)! : null,
+      tienePesoReal: pesosPorTallaMap.has(tallaObj.id),
+    }));
 
     let tallaSeleccionada: any = null;
     if (tallaIdParam) {
-      tallaSeleccionada = tallasDisponibles.find((t: any) => t.tallaId === tallaIdParam) || tallasDisponibles[0] || null;
-    } else {
-      // Por defecto: talla 14; si no existe, la primera disponible
-      tallaSeleccionada = tallasDisponibles.find((t: any) => String(t.codigo).trim() === '14') || tallasDisponibles[0] || null;
+      tallaSeleccionada = tallasDisponibles.find((t: any) => t.tallaId === tallaIdParam) || null;
+    }
+    if (!tallaSeleccionada) {
+      // Preferir talla 14 con peso real; si no, talla 14 sin peso; si no, primera con peso real; si no, primera
+      tallaSeleccionada =
+        tallasDisponibles.find((t: any) => String(t.codigo).trim() === '14' && t.tienePesoReal) ||
+        tallasDisponibles.find((t: any) => String(t.codigo).trim() === '14') ||
+        tallasDisponibles.find((t: any) => t.tienePesoReal) ||
+        tallasDisponibles[0] || null;
     }
 
     const pesoGramos = tallaSeleccionada ? tallaSeleccionada.pesoGramos : 250;
