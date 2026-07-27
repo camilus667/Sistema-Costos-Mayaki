@@ -664,6 +664,16 @@ td, th {
   vertical-align: bottom !important;
 }
 
+.table-compact-peso th {
+  padding: 0.35rem 0.2rem !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  height: 38px !important;
+  vertical-align: middle !important;
+}
+
 .table-compact-acc td {
   padding: 0.15rem 0.05rem !important;
   font-size: 0.68rem !important;

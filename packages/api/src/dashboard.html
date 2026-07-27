@@ -509,7 +509,7 @@
           </tr>
         `).join('');
       } else if (concept === 'PesoMatPrima') {
-        tableElem.className = 'table-compact-acc';
+        tableElem.className = 'table-compact-acc table-compact-peso';
         const mermaContainer = document.getElementById('peso-merma-container');
         if (mermaContainer) mermaContainer.style.display = 'block';
 
@@ -529,7 +529,7 @@
                 <span style="font-size: 0.76rem; color: var(--text-muted);">(Recalcula en vivo el Peso con Merma para todas las prendas)</span>
               </div>
               <div style="font-size: 0.78rem; color: #38bdf8; font-weight: 600;">
-                💡 <strong style="color:#fff;">Insignia cian (esquina):</strong> Peso Real Sin Merma (g) &nbsp;|&nbsp; <strong style="color:#fff;">Texto central:</strong> Peso Con Merma (g)
+                💡 <strong style="color:#fff;">Insignia cian (esquina):</strong> Peso Real Sin Merma &nbsp;|&nbsp; <strong style="color:#fff;">Texto central:</strong> Peso Con Merma (enteros)
               </div>
             </div>
           `;
@@ -549,14 +549,14 @@
             <td title="${p.descripcion}" style="text-align:left; overflow:hidden; text-overflow:ellipsis;"><strong>${p.descripcion}</strong></td>
             ${json.tallas.map(t => {
               const rec = p.tallas[t.codigo] || { pesoExacto: 0, pesoConMerma: 0 };
-              const exacto = rec.pesoExacto || 0;
-              const conMerma = rec.pesoConMerma || 0;
+              const exacto = Math.round(rec.pesoExacto || 0);
+              const conMerma = Math.round(rec.pesoConMerma || 0);
               const cellKey = `${p.productoId}_${t.codigo}`;
 
               return `<td style="text-align:center; padding:0.05rem;">
                 <div class="acc-cell-wrapper">
-                  <span class="acc-qty-badge" id="badge-peso-${cellKey}" title="Peso Real sin merma" style="${exacto > 0 ? '' : 'display:none;'}">${exacto > 0 ? exacto.toFixed(0) + 'g' : ''}</span>
-                  <span class="acc-cost-display" id="disp-peso-${cellKey}">${conMerma > 0 ? conMerma.toFixed(1) : '-'}</span>
+                  <span class="acc-qty-badge" id="badge-peso-${cellKey}" title="Peso Real sin merma" style="${exacto > 0 ? '' : 'display:none;'}">${exacto > 0 ? exacto : ''}</span>
+                  <span class="acc-cost-display" id="disp-peso-${cellKey}">${conMerma > 0 ? conMerma : '-'}</span>
                   <input type="number" 
                          class="acc-cell-input" 
                          id="input-peso-${cellKey}"
@@ -926,7 +926,7 @@
     }
 
     async function recalcularPesoLive(productoId, tallaCodigo, inputElem) {
-      const pesoExacto = parseFloat(inputElem.value) || 0;
+      const pesoExacto = Math.round(parseFloat(inputElem.value) || 0);
       const mermaElem = document.getElementById('input-global-merma');
       const mermaPct = mermaElem ? (parseFloat(mermaElem.value) || 8) : 8;
 
@@ -934,12 +934,12 @@
       const dispElem = document.getElementById('disp-peso-' + cellKey);
       const badgeElem = document.getElementById('badge-peso-' + cellKey);
 
-      const pesoConMerma = pesoExacto > 0 ? parseFloat((pesoExacto * (1 + mermaPct / 100)).toFixed(1)) : 0;
+      const pesoConMerma = pesoExacto > 0 ? Math.round(pesoExacto * (1 + mermaPct / 100)) : 0;
 
-      if (dispElem) dispElem.textContent = pesoConMerma > 0 ? pesoConMerma.toFixed(1) : '-';
+      if (dispElem) dispElem.textContent = pesoConMerma > 0 ? pesoConMerma : '-';
       if (badgeElem) {
         if (pesoExacto > 0) {
-          badgeElem.textContent = pesoExacto.toFixed(0) + 'g';
+          badgeElem.textContent = pesoExacto;
           badgeElem.style.display = '';
         } else {
           badgeElem.style.display = 'none';
@@ -971,17 +971,17 @@
       document.querySelectorAll('.acc-cell-input[data-prodid]').forEach(input => {
         const prodId = input.dataset.prodid;
         const tCode = input.dataset.tcodigo;
-        const pExacto = parseFloat(input.value) || 0;
+        const pExacto = Math.round(parseFloat(input.value) || 0);
 
         const cellKey = prodId + '_' + tCode;
         const dispElem = document.getElementById('disp-peso-' + cellKey);
         const badgeElem = document.getElementById('badge-peso-' + cellKey);
 
-        const pesoConMerma = pExacto > 0 ? parseFloat((pExacto * (1 + newMerma / 100)).toFixed(1)) : 0;
-        if (dispElem) dispElem.textContent = pesoConMerma > 0 ? pesoConMerma.toFixed(1) : '-';
+        const pesoConMerma = pExacto > 0 ? Math.round(pExacto * (1 + newMerma / 100)) : 0;
+        if (dispElem) dispElem.textContent = pesoConMerma > 0 ? pesoConMerma : '-';
         if (badgeElem) {
           if (pExacto > 0) {
-            badgeElem.textContent = pExacto.toFixed(0) + 'g';
+            badgeElem.textContent = pExacto;
             badgeElem.style.display = '';
           } else {
             badgeElem.style.display = 'none';
