@@ -9,6 +9,8 @@ dist
 coverage
 turbo
 *.zip
+*.sqlite
 !packages/api/sistema_inventario.db
+
 
 
