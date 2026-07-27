@@ -129,6 +129,7 @@
             <button class="excel-tab" onclick="switchInputConcept('ManoDeObra', this)">ManoDeObra</button>
             <button class="excel-tab" onclick="switchInputConcept('fijosXprenda', this)">fijosXprenda &
               Indirectos</button>
+            <button class="excel-tab" style="background:#059669; color:#ffffff; font-weight:700;" onclick="switchInputConcept('DesgloseProducto', this)">📊 Desglose Inteligente por Producto</button>
           </div>
         </div>
 
@@ -989,6 +990,44 @@
             </table>
           </div>
         `;
+      } else if (concept === 'DesgloseProducto') {
+        tableElem.className = 'table-compact-auto';
+        const res = await fetch('/api/inputs/desglose-inteligente-producto?colegioId=' + colegioFiltroActual);
+        const json = await res.json();
+
+        thead.innerHTML = `
+          <tr>
+            <th style="width:50px; text-align:center;">ITEM</th>
+            <th style="text-align:left; min-width:200px;">DETALLE DE LA PRENDA</th>
+            <th style="text-align:left; background:#1e293b; color:#38bdf8;">🧵 TELA ASIGNADA</th>
+            <th style="text-align:right; background:#1e293b; color:#38bdf8; width:110px;">COSTO TELA</th>
+            <th style="text-align:left; background:#0f172a; color:#34d399; min-width:320px;">📦 ACCESORIOS UTILIZADOS (FILTRADO INTELIGENTE)</th>
+            <th style="text-align:right; background:#0f172a; color:#34d399; width:110px;">COSTO ACC.</th>
+            <th style="text-align:right; color:#fbbf24; width:110px;">MANO DE OBRA</th>
+            <th style="text-align:right; color:#a78bfa; width:110px;">FIJOS & INDIR.</th>
+            <th style="text-align:right; background:#059669; color:#ffffff; font-weight:800; width:140px;">COSTO TOTAL PRODUCCIÓN</th>
+          </tr>
+        `;
+
+        tbody.innerHTML = json.data.map(p => {
+          const accChips = p.accesoriosIntervinientes.length > 0
+            ? p.accesoriosIntervinientes.map(a => `<span class="badge-tag" style="background:#10b98118; color:#34d399; border-color:#05966933; font-size:0.75rem; padding:0.15rem 0.45rem; margin:2px; display:inline-block;" title="Costo Unitario: Bs. ${a.costoUnitarioBs.toFixed(3)} / ${a.unidadCompra}">• ${a.cantidad}× ${a.nombre} (Bs. ${a.costoTotalBs.toFixed(2)})</span>`).join('')
+            : '<span style="color:#64748b; font-size:0.78rem; font-style:italic;">(Sin accesorios)</span>';
+
+          return `
+            <tr>
+              <td style="text-align:center;"><span class="col-item">${p.itemNumero}</span></td>
+              <td title="${p.descripcion}"><strong>${p.descripcion}</strong></td>
+              <td style="background:#1e293b11;"><strong style="color:#38bdf8;">${p.tela.nombre}</strong></td>
+              <td style="text-align:right; background:#1e293b11;"><strong style="color:#38bdf8;">Bs. ${p.tela.costoTelaBs.toFixed(2)}</strong></td>
+              <td style="background:#0f172a11;">${accChips}</td>
+              <td style="text-align:right; background:#0f172a11;"><strong style="color:#34d399;">Bs. ${p.subtotalAccesoriosBs.toFixed(2)}</strong></td>
+              <td style="text-align:right;"><strong style="color:#fbbf24;">Bs. ${p.manoDeObra.totalManoObraBs.toFixed(2)}</strong></td>
+              <td style="text-align:right;"><strong style="color:#a78bfa;">Bs. ${p.fijosEIndirectos.totalFijosBs.toFixed(2)}</strong></td>
+              <td style="text-align:right; background:#05966915;"><strong style="font-size:0.98rem; color:#34d399; font-weight:800;">Bs. ${p.costoTotalProduccionBs.toFixed(2)}</strong></td>
+            </tr>
+          `;
+        }).join('');
       } else if (concept === 'Acc') {
         if (currentAccSubView === 'aux') {
           const res = await fetch('/api/inputs/tabla-auxiliar-accesorios?colegioId=' + colegioFiltroActual);

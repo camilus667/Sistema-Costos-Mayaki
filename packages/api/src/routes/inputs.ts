@@ -696,11 +696,156 @@ api.put('/peso-mat-prima', async (c) => {
       });
       saveDbToDisk();
     }
-    return c.json({ success: true, message: 'Peso de materia prima actualizado' });
-  } catch (e) {
-    console.error('Error actualizando peso materia prima:', e);
-    return c.json({ success: false, error: String(e) }, 500);
+// GET /api/inputs/desglose-inteligente-producto - Matriz inteligente de costos involucrados por producto (Solo Tela asignada + Accesorios intervinientes > 0 + M.O. + Fijos)
+api.get('/desglose-inteligente-producto', async (c) => {
+  const db = (c as any).db;
+  const colegioId = c.req.query('colegioId');
+
+  let prodQuery = db.select().from(productos);
+  if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
+  const allProds = await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero));
+
+  let telasList = await db.select().from(telas);
+  let accList = await db.select().from(accesorios);
+  let moList = await db.select().from(manoObra);
+  let indirectosList = await db.select().from(costosIndirectos);
+
+  const telaMap = new Map<string, any>();
+  telasList.forEach((t: any) => telaMap.set(t.id, t));
+
+  const inputs = loadExcelInputs();
+  const accRows = inputs ? inputs.accRows : [];
+  const accHeaders = inputs ? inputs.accHeaders : [];
+
+  const auxMap = new Map<string, any>();
+  const auxRows = inputs ? inputs.tablaAuxiliarRows : [];
+  auxRows.forEach((r: any) => {
+    const code = Number(r[1]);
+    if (code > 0) {
+      const cantUd = Number(r[3]) || 1;
+      const costoUd = Number(r[4]) || Number(r[5]) || 0;
+      const costoUnit = Number(r[5]) || (cantUd > 0 ? costoUd / cantUd : 0);
+      auxMap.set(String(code), {
+        unidadCompra: r[2] ? String(r[2]).trim() : 'unidad',
+        costoUnitarioBs: parseFloat(costoUnit.toFixed(4))
+      });
+    }
+  });
+
+  const itemAccUsageMap = new Map<number, Map<string, number>>();
+  if (accRows && accRows.length > 0) {
+    const auxHeaderIdx = accRows.findIndex((r: any) => r && r.some((c: any) => String(c).includes('UNIDAD DE COMPRA') || String(c).includes('COSTO Unitario')));
+    const matrixRows = accRows.slice(2, auxHeaderIdx !== -1 ? auxHeaderIdx : 30);
+
+    const parseItemNumbers = (val: any): number[] => {
+      if (typeof val === 'number') return [val];
+      const str = String(val).trim();
+      if (str.includes('-')) {
+        const parts = str.split('-').map(p => parseInt(p.trim())).filter(p => !isNaN(p));
+        if (parts.length === 2) {
+          const nums = [];
+          for (let i = parts[0]; i <= parts[1]; i++) nums.push(i);
+          return nums;
+        }
+      }
+      const num = parseInt(str);
+      return !isNaN(num) ? [num] : [];
+    };
+
+    matrixRows.forEach((r: any) => {
+      if (r && r[1] !== undefined) {
+        const itemNums = parseItemNumbers(r[1]);
+        itemNums.forEach((itemNum) => {
+          if (itemNum > 0) {
+            if (!itemAccUsageMap.has(itemNum)) itemAccUsageMap.set(itemNum, new Map<string, number>());
+            const mapForProduct = itemAccUsageMap.get(itemNum)!;
+            accHeaders.forEach((h: string, idx: number) => {
+              const qty = Number(r[2 + idx]) || 0;
+              if (qty > 0) {
+                mapForProduct.set(h, qty);
+              }
+            });
+          }
+        });
+      }
+    });
   }
+
+  const indirectoObj = indirectosList[0] || { costoFijoPrendaBs: 1.5 };
+  const costoFijoPrenda = indirectoObj.costoFijoPrendaBs || 1.5;
+
+  const data = allProds.map((p: any) => {
+    const telaObj = p.telaId ? telaMap.get(p.telaId) : null;
+    const precioTelaBsG = telaObj ? (telaObj.precioBsG || (telaObj.precioCompra / 1000) || 0.1475) : 0.1475;
+    const nombreTela = telaObj ? telaObj.descripcion : 'Tasa Promedio Catálogo (0.148 Bs/g)';
+    const pesoEstimadoGramos = 250;
+    const costoTelaBs = parseFloat((pesoEstimadoGramos * precioTelaBsG).toFixed(2));
+
+    const usageMap = itemAccUsageMap.get(p.itemNumero) || new Map<string, number>();
+    const accesoriosIntervinientes: any[] = [];
+    let subtotalAccesoriosBs = 0;
+
+    usageMap.forEach((qty, accHeaderName) => {
+      const matchedAcc = accList.find((a: any) => a.descripcion === accHeaderName || a.codigo === accHeaderName);
+      const codeNum = matchedAcc ? parseInt(matchedAcc.codigo || '') : null;
+      const auxInfo = codeNum ? auxMap.get(String(codeNum)) : null;
+
+      const costoUnitarioBs = auxInfo ? auxInfo.costoUnitarioBs : (matchedAcc?.costoUnitarioBs || 0.5);
+      const unidadCompra = auxInfo ? auxInfo.unidadCompra : (matchedAcc?.unidadCompra || 'unidad');
+      const costoTotalBs = parseFloat((qty * costoUnitarioBs).toFixed(2));
+
+      subtotalAccesoriosBs += costoTotalBs;
+      accesoriosIntervinientes.push({
+        nombre: accHeaderName,
+        unidadCompra,
+        costoUnitarioBs,
+        cantidad: qty,
+        costoTotalBs
+      });
+    });
+
+    subtotalAccesoriosBs = parseFloat(subtotalAccesoriosBs.toFixed(2));
+
+    const moObj = moList.find((m: any) => m.productoId === p.id);
+    const factorComp = p.factorComplejidad || 1;
+    const costoCorte = moObj ? moObj.costoCorte : 3.0;
+    const costoConfeccion = moObj ? moObj.costoConfeccion : 12.0;
+    const totalManoObraBs = parseFloat(((costoCorte + costoConfeccion) * factorComp).toFixed(2));
+
+    const totalFijosBs = parseFloat(costoFijoPrenda.toFixed(2));
+
+    const costoTotalProduccionBs = parseFloat((costoTelaBs + subtotalAccesoriosBs + totalManoObraBs + totalFijosBs).toFixed(2));
+
+    return {
+      productoId: p.id,
+      itemNumero: p.itemNumero,
+      descripcion: p.descripcion,
+      tela: {
+        nombre: nombreTela,
+        precioBsG: precioTelaBsG,
+        pesoEstimadoGramos,
+        costoTelaBs
+      },
+      accesoriosIntervinientes,
+      subtotalAccesoriosBs,
+      manoDeObra: {
+        costoCorte,
+        costoConfeccion,
+        factorComp,
+        totalManoObraBs
+      },
+      fijosEIndirectos: {
+        costoFijoPrendaBs: costoFijoPrenda,
+        totalFijosBs
+      },
+      costoTotalProduccionBs
+    };
+  });
+
+  return c.json({
+    success: true,
+    data
+  });
 });
 
 export default api;
