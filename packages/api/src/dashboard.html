@@ -1320,9 +1320,11 @@
           let htmlHead = `<tr><th>Concepto / Talla</th>${tallas.map(t => `<th style="text-align:center;">${t.tallaCodigo}</th>`).join('')}</tr>`;
           document.querySelector('#matriz-container table thead').innerHTML = htmlHead;
 
+          const sampleMerma = (tallas.find(t => t.mermaPorcentaje > 0) || {}).mermaPorcentaje || 8;
+
           let rows = [
-            { name: 'Peso Exacto (g)', desc: 'Peso neto de la tela consumida para confeccionar esta prenda sin incluir desperdicios de corte.', key: 'pesoExacto', fmt: v => v ? v + ' g' : '-' },
-            { name: 'Peso con Merma (8%)', desc: 'Peso total de tela requerida considerando el 8% estandarizado de merma o desperdicio de corte.', key: 'pesoConMerma', fmt: v => v ? v + ' g' : '-' },
+            { name: 'Peso Real (sin merma)', desc: 'Peso neto de la tela consumida para confeccionar esta prenda sin incluir desperdicios de corte.', key: 'pesoExacto', fmt: v => v > 0 ? Math.round(v) : '-' },
+            { name: `Peso con Merma (${sampleMerma}%)`, desc: `Peso total de tela requerida considerando el ${sampleMerma}% de merma o desperdicio de corte.`, key: 'pesoConMerma', fmt: v => v > 0 ? Math.round(v) : '-' },
             { name: 'Costo Tela (Bs.)', desc: 'Costo directo de la tela por prenda calculado según su peso con merma y el precio por metro o kilo de tela.', key: 'costoTela', fmt: v => v ? 'Bs. ' + v.toFixed(2) : '-' },
             { name: 'Costo Accesorios (Bs.)', desc: 'Suma del costo de todos los insumos (botones, cierres, hilos, elásticos, etiquetas) usados en la prenda.', key: 'costoAccesorios', fmt: v => v ? 'Bs. ' + v.toFixed(2) : '-' },
             { name: 'Costo Mano Obra (Bs.)', desc: 'Costo directo pagado por el corte, confección y armado de la prenda según su rango de talla.', key: 'costoManoObra', fmt: v => v ? '<strong style="color:var(--warning);">Bs. ' + v.toFixed(2) + '</strong>' : '-' },

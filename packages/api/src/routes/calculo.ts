@@ -466,6 +466,7 @@ api.get('/matriz-prenda/:productoId', async (c) => {
       tallaNombre: t.nombre,
       pesoExacto: parseFloat(pesoExacto.toFixed(2)),
       pesoConMerma: parseFloat(pesoConMerma.toFixed(2)),
+      mermaPorcentaje: pRecord?.mermaPorcentaje || 8,
       costoTela: parseFloat((cb > 0 ? costoTelaVal : 0).toFixed(2)),
       costoAccesorios: parseFloat((cb > 0 ? costoAcc : 0).toFixed(2)),
       costoManoObra: parseFloat((cb > 0 ? costoMO : 0).toFixed(2)),
