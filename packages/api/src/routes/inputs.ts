@@ -182,7 +182,7 @@ api.get('/peso-mat-prima', async (c) => {
 
   let prodQuery = db.select().from(productos);
   if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
-  const allProds = await prodQuery.orderBy(asc(productos.itemNumero));
+  const allProds = await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero));
   const allTallas = await db.select().from(tallas).orderBy(asc(tallas.orden));
 
   let pesos: any[] = [];

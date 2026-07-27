@@ -74,7 +74,9 @@ CREATE TABLE IF NOT EXISTS "producto" (
  "colegio_id" text NOT NULL,
  "anio_id" text,
  "item_numero" integer NOT NULL,
+ "orden" integer DEFAULT 0,
  "descripcion" text NOT NULL,
+ "tela_id" text,
  "factor_complejidad" integer DEFAULT 1,
  "costo_fijo" real DEFAULT 0,
  "planchado_extra" real DEFAULT 0,
@@ -225,6 +227,9 @@ export async function getDb() {
     const s = stmt.trim();
     if (s) dbInstance.run(s);
   });
+
+  try { dbInstance.run('ALTER TABLE "producto" ADD COLUMN "orden" INTEGER DEFAULT 0;'); } catch (e) {}
+  try { dbInstance.run('ALTER TABLE "producto" ADD COLUMN "tela_id" TEXT;'); } catch (e) {}
 
   dbDrizzle = drizzle(dbInstance, { schema: schemaModule });
 

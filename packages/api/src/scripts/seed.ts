@@ -128,6 +128,7 @@ export async function seedData(db: any) {
           colegioId: colegio.id,
           anioId: anio.id,
           itemNumero: itemNum,
+          orden: itemNum,
           descripcion: String(row[1]).trim(),
           factorComplejidad: fxpData?.factor || 1,
           costoFijo: parseFloat((fxpData?.costoFijo || 0).toFixed(4)),

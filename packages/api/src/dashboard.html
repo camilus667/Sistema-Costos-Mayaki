@@ -24,6 +24,7 @@
       <select id="global-colegio-select" class="colegio-selector" onchange="cambiarColegioGlobal(this.value)">
         <option value="all">TODOS LOS COLEGIOS</option>
       </select>
+      <button class="btn-icon-admin" onclick="abrirModalAdminColegio()" title="Centro de Configuración y Administración del Colegio">⚙️ Configuración</button>
       <div class="status-badge">
         <div class="status-dot"></div>
         <span id="env-status">sql.js / D1 Activo</span>
@@ -1371,6 +1372,408 @@
           tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 1.5rem; color: var(--text-muted);">No hay stock registrado en la BD para este filtro.</td></tr>';
         }
       } catch (e) { console.error(e); }
+    }
+
+  <!-- MODAL CENTRO DE CONFIGURACIÓN Y ADMINISTRACIÓN DEL COLEGIO -->
+  <div id="modal-admin-colegio" class="modal-backdrop" style="display:none;">
+    <div class="modal-content-lg">
+      <div class="modal-header-admin">
+        <div class="modal-title-admin">
+          ⚙️ <span>Centro de Configuración y Administración del Colegio</span>
+          <span id="modal-colegio-name-badge" class="badge-tag" style="background:#10b98122; color:#34d399; border-color:#05966944;"></span>
+        </div>
+        <button class="modal-close-btn" onclick="cerrarModalAdminColegio()">✕</button>
+      </div>
+
+      <div class="admin-tabs-bar">
+        <button class="admin-tab-btn active" id="btn-atab-prendas" onclick="switchAdminTab('prendas')">👔 Prendas & Reordenamiento</button>
+        <button class="admin-tab-btn" id="btn-atab-tallas" onclick="switchAdminTab('tallas')">📏 Tallas Habilitadas</button>
+        <button class="admin-tab-btn" id="btn-atab-colegios" onclick="switchAdminTab('colegios')">🏛️ Perfil & Nuevos Colegios</button>
+      </div>
+
+      <div class="admin-body">
+        <!-- SUBTAB 1: PRENDAS & REORDENAMIENTO -->
+        <div id="admin-sec-prendas">
+          <div style="display:flex; align-items:center; justify-space-between; margin-bottom:1rem;">
+            <p style="font-size:0.82rem; color:var(--text-muted); margin:0;">
+              💡 <strong>Reordena las prendas:</strong> Usa los botones ▲ / ▼ para cambiar la secuencia. Asigna la <strong>Tela específica</strong> que usa cada prenda para calcular dinámicamente su costo.
+            </p>
+            <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.4rem 0.8rem;" onclick="mostrarFormNuevaPrenda()">+ Dar de Alta Nueva Prenda</button>
+          </div>
+
+          <div id="form-nueva-prenda-container" style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
+            <h4 style="margin-top:0; margin-bottom:0.75rem; color:#38bdf8; font-size:0.9rem;">✨ Registrar Nueva Prenda para este Colegio</h4>
+            <div style="display:grid; grid-template-columns: 80px 1fr 1fr 100px auto; gap:0.75rem; align-items:end;">
+              <div>
+                <label style="font-size:0.72rem; color:#94a3b8;">Item N°</label>
+                <input type="number" id="np-item" class="cell-editable-sm" style="width:100%; text-align:center;" value="28">
+              </div>
+              <div>
+                <label style="font-size:0.72rem; color:#94a3b8;">Descripción Prenda</label>
+                <input type="text" id="np-desc" class="cell-editable-sm" style="width:100%;" placeholder="Ej. Chaleco de invierno">
+              </div>
+              <div>
+                <label style="font-size:0.72rem; color:#94a3b8;">Tela Asignada</label>
+                <select id="np-tela" class="cell-editable-sm" style="width:100%; padding:0.3rem;">
+                  <option value="">-- Sin tela / Promedio --</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:0.72rem; color:#94a3b8;">Factor Comp.</label>
+                <input type="number" id="np-factor" class="cell-editable-sm" style="width:100%; text-align:center;" value="1" step="0.1">
+              </div>
+              <div>
+                <button class="btn" style="padding:0.45rem 1rem;" onclick="crearNuevaPrendaAdmin()">Guardar Prenda</button>
+              </div>
+            </div>
+          </div>
+
+          <div style="max-height: 480px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
+            <table class="table-compact-auto" style="width:100%;">
+              <thead>
+                <tr>
+                  <th style="width:60px; text-align:center;">Orden</th>
+                  <th style="width:65px; text-align:center;">Item N°</th>
+                  <th style="text-align:left;">Descripción de Prenda</th>
+                  <th style="width:260px; text-align:left;">Tela Asignada (Selector)</th>
+                  <th style="width:90px; text-align:center;">Factor Comp.</th>
+                  <th style="width:70px; text-align:center;">Activo</th>
+                </tr>
+              </thead>
+              <tbody id="tb-admin-prendas-body">
+                <tr><td colspan="6" style="text-align:center; padding:2rem;">Cargando catálogo de prendas...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div style="margin-top:1.25rem; text-align:right;">
+            <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; padding:0.6rem 1.4rem;" onclick="guardarConfigPrendasAdmin()">💾 Guardar Reordenamiento y Cambios</button>
+          </div>
+        </div>
+
+        <!-- SUBTAB 2: TALLAS HABILITADAS -->
+        <div id="admin-sec-tallas" style="display:none;">
+          <p style="font-size:0.82rem; color:var(--text-muted); margin-top:0; margin-bottom:1rem;">
+            ⚙️ Marca o desmarca las tallas que opera este colegio. El orden y estado afectarán a toda la matriz de costos.
+          </p>
+
+          <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap:0.75rem;" id="container-admin-tallas">
+            <!-- Tallas cargadas por JS -->
+          </div>
+
+          <div style="margin-top:1.5rem; text-align:right;">
+            <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; padding:0.6rem 1.4rem;" onclick="guardarTallasAdmin()">💾 Guardar Configuración de Tallas</button>
+          </div>
+        </div>
+
+        <!-- SUBTAB 3: COLEGIOS & PERFIL -->
+        <div id="admin-sec-colegios" style="display:none;">
+          <div style="background:#1e293b; padding:1.25rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.5rem;">
+            <h4 style="margin-top:0; color:#f8fafc;">🏛️ Datos del Colegio Activo</h4>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
+              <div>
+                <label style="font-size:0.78rem; color:#94a3b8;">Nombre del Colegio</label>
+                <input type="text" id="col-edit-nombre" class="cell-editable-sm" style="width:100%; font-weight:700;">
+              </div>
+              <div>
+                <label style="font-size:0.78rem; color:#94a3b8;">NIT / Identificación</label>
+                <input type="text" id="col-edit-nit" class="cell-editable-sm" style="width:100%;">
+              </div>
+              <div>
+                <label style="font-size:0.78rem; color:#94a3b8;">Dirección</label>
+                <input type="text" id="col-edit-dir" class="cell-editable-sm" style="width:100%;">
+              </div>
+              <div>
+                <label style="font-size:0.78rem; color:#94a3b8;">Teléfono de Contacto</label>
+                <input type="text" id="col-edit-tel" class="cell-editable-sm" style="width:100%;">
+              </div>
+            </div>
+            <button class="btn" onclick="actualizarColegioActualAdmin()">Guardar Datos del Colegio</button>
+          </div>
+
+          <div style="background:#0f172a; padding:1.25rem; border-radius:10px; border:1px solid #1e293b;">
+            <h4 style="margin-top:0; color:#34d399;">➕ Dar de Alta un Nuevo Colegio en el Sistema</h4>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
+              <div>
+                <label style="font-size:0.78rem; color:#94a3b8;">Nombre del Nuevo Colegio *</label>
+                <input type="text" id="ncol-nombre" class="cell-editable-sm" style="width:100%;" placeholder="Ej. Colegio San Agustín">
+              </div>
+              <div>
+                <label style="font-size:0.78rem; color:#94a3b8;">NIT</label>
+                <input type="text" id="ncol-nit" class="cell-editable-sm" style="width:100%;" placeholder="Opcional">
+              </div>
+            </div>
+            <button class="btn" style="background:#059669;" onclick="crearNuevoColegioAdmin()">Crear Colegio e Inicializar Catálogo</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let adminConfigData = null;
+
+    async function abrirModalAdminColegio() {
+      if (!colegioFiltroActual || colegioFiltroActual === 'all') {
+        const select = document.getElementById('global-colegio-select');
+        for (let opt of select.options) {
+          if (opt.value && opt.value !== 'all') {
+            colegioFiltroActual = opt.value;
+            select.value = opt.value;
+            break;
+          }
+        }
+      }
+
+      const modal = document.getElementById('modal-admin-colegio');
+      if (modal) modal.style.display = 'flex';
+      await cargarConfigAdminColegio();
+    }
+
+    function cerrarModalAdminColegio() {
+      const modal = document.getElementById('modal-admin-colegio');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function switchAdminTab(tabName) {
+      document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('btn-atab-' + tabName).classList.add('active');
+
+      document.getElementById('admin-sec-prendas').style.display = tabName === 'prendas' ? 'block' : 'none';
+      document.getElementById('admin-sec-tallas').style.display = tabName === 'tallas' ? 'block' : 'none';
+      document.getElementById('admin-sec-colegios').style.display = tabName === 'colegios' ? 'block' : 'none';
+    }
+
+    async function cargarConfigAdminColegio() {
+      if (!colegioFiltroActual || colegioFiltroActual === 'all') return;
+
+      try {
+        const res = await fetch('/api/colegios/' + colegioFiltroActual + '/config');
+        const json = await res.json();
+        if (json.success) {
+          adminConfigData = json;
+          renderAdminPrendas();
+          renderAdminTallas();
+          renderAdminPerfilColegio();
+        }
+      } catch (e) { console.error('Error al cargar config admin:', e); }
+    }
+
+    function renderAdminPrendas() {
+      if (!adminConfigData) return;
+      const prods = adminConfigData.productos || [];
+      const telas = adminConfigData.telas || [];
+      const col = adminConfigData.colegio || {};
+
+      document.getElementById('modal-colegio-name-badge').textContent = col.nombre || 'CAMBRIDGE';
+
+      const selectNpTela = document.getElementById('np-tela');
+      selectNpTela.innerHTML = `<option value="">-- Sin tela / Promedio --</option>` +
+        telas.map(t => `<option value="${t.id}">${t.descripcion} (Bs. ${(t.precioBsG || 0.1475).toFixed(3)}/g)</option>`).join('');
+
+      const tbody = document.getElementById('tb-admin-prendas-body');
+      tbody.innerHTML = prods.map((p, idx) => `
+        <tr>
+          <td style="text-align:center;">
+            <button class="btn-move" onclick="moverPrendaUp(${idx})" ${idx === 0 ? 'disabled style="opacity:0.3;"' : ''}>▲</button>
+            <button class="btn-move" onclick="moverPrendaDown(${idx})" ${idx === prods.length - 1 ? 'disabled style="opacity:0.3;"' : ''}>▼</button>
+          </td>
+          <td style="text-align:center;">
+            <input type="number" id="ap-item-${p.id}" class="cell-editable-sm" style="width:45px; text-align:center; font-weight:700;" value="${p.itemNumero}">
+          </td>
+          <td>
+            <input type="text" id="ap-desc-${p.id}" class="cell-editable-sm" style="width:100%; font-weight:600; color:#f8fafc;" value="${p.descripcion}">
+          </td>
+          <td>
+            <select id="ap-tela-${p.id}" class="cell-editable-sm" style="width:100%; padding:0.2rem;">
+              <option value="" ${!p.telaId ? 'selected' : ''}>-- Tasa Promedio Catálogo (0.148 Bs/g) --</option>
+              ${telas.map(t => `<option value="${t.id}" ${p.telaId === t.id ? 'selected' : ''}>${t.descripcion} (Bs. ${(t.precioBsG || 0.1475).toFixed(3)}/g)</option>`).join('')}
+            </select>
+          </td>
+          <td style="text-align:center;">
+            <input type="number" id="ap-factor-${p.id}" class="cell-editable-sm" style="width:55px; text-align:center;" value="${p.factorComplejidad || 1}" step="0.1" min="0.5">
+          </td>
+          <td style="text-align:center;">
+            <input type="checkbox" id="ap-act-${p.id}" ${p.activo ? 'checked' : ''}>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function moverPrendaUp(idx) {
+      if (idx <= 0 || !adminConfigData || !adminConfigData.productos) return;
+      const prods = adminConfigData.productos;
+      const temp = prods[idx];
+      prods[idx] = prods[idx - 1];
+      prods[idx - 1] = temp;
+      
+      prods.forEach((p, i) => p.orden = i + 1);
+      renderAdminPrendas();
+    }
+
+    function moverPrendaDown(idx) {
+      if (!adminConfigData || !adminConfigData.productos || idx >= adminConfigData.productos.length - 1) return;
+      const prods = adminConfigData.productos;
+      const temp = prods[idx];
+      prods[idx] = prods[idx + 1];
+      prods[idx + 1] = temp;
+
+      prods.forEach((p, i) => p.orden = i + 1);
+      renderAdminPrendas();
+    }
+
+    async function guardarConfigPrendasAdmin() {
+      if (!adminConfigData || !adminConfigData.productos) return;
+      const payload = adminConfigData.productos.map((p, i) => ({
+        id: p.id,
+        orden: i + 1,
+        itemNumero: parseInt(document.getElementById('ap-item-' + p.id).value) || p.itemNumero,
+        descripcion: document.getElementById('ap-desc-' + p.id).value.trim(),
+        telaId: document.getElementById('ap-tela-' + p.id).value || null,
+        factorComplejidad: parseFloat(document.getElementById('ap-factor-' + p.id).value) || 1,
+        activo: document.getElementById('ap-act-' + p.id).checked
+      }));
+
+      try {
+        const res = await fetch('/api/colegios/' + colegioFiltroActual + '/config-prendas', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prendas: payload })
+        });
+        const json = await res.json();
+        if (json.success) {
+          alert('✅ Reordenamiento y configuración de prendas guardados exitosamente.');
+          await cargarResumen();
+          await cargarMatrizConsolidada();
+          cargarInputConcept(currentInputConcept);
+          generarMatrizPrenda();
+          await cargarConfigAdminColegio();
+        }
+      } catch (e) { alert('Error al guardar prendas: ' + e); }
+    }
+
+    function mostrarFormNuevaPrenda() {
+      const container = document.getElementById('form-nueva-prenda-container');
+      if (container) container.style.display = container.style.display === 'none' ? 'block' : 'none';
+    }
+
+    async function crearNuevaPrendaAdmin() {
+      const itemNumero = parseInt(document.getElementById('np-item').value) || 28;
+      const descripcion = document.getElementById('np-desc').value.trim();
+      const telaId = document.getElementById('np-tela').value || null;
+      const factorComplejidad = parseFloat(document.getElementById('np-factor').value) || 1;
+
+      if (!descripcion) return alert('Por favor ingresa la descripción de la prenda.');
+
+      try {
+        const res = await fetch('/api/colegios/' + colegioFiltroActual + '/prendas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ itemNumero, descripcion, telaId, factorComplejidad })
+        });
+        const json = await res.json();
+        if (json.success) {
+          document.getElementById('form-nueva-prenda-container').style.display = 'none';
+          document.getElementById('np-desc').value = '';
+          alert('🎉 Nueva prenda registrada exitosamente.');
+          await cargarResumen();
+          await cargarMatrizConsolidada();
+          cargarInputConcept(currentInputConcept);
+          generarMatrizPrenda();
+          await cargarConfigAdminColegio();
+        }
+      } catch (e) { alert('Error al crear prenda: ' + e); }
+    }
+
+    function renderAdminTallas() {
+      if (!adminConfigData || !adminConfigData.tallas) return;
+      const container = document.getElementById('container-admin-tallas');
+      container.innerHTML = adminConfigData.tallas.map(t => `
+        <div style="background:#1e293b; padding:0.75rem; border-radius:8px; border:1px solid #334155; display:flex; align-items:center; justify-content:space-between;">
+          <div>
+            <strong style="color:#f8fafc; display:block; font-size:0.9rem;">${t.codigo}</strong>
+            <span style="font-size:0.7rem; color:#94a3b8;">${t.nombre}</span>
+          </div>
+          <input type="checkbox" id="atalla-act-${t.id}" ${t.activo ? 'checked' : ''} style="width:18px; height:18px;">
+        </div>
+      `).join('');
+    }
+
+    async function guardarTallasAdmin() {
+      if (!adminConfigData || !adminConfigData.tallas) return;
+      const payload = adminConfigData.tallas.map(t => ({
+        id: t.id,
+        activo: document.getElementById('atalla-act-' + t.id).checked
+      }));
+
+      try {
+        const res = await fetch('/api/colegios/' + colegioFiltroActual + '/tallas-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tallas: payload })
+        });
+        const json = await res.json();
+        if (json.success) {
+          alert('✅ Configuración de tallas guardada.');
+          await cargarResumen();
+          await cargarMatrizConsolidada();
+          cargarInputConcept(currentInputConcept);
+          generarMatrizPrenda();
+        }
+      } catch (e) { alert('Error al guardar tallas: ' + e); }
+    }
+
+    function renderAdminPerfilColegio() {
+      if (!adminConfigData || !adminConfigData.colegio) return;
+      const col = adminConfigData.colegio;
+      document.getElementById('col-edit-nombre').value = col.nombre || '';
+      document.getElementById('col-edit-nit').value = col.nit || '';
+      document.getElementById('col-edit-dir').value = col.direccion || '';
+      document.getElementById('col-edit-tel').value = col.telefono || '';
+    }
+
+    async function actualizarColegioActualAdmin() {
+      const nombre = document.getElementById('col-edit-nombre').value.trim();
+      const nit = document.getElementById('col-edit-nit').value.trim();
+      const direccion = document.getElementById('col-edit-dir').value.trim();
+      const telefono = document.getElementById('col-edit-tel').value.trim();
+
+      try {
+        const res = await fetch('/api/colegios/' + colegioFiltroActual, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre, nit, direccion, telefono })
+        });
+        const json = await res.json();
+        if (json.success) {
+          alert('✅ Datos del colegio actualizados.');
+          await cargarColegiosHeader();
+        }
+      } catch (e) { alert('Error al actualizar colegio: ' + e); }
+    }
+
+    async function crearNuevoColegioAdmin() {
+      const nombre = document.getElementById('ncol-nombre').value.trim();
+      const nit = document.getElementById('ncol-nit').value.trim();
+      if (!nombre) return alert('Ingresa el nombre del nuevo colegio.');
+
+      try {
+        const res = await fetch('/api/colegios', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre, nit })
+        });
+        const json = await res.json();
+        if (json.success) {
+          alert('🎉 Nuevo colegio creado exitosamente.');
+          document.getElementById('ncol-nombre').value = '';
+          document.getElementById('ncol-nit').value = '';
+          await cargarColegiosHeader();
+          colegioFiltroActual = json.data.id;
+          document.getElementById('global-colegio-select').value = json.data.id;
+          await cargarConfigAdminColegio();
+        }
+      } catch (e) { alert('Error al crear colegio: ' + e); }
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
