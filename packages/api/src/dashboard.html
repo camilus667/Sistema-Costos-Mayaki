@@ -270,11 +270,11 @@
             </div>
 
             <div style="max-height: 540px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
-              <table class="table-compact-auto" style="width:100%; min-width:650px;">
+              <table class="table-compact-auto" style="width:100%; min-width:850px;">
                 <thead>
                   <tr>
                     <th style="width:80px; text-align:center;">Orden</th>
-                    <th style="text-align:left; padding-left:0.75rem; font-size:0.85rem;">Nombre / Descripción de la Tela</th>
+                    <th style="text-align:left; padding-left:0.75rem; font-size:0.9rem; min-width:550px;">Nombre / Descripción de la Tela</th>
                     <th style="width:80px; text-align:center;">Activo</th>
                   </tr>
                 </thead>
@@ -300,18 +300,18 @@
 
             <div id="form-nueva-prenda-container" style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
               <h4 style="margin-top:0; margin-bottom:0.75rem; color:#38bdf8; font-size:0.9rem;">✨ Registrar Nueva Prenda para este Colegio</h4>
-              <div style="display:grid; grid-template-columns: 80px 1fr 1fr 100px auto; gap:0.75rem; align-items:end;">
+              <div style="display:grid; grid-template-columns: 80px 1fr 340px 100px auto; gap:0.75rem; align-items:end;">
                 <div>
                   <label style="font-size:0.72rem; color:#94a3b8;">Item N°</label>
                   <input type="number" id="np-item" class="cell-editable-sm" style="width:100%; text-align:center;" value="28">
                 </div>
                 <div>
                   <label style="font-size:0.72rem; color:#94a3b8;">Descripción Prenda</label>
-                  <input type="text" id="np-desc" class="cell-editable-sm" style="width:100%;" placeholder="Ej. Chaleco de invierno">
+                  <input type="text" id="np-desc" class="cell-editable-sm" style="width:100%; font-weight:600;" placeholder="Ej. Chaleco de invierno">
                 </div>
                 <div>
                   <label style="font-size:0.72rem; color:#94a3b8;">Tela Asignada</label>
-                  <select id="np-tela" class="cell-editable-sm" style="width:100%; padding:0.3rem;">
+                  <select id="np-tela" class="cell-editable-sm" style="width:100%; padding:0.4rem; font-weight:600;">
                     <option value="">-- Sin tela / Promedio --</option>
                   </select>
                 </div>
@@ -326,13 +326,13 @@
             </div>
 
             <div style="max-height: 540px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
-              <table class="table-compact-auto" style="width:100%;">
+              <table class="table-compact-auto" style="width:100%; min-width:1100px;">
                 <thead>
                   <tr>
                     <th style="width:60px; text-align:center;">Orden</th>
                     <th style="width:65px; text-align:center;">Item N°</th>
-                    <th style="text-align:left;">Descripción de Prenda</th>
-                    <th style="width:260px; text-align:left;">Tela Asignada (Selector)</th>
+                    <th style="text-align:left; min-width:320px;">Descripción de Prenda</th>
+                    <th style="width:420px; text-align:left; padding-left:0.5rem;">Tela Asignada (Selector)</th>
                     <th style="width:90px; text-align:center;">Factor Comp.</th>
                     <th style="width:70px; text-align:center;">Activo</th>
                   </tr>
@@ -1700,8 +1700,8 @@
           <td>
             <input type="text" id="ap-desc-${p.id}" class="cell-editable-sm" style="width:100%; font-weight:600; color:#f8fafc;" value="${p.descripcion}">
           </td>
-          <td>
-            <select id="ap-tela-${p.id}" class="cell-editable-sm" style="width:100%; padding:0.2rem;">
+          <td style="padding:0.35rem 0.5rem;">
+            <select id="ap-tela-${p.id}" class="cell-editable-sm" style="width:100%; font-weight:600; font-size:0.88rem; padding:0.4rem 0.6rem;">
               <option value="" ${!p.telaId ? 'selected' : ''}>-- Tasa Promedio Catálogo (0.148 Bs/g) --</option>
               ${telas.map(t => `<option value="${t.id}" ${p.telaId === t.id ? 'selected' : ''}>${t.descripcion} (Bs. ${(t.precioBsG || 0.1475).toFixed(3)}/g)</option>`).join('')}
             </select>
