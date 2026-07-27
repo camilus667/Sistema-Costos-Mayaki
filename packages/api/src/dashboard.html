@@ -1398,7 +1398,7 @@
         <div id="admin-sec-prendas">
           <div style="display:flex; align-items:center; justify-space-between; margin-bottom:1rem;">
             <p style="font-size:0.82rem; color:var(--text-muted); margin:0;">
-              💡 <strong>Reordena las prendas:</strong> Usa los botones ▲ / ▼ para cambiar la secuencia. Asigna la <strong>Tela específica</strong> que usa cada prenda para calcular dinámicamente su costo.
+              💡 <strong>Reordena las prendas:</strong> Arrastra la fila desde el ícono <strong>`⋮⋮`</strong> o usa los botones ▲ / ▼ para cambiar la secuencia. Asigna la <strong>Tela específica</strong> que usa cada prenda para calcular dinámicamente su costo.
             </p>
             <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.4rem 0.8rem;" onclick="mostrarFormNuevaPrenda()">+ Dar de Alta Nueva Prenda</button>
           </div>
@@ -1457,7 +1457,7 @@
         <div id="admin-sec-telas" style="display:none;">
           <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
             <p style="font-size:0.82rem; color:var(--text-muted); margin:0;">
-              💡 <strong>Ordena y gestiona las telas:</strong> Usa ▲ / ▼ para ordenar las telas. El orden definido aquí aparecerá automáticamente en el selector desplegable <strong>"Tela Asignada"</strong> de cada prenda.
+              💡 <strong>Ordena y gestiona las telas:</strong> Arrastra la fila desde el ícono <strong>`⋮⋮`</strong> o usa los botones ▲ / ▼ para ordenar las telas. El orden definido aquí aparecerá automáticamente en el selector desplegable <strong>"Tela Asignada"</strong> de cada prenda.
             </p>
             <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.4rem 0.8rem;" onclick="mostrarFormNuevaTela()">+ Dar de Alta Nueva Tela</button>
           </div>
@@ -1606,6 +1606,64 @@
       } catch (e) { console.error('Error al cargar config admin:', e); }
     }
 
+    let draggedIndex = null;
+    let draggedType = null;
+
+    function handleDragStart(e, index, type) {
+      draggedIndex = index;
+      draggedType = type;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', index);
+      const row = e.currentTarget.closest('tr');
+      if (row) row.classList.add('dragging-row');
+    }
+
+    function handleDragOver(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const row = e.currentTarget.closest('tr');
+      if (row && !row.classList.contains('dragging-row')) {
+        row.classList.add('drag-over-row');
+      }
+    }
+
+    function handleDragLeave(e) {
+      const row = e.currentTarget.closest('tr');
+      if (row) row.classList.remove('drag-over-row');
+    }
+
+    function handleDrop(e, targetIndex, type) {
+      e.preventDefault();
+      const row = e.currentTarget.closest('tr');
+      if (row) row.classList.remove('drag-over-row');
+
+      if (draggedIndex === null || draggedIndex === targetIndex || draggedType !== type) return;
+
+      if (type === 'prenda') {
+        if (!adminConfigData || !adminConfigData.productos) return;
+        const prods = adminConfigData.productos;
+        const itemToMove = prods.splice(draggedIndex, 1)[0];
+        prods.splice(targetIndex, 0, itemToMove);
+        prods.forEach((p, i) => p.orden = i + 1);
+        renderAdminPrendas();
+      } else if (type === 'tela') {
+        if (!adminConfigData || !adminConfigData.telas) return;
+        const telas = adminConfigData.telas;
+        const itemToMove = telas.splice(draggedIndex, 1)[0];
+        telas.splice(targetIndex, 0, itemToMove);
+        telas.forEach((t, i) => t.orden = i + 1);
+        renderAdminTelas();
+        renderAdminPrendas();
+      }
+    }
+
+    function handleDragEnd(e) {
+      draggedIndex = null;
+      draggedType = null;
+      document.querySelectorAll('.dragging-row').forEach(el => el.classList.remove('dragging-row'));
+      document.querySelectorAll('.drag-over-row').forEach(el => el.classList.remove('drag-over-row'));
+    }
+
     function renderAdminPrendas() {
       if (!adminConfigData) return;
       const prods = adminConfigData.productos || [];
@@ -1620,8 +1678,14 @@
 
       const tbody = document.getElementById('tb-admin-prendas-body');
       tbody.innerHTML = prods.map((p, idx) => `
-        <tr>
+        <tr draggable="true" data-index="${idx}"
+            ondragstart="handleDragStart(event, ${idx}, 'prenda')"
+            ondragover="handleDragOver(event)"
+            ondragleave="handleDragLeave(event)"
+            ondrop="handleDrop(event, ${idx}, 'prenda')"
+            ondragend="handleDragEnd(event)">
           <td style="text-align:center;">
+            <span class="drag-handle" title="Arrastra para reordenar arriba/abajo">⋮⋮</span>
             <button class="btn-move" onclick="moverPrendaUp(${idx})" ${idx === 0 ? 'disabled style="opacity:0.3;"' : ''}>▲</button>
             <button class="btn-move" onclick="moverPrendaDown(${idx})" ${idx === prods.length - 1 ? 'disabled style="opacity:0.3;"' : ''}>▼</button>
           </td>
@@ -1740,8 +1804,14 @@
       if (!tbody) return;
 
       tbody.innerHTML = telas.map((t, idx) => `
-        <tr>
+        <tr draggable="true" data-index="${idx}"
+            ondragstart="handleDragStart(event, ${idx}, 'tela')"
+            ondragover="handleDragOver(event)"
+            ondragleave="handleDragLeave(event)"
+            ondrop="handleDrop(event, ${idx}, 'tela')"
+            ondragend="handleDragEnd(event)">
           <td style="text-align:center;">
+            <span class="drag-handle" title="Arrastra para reordenar arriba/abajo">⋮⋮</span>
             <button class="btn-move" onclick="moverTelaUp(${idx})" ${idx === 0 ? 'disabled style="opacity:0.3;"' : ''}>▲</button>
             <button class="btn-move" onclick="moverTelaDown(${idx})" ${idx === telas.length - 1 ? 'disabled style="opacity:0.3;"' : ''}>▼</button>
           </td>

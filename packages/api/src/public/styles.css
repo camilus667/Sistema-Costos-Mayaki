@@ -984,6 +984,32 @@ td, th {
 }
 .btn-move:hover { background: #38bdf8; color: #000; }
 
+/* Drag and Drop Styling */
+.drag-handle {
+  cursor: grab;
+  font-size: 1.15rem;
+  color: #94a3b8;
+  user-select: none;
+  display: inline-block;
+  vertical-align: middle;
+  padding: 0 4px;
+}
+.drag-handle:hover {
+  color: #38bdf8;
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
+tr.dragging-row {
+  opacity: 0.35 !important;
+  background: #0284c733 !important;
+  border: 1px dashed #38bdf8 !important;
+}
+tr.drag-over-row {
+  border-top: 2px solid #38bdf8 !important;
+  background: #1e293b !important;
+}
+
 /* Footer */
 footer {
   text-align: center;
