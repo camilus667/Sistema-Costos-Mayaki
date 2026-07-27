@@ -239,16 +239,58 @@
           </div>
 
           <div class="admin-tabs-bar" style="border-bottom:none; margin:0; padding:0;">
-            <button class="admin-tab-btn active" id="btn-atab-prendas" onclick="switchAdminTab('prendas')">👔 Prendas & Reordenamiento</button>
-            <button class="admin-tab-btn" id="btn-atab-telas" onclick="switchAdminTab('telas')">🧵 Telas del Colegio</button>
+            <button class="admin-tab-btn active" id="btn-atab-telas" onclick="switchAdminTab('telas')">🧵 Telas del Colegio</button>
+            <button class="admin-tab-btn" id="btn-atab-prendas" onclick="switchAdminTab('prendas')">👔 Prendas & Reordenamiento</button>
             <button class="admin-tab-btn" id="btn-atab-tallas" onclick="switchAdminTab('tallas')">📏 Tallas Habilitadas</button>
             <button class="admin-tab-btn" id="btn-atab-colegios" onclick="switchAdminTab('colegios')">🏛️ Perfil & Nuevos Colegios</button>
           </div>
         </div>
 
         <div class="admin-body" style="padding:0;">
-          <!-- SUBTAB 1: PRENDAS & REORDENAMIENTO -->
-          <div id="admin-sec-prendas">
+          <!-- SUBTAB 1: TELAS DEL COLEGIO -->
+          <div id="admin-sec-telas">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+              <p style="font-size:0.82rem; color:var(--text-muted); margin:0;">
+                💡 <strong>Ordena y gestiona las telas:</strong> Arrastra la fila desde el ícono <strong>`⋮⋮`</strong> o usa los botones ▲ / ▼ para ordenar las telas. El orden definido aquí aparecerá automáticamente en el selector desplegable <strong>"Tela Asignada"</strong> de cada prenda.
+              </p>
+              <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.4rem 0.8rem;" onclick="mostrarFormNuevaTela()">+ Dar de Alta Nueva Tela</button>
+            </div>
+
+            <div id="form-nueva-tela-container" style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
+              <h4 style="margin-top:0; margin-bottom:0.75rem; color:#34d399; font-size:0.9rem;">✨ Registrar Nueva Tela para este Colegio</h4>
+              <div style="display:grid; grid-template-columns: 1fr auto; gap:0.75rem; align-items:end;">
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Nombre / Descripción de la Tela *</label>
+                  <input type="text" id="nt-desc" class="cell-editable-sm" style="width:100%; font-weight:600;" placeholder="Ej. Gabardina 100% Algodón">
+                </div>
+                <div>
+                  <button class="btn" style="padding:0.45rem 1rem;" onclick="crearNuevaTelaAdmin()">Guardar Tela</button>
+                </div>
+              </div>
+            </div>
+
+            <div style="max-height: 540px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
+              <table class="table-compact-auto" style="width:100%;">
+                <thead>
+                  <tr>
+                    <th style="width:70px; text-align:center;">Orden</th>
+                    <th style="text-align:left;">Nombre / Descripción de la Tela</th>
+                    <th style="width:70px; text-align:center;">Activo</th>
+                  </tr>
+                </thead>
+                <tbody id="tb-admin-telas-body">
+                  <tr><td colspan="3" style="text-align:center; padding:2rem;">Cargando telas del colegio...</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div style="margin-top:1.25rem; text-align:right;">
+              <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; padding:0.6rem 1.4rem;" onclick="guardarConfigTelasAdmin()">💾 Guardar Orden y Cambios de Telas</button>
+            </div>
+          </div>
+
+          <!-- SUBTAB 2: PRENDAS & REORDENAMIENTO -->
+          <div id="admin-sec-prendas" style="display:none;">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
               <p style="font-size:0.82rem; color:var(--text-muted); margin:0;">
                 💡 <strong>Reordena las prendas:</strong> Arrastra la fila desde el ícono <strong>`⋮⋮`</strong> o usa los botones ▲ / ▼ para cambiar la secuencia. Asigna la <strong>Tela específica</strong> que usa cada prenda para calcular dinámicamente su costo.
@@ -303,48 +345,6 @@
 
             <div style="margin-top:1.25rem; text-align:right;">
               <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; padding:0.6rem 1.4rem;" onclick="guardarConfigPrendasAdmin()">💾 Guardar Reordenamiento y Cambios</button>
-            </div>
-          </div>
-
-          <!-- SUBTAB 2: TELAS DEL COLEGIO -->
-          <div id="admin-sec-telas" style="display:none;">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
-              <p style="font-size:0.82rem; color:var(--text-muted); margin:0;">
-                💡 <strong>Ordena y gestiona las telas:</strong> Arrastra la fila desde el ícono <strong>`⋮⋮`</strong> o usa los botones ▲ / ▼ para ordenar las telas. El orden definido aquí aparecerá automáticamente en el selector desplegable <strong>"Tela Asignada"</strong> de cada prenda.
-              </p>
-              <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.4rem 0.8rem;" onclick="mostrarFormNuevaTela()">+ Dar de Alta Nueva Tela</button>
-            </div>
-
-            <div id="form-nueva-tela-container" style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
-              <h4 style="margin-top:0; margin-bottom:0.75rem; color:#34d399; font-size:0.9rem;">✨ Registrar Nueva Tela para este Colegio</h4>
-              <div style="display:grid; grid-template-columns: 1fr auto; gap:0.75rem; align-items:end;">
-                <div>
-                  <label style="font-size:0.72rem; color:#94a3b8;">Nombre / Descripción de la Tela *</label>
-                  <input type="text" id="nt-desc" class="cell-editable-sm" style="width:100%; font-weight:600;" placeholder="Ej. Gabardina 100% Algodón">
-                </div>
-                <div>
-                  <button class="btn" style="padding:0.45rem 1rem;" onclick="crearNuevaTelaAdmin()">Guardar Tela</button>
-                </div>
-              </div>
-            </div>
-
-            <div style="max-height: 540px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
-              <table class="table-compact-auto" style="width:100%;">
-                <thead>
-                  <tr>
-                    <th style="width:70px; text-align:center;">Orden</th>
-                    <th style="text-align:left;">Nombre / Descripción de la Tela</th>
-                    <th style="width:70px; text-align:center;">Activo</th>
-                  </tr>
-                </thead>
-                <tbody id="tb-admin-telas-body">
-                  <tr><td colspan="3" style="text-align:center; padding:2rem;">Cargando telas del colegio...</td></tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div style="margin-top:1.25rem; text-align:right;">
-              <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; padding:0.6rem 1.4rem;" onclick="guardarConfigTelasAdmin()">💾 Guardar Orden y Cambios de Telas</button>
             </div>
           </div>
 
