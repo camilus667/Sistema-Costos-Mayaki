@@ -828,7 +828,8 @@ api.get('/desglose-inteligente-producto', async (c) => {
     if (tallaIdParam) {
       tallaSeleccionada = tallasDisponibles.find((t: any) => t.tallaId === tallaIdParam) || tallasDisponibles[0] || null;
     } else {
-      tallaSeleccionada = tallasDisponibles[0] || null;
+      // Por defecto: talla 14; si no existe, la primera disponible
+      tallaSeleccionada = tallasDisponibles.find((t: any) => String(t.codigo).trim() === '14') || tallasDisponibles[0] || null;
     }
 
     const pesoGramos = tallaSeleccionada ? tallaSeleccionada.pesoGramos : 250;

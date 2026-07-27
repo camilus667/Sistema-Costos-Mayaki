@@ -860,9 +860,15 @@
         tallaSel.innerHTML = tallasDisp.map(t =>
           `<option value="${t.tallaId}" title="Peso c/merma: ${t.pesoGramos}g">${t.codigo} — ${t.pesoGramos}g tela</option>`
         ).join('');
-        // Restaurar selección si sigue siendo válida
+        // Prioridad: 1) selección anterior válida, 2) talla 14 por defecto, 3) primera disponible
         if (currentTallaVal && tallasDisp.find(t => t.tallaId === currentTallaVal)) {
           tallaSel.value = currentTallaVal;
+        } else {
+          const talla14 = tallasDisp.find(t => String(t.codigo).trim() === '14');
+          if (talla14) {
+            tallaSel.value = talla14.tallaId;
+          }
+          // Si no existe talla 14, queda la primera (comportamiento nativo del select)
         }
 
         const tallaActual = p.tallaActual;
