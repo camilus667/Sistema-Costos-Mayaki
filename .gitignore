@@ -1,0 +1,14 @@
+node_modules
+dist
+.env
+.env.*
+.next
+.vscode
+*.log
+.DS_Store
+coverage
+turbo
+*.zip
+*.db
+*.sqlite
+

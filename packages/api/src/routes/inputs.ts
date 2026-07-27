@@ -1,0 +1,654 @@
+import { Hono } from 'hono';
+import { eq, and, asc } from 'drizzle-orm';
+import { productos, tallas, pesoMateriaPrima, manoObra, telas, accesorios, detalleAccesorio, costosIndirectos } from '../database/schema';
+import * as XLSX from 'xlsx';
+import { findExcelPath } from '../scripts/seed';
+import { saveDbToDisk } from '../database/sqljs';
+
+const api = new Hono();
+
+let inputsExcelCache: any = null;
+const overriddenCellQtyMap = new Map<string, number>();
+
+function loadExcelInputs() {
+  if (inputsExcelCache) return inputsExcelCache;
+
+  try {
+    const excelPath = findExcelPath();
+    const parseXLSX = (XLSX as any).default || XLSX;
+    const workbook = parseXLSX.readFile(excelPath);
+
+    // 1. PesoMatPrima
+    const pesoSheet = workbook.Sheets['PesoMatPrima'];
+    const pesoRows = pesoSheet ? parseXLSX.utils.sheet_to_json<any[]>(pesoSheet, { header: 1 }) : [];
+    const tallasHeaderPeso = pesoRows[1]?.slice(2) || [];
+
+    // 2. Acc (Accesorios por prenda + Tabla Auxiliar)
+    const accSheet = workbook.Sheets['Acc'];
+    const accRows = accSheet ? parseXLSX.utils.sheet_to_json<any[]>(accSheet, { header: 1 }) : [];
+    const accHeaders = accRows[1]?.slice(2, 40).map(h => String(h || '').trim()).filter(Boolean) || [];
+
+    // Cargar Tabla Auxiliar (fila 31 en adelante)
+    const auxHeaderIdx = accRows.findIndex((r: any) => r && r.some((c: any) => String(c).includes('UNIDAD DE COMPRA') || String(c).includes('COSTO Unitario')));
+    const tablaAuxiliarRows = auxHeaderIdx !== -1 ? accRows.slice(auxHeaderIdx + 1).filter((r: any) => r && r[0] && (typeof r[1] === 'number' || !isNaN(Number(r[1])))) : [];
+
+    // 3. ManoDeObra
+    const moSheet = workbook.Sheets['ManoDeObra'];
+    const moRows = moSheet ? parseXLSX.utils.sheet_to_json<any[]>(moSheet, { header: 1 }) : [];
+
+    // 4. fijosXprenda
+    const fxpSheet = workbook.Sheets['fijosXprenda'];
+    const fxpRows = fxpSheet ? parseXLSX.utils.sheet_to_json<any[]>(fxpSheet, { header: 1 }) : [];
+
+    // 5. Fij&Var
+    const fjvSheet = workbook.Sheets['Fij&Var'];
+    const fjvRows = fjvSheet ? parseXLSX.utils.sheet_to_json<any[]>(fjvSheet, { header: 1 }) : [];
+
+    inputsExcelCache = { pesoRows, tallasHeaderPeso, accRows, accHeaders, tablaAuxiliarRows, moRows, fxpRows, fjvRows };
+    return inputsExcelCache;
+  } catch (e) {
+    console.error('Error al cargar datos fijos desde Excel:', e);
+    return null;
+  }
+}
+
+// GET /api/inputs/tabla-auxiliar-accesorios - Tabla Auxiliar completa de Definición y Costos de Accesorios (Hoja Acc)
+api.get('/tabla-auxiliar-accesorios', async (c) => {
+  const db = (c as any).db;
+  const colegioId = c.req.query('colegioId');
+
+  let accQuery = db.select().from(accesorios);
+  if (colegioId && colegioId !== 'all') accQuery = accQuery.where(eq(accesorios.colegioId, colegioId));
+  const list = await accQuery;
+
+  const inputs = loadExcelInputs();
+  const auxRows = inputs ? inputs.tablaAuxiliarRows : [];
+
+  const auxMap = new Map<number, any>();
+  auxRows.forEach((r: any) => {
+    const code = Number(r[1]);
+    if (code > 0) {
+      const cantUd = Number(r[3]) || 1;
+      const costoUd = Number(r[4]) || Number(r[5]) || 0;
+      const costoUnit = Number(r[5]) || (cantUd > 0 ? costoUd / cantUd : 0);
+      const costoUso = Number(r[6]) || costoUnit;
+
+      auxMap.set(code, {
+        unidadCompra: r[2] ? String(r[2]).trim() : 'unidad',
+        cantidadXUd: cantUd,
+        costoUdCompra: parseFloat(costoUd.toFixed(2)),
+        costoUnitario: parseFloat(costoUnit.toFixed(4)),
+        costoUsoPrendas: parseFloat(costoUso.toFixed(2)),
+        ojales: r[7] ? Number(r[7]) : null,
+        unidadesPorPrenda: r[8] ? Number(r[8]) : 1,
+        unidadesPorMetro: r[9] ? Number(r[9]) : null,
+        costoCm2: r[10] ? Number(r[10]) : null,
+      });
+    }
+  });
+
+  const data = list.map((a: any, idx: number) => {
+    const codeNum = parseInt(a.codigo || '') || (idx + 1);
+    const aux = auxMap.get(codeNum) || {
+      unidadCompra: a.unidadCompra || 'unidad',
+      cantidadXUd: a.cantidadXUd || 1,
+      costoUdCompra: a.costoUdCompra || 0,
+      costoUnitario: a.costoUnitario || 0,
+      costoUsoPrendas: a.costoUnitario || 0,
+      ojales: null,
+      unidadesPorPrenda: 1,
+      unidadesPorMetro: null,
+      costoCm2: null,
+    };
+
+    return {
+      id: a.id,
+      codigo: codeNum,
+      descripcion: a.descripcion,
+      unidadCompra: aux.unidadCompra,
+      cantidadXUd: aux.cantidadXUd,
+      costoUdCompra: aux.costoUdCompra,
+      costoUnitario: aux.costoUnitario,
+      costoUsoPrendas: aux.costoUsoPrendas,
+      ojales: aux.ojales,
+      unidadesPorPrenda: aux.unidadesPorPrenda,
+      unidadesPorMetro: aux.unidadesPorMetro,
+      costoCm2: aux.costoCm2,
+    };
+  });
+
+  return c.json({ success: true, data });
+});
+
+// PUT /api/inputs/tabla-auxiliar-accesorios/:id - Actualizar datos de un accesorio en Tabla Auxiliar
+api.put('/tabla-auxiliar-accesorios/:id', async (c) => {
+  const db = (c as any).db;
+  const id = c.req.param('id');
+  const body = await c.req.json();
+
+  const {
+    unidadCompra,
+    cantidadXUd,
+    costoUdCompra,
+    costoUnitario,
+    costoUsoPrendas,
+    ojales,
+    unidadesPorPrenda,
+    unidadesPorMetro,
+    costoCm2
+  } = body;
+
+  try {
+    await db.update(accesorios)
+      .set({
+        unidadCompra: unidadCompra || 'unidad',
+        cantidadXUd: Number(cantidadXUd) || 1,
+        costoUdCompra: Number(costoUdCompra) || 0,
+        costoUnitario: Number(costoUnitario) || 0,
+      })
+      .where(eq(accesorios.id, id));
+
+    const inputs = loadExcelInputs();
+    if (inputs && inputs.tablaAuxiliarRows) {
+      const [accObj] = await db.select().from(accesorios).where(eq(accesorios.id, id)).limit(1);
+      if (accObj && accObj.codigo) {
+        const codeNum = parseInt(accObj.codigo);
+        const row = inputs.tablaAuxiliarRows.find((r: any) => Number(r[1]) === codeNum);
+        if (row) {
+          if (unidadCompra !== undefined) row[2] = unidadCompra;
+          if (cantidadXUd !== undefined) row[3] = Number(cantidadXUd) || 1;
+          if (costoUdCompra !== undefined) row[4] = Number(costoUdCompra) || 0;
+          if (costoUnitario !== undefined) row[5] = Number(costoUnitario) || 0;
+          if (costoUsoPrendas !== undefined) row[6] = Number(costoUsoPrendas) || 0;
+          if (ojales !== undefined) row[7] = ojales;
+          if (unidadesPorPrenda !== undefined) row[8] = unidadesPorPrenda;
+          if (unidadesPorMetro !== undefined) row[9] = unidadesPorMetro;
+          if (costoCm2 !== undefined) row[10] = costoCm2;
+        }
+      }
+    }
+
+    return c.json({ success: true, message: 'Accesorio actualizado exitosamente' });
+  } catch (e) {
+    console.error('Error al actualizar accesorio en Tabla Auxiliar:', e);
+    return c.json({ success: false, error: String(e) }, 500);
+  }
+});
+
+// GET /api/inputs/peso-mat-prima - Matriz exacta de pesos (Con Merma + Peso Exacto)
+api.get('/peso-mat-prima', async (c) => {
+  const db = (c as any).db;
+  const colegioId = c.req.query('colegioId');
+
+  let prodQuery = db.select().from(productos);
+  if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
+  const allProds = await prodQuery.orderBy(asc(productos.itemNumero));
+  const allTallas = await db.select().from(tallas).orderBy(asc(tallas.orden));
+
+  let pesos: any[] = [];
+  try {
+    pesos = await db.select().from(pesoMateriaPrima);
+  } catch (e) {}
+
+  const pesoMap = new Map<string, any>();
+  pesos.forEach((p: any) => pesoMap.set(`${p.productoId}_${p.tallaId}`, p));
+
+  const inputs = loadExcelInputs();
+  const rows = inputs ? inputs.pesoRows : [];
+  const tallasHeader = inputs ? inputs.tallasHeaderPeso : [];
+
+  const topMap = new Map<string, number>();
+  const bottomMap = new Map<string, number>();
+
+  if (rows && rows.length > 0) {
+    const sinMermaHeaderIdx = rows.findIndex((r: any) => r && String(r[0]).toUpperCase().includes('ESTIMADO'));
+    const topRows = rows.slice(2, sinMermaHeaderIdx !== -1 ? sinMermaHeaderIdx : 30).filter((r: any) => r && typeof r[0] === 'number');
+    const bottomRows = sinMermaHeaderIdx !== -1 ? rows.slice(sinMermaHeaderIdx + 2).filter((r: any) => r && typeof r[0] === 'number') : [];
+
+    topRows.forEach((r: any) => {
+      const itemNum = Number(r[0]);
+      tallasHeader.forEach((code: any, idx: number) => {
+        const val = Number(r[2 + idx]) || 0;
+        topMap.set(`${itemNum}_${String(code).trim()}`, val);
+      });
+    });
+
+    bottomRows.forEach((r: any) => {
+      const itemNum = Number(r[0]);
+      tallasHeader.forEach((code: any, idx: number) => {
+        const val = Number(r[2 + idx]) || 0;
+        bottomMap.set(`${itemNum}_${String(code).trim()}`, val);
+      });
+    });
+  }
+
+  const data = allProds.map((prod: any) => {
+    const rowObj: any = {
+      productoId: prod.id,
+      itemNumero: prod.itemNumero,
+      descripcion: prod.descripcion,
+      tallas: {}
+    };
+
+    allTallas.forEach((talla: any) => {
+      const dbRec = pesoMap.get(`${prod.id}_${talla.id}`);
+      const key = `${prod.itemNumero}_${talla.codigo}`;
+
+      const conMerma = dbRec ? dbRec.pesoGramos : (topMap.get(key) || 0);
+      const exacto = dbRec ? (dbRec.pesoExactoGramos || parseFloat((conMerma / 1.08).toFixed(2))) : (bottomMap.get(key) || (conMerma > 0 ? parseFloat((conMerma / 1.08).toFixed(2)) : 0));
+
+      rowObj.tallas[talla.codigo] = {
+        pesoConMerma: parseFloat(conMerma.toFixed(2)),
+        pesoExacto: parseFloat(exacto.toFixed(2)),
+        mermaPorcentaje: 8
+      };
+    });
+
+    return rowObj;
+  });
+
+  return c.json({
+    success: true,
+    tallas: allTallas.map((t: any) => ({ id: t.id, codigo: t.codigo })),
+    data
+  });
+});
+
+// GET /api/inputs/accesorios-matriz - Matriz completa de los 38 accesorios por prenda
+api.get('/accesorios-matriz', async (c) => {
+  const db = (c as any).db;
+  const colegioId = c.req.query('colegioId');
+
+  let prodQuery = db.select().from(productos);
+  if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
+  const allProds = await prodQuery.orderBy(asc(productos.itemNumero));
+
+  const inputs = loadExcelInputs();
+  const accRows = inputs ? inputs.accRows : [];
+  const accHeaders = inputs ? inputs.accHeaders : [];
+
+  const accMap = new Map<string, number>();
+  const totalAccMap = new Map<number, number>();
+
+  if (accRows && accRows.length > 0) {
+    const auxHeaderIdx = accRows.findIndex((r: any) => r && r.some((c: any) => String(c).includes('UNIDAD DE COMPRA') || String(c).includes('COSTO Unitario')));
+    const matrixRows = accRows.slice(2, auxHeaderIdx !== -1 ? auxHeaderIdx : 30);
+
+    const parseItemNumbers = (val: any): number[] => {
+      if (typeof val === 'number') return [val];
+      const str = String(val).trim();
+      if (str.includes('-')) {
+        const parts = str.split('-').map(p => parseInt(p.trim())).filter(p => !isNaN(p));
+        if (parts.length === 2) {
+          const nums = [];
+          for (let i = parts[0]; i <= parts[1]; i++) nums.push(i);
+          return nums;
+        }
+      }
+      const num = parseInt(str);
+      return !isNaN(num) ? [num] : [];
+    };
+
+    matrixRows.forEach((r: any) => {
+      if (r && r[1] !== undefined) {
+        const itemNums = parseItemNumbers(r[1]);
+        itemNums.forEach((itemNum) => {
+          if (itemNum > 0) {
+            accHeaders.forEach((h: string, idx: number) => {
+              const val = Number(r[2 + idx]) || 0;
+              accMap.set(`${itemNum}_${h}`, val);
+            });
+            const total = Number(r[41]) || 0;
+            totalAccMap.set(itemNum, total);
+          }
+        });
+      }
+    });
+  }
+
+  const auxInfoMap = new Map<string, any>();
+  const tablaAux = inputs ? inputs.tablaAuxiliarRows : [];
+  
+  let dbAccs: any[] = [];
+  try {
+    dbAccs = await db.select().from(accesorios);
+  } catch (e) {}
+
+  if (dbAccs && dbAccs.length > 0) {
+    dbAccs.forEach((a: any) => {
+      const name = a.descripcion.trim();
+      auxInfoMap.set(name, {
+        unidadCompra: a.unidadCompra || 'unidad',
+        cantidadXUd: a.cantidadXUd || 1,
+        costoUdCompra: a.costoUdCompra || 0,
+        costoUnitarioBs: a.costoUnitario || 0,
+      });
+    });
+  }
+
+  if (tablaAux && tablaAux.length > 0) {
+    tablaAux.forEach((r: any) => {
+      if (r && r[0]) {
+        const name = String(r[0]).trim();
+        if (!auxInfoMap.has(name)) {
+          const dbMatch = dbAccs.find((a: any) => a.descripcion.trim() === name);
+          const udComp = dbMatch ? dbMatch.unidadCompra : (r[2] || 'unidad');
+          const cantUd = dbMatch ? dbMatch.cantidadXUd : (Number(r[3]) || 1);
+          let costoUd = dbMatch ? dbMatch.costoUdCompra : (Number(r[4]) || 0);
+          const costF = Number(r[5]) || (cantUd > 0 ? costoUd / cantUd : 0);
+          const costG = Number(r[6]) || costF;
+          const unitCost = (!isNaN(costG) && costG > 0) ? costG : ((!isNaN(costF) && costF > 0) ? costF : 0);
+
+          if ((costoUd === 0 || isNaN(costoUd)) && unitCost > 0) {
+            costoUd = unitCost * cantUd;
+          }
+
+          auxInfoMap.set(name, {
+            unidadCompra: udComp,
+            cantidadXUd: cantUd,
+            costoUdCompra: costoUd,
+            costoUnitarioBs: unitCost
+          });
+        }
+      }
+    });
+  }
+
+  const headerList = accHeaders.length > 0 ? accHeaders : (dbAccs.map((a: any) => a.descripcion.trim()));
+
+  const accesoriosInfo = headerList.map((h: string) => {
+    const info = auxInfoMap.get(h) || {};
+    return {
+      nombre: h,
+      unidadCompra: info.unidadCompra || 'unidad',
+      cantidadXUd: info.cantidadXUd || 1,
+      costoUdCompra: info.costoUdCompra || 0,
+      costoUnitarioBs: parseFloat((info.costoUnitarioBs || 0).toFixed(4))
+    };
+  });
+
+  const data = allProds.map((prod: any) => {
+    const rowObj: any = {
+      productoId: prod.id,
+      itemNumero: prod.itemNumero,
+      descripcion: prod.descripcion,
+      totalAccesoriosBs: parseFloat((totalAccMap.get(prod.itemNumero) || 0).toFixed(2)),
+      accesorios: {},
+      unidades: {},
+      costos: {}
+    };
+
+    headerList.forEach((h: string) => {
+      const key = `${prod.itemNumero}_${h}`;
+      const info = auxInfoMap.get(h) || {};
+      const uCost = info.costoUnitarioBs || 0;
+      let qty = 0;
+      if (overriddenCellQtyMap.has(key)) {
+        qty = overriddenCellQtyMap.get(key)!;
+      } else {
+        const costBs = accMap.get(key) || 0;
+        if (costBs > 0) {
+          if (uCost > 0) {
+            qty = parseFloat((costBs / uCost).toFixed(2));
+          } else {
+            qty = 1;
+          }
+        }
+      }
+
+      const calculatedCost = parseFloat((qty * uCost).toFixed(2));
+      rowObj.accesorios[h] = calculatedCost;
+      rowObj.costos[h] = calculatedCost;
+      rowObj.unidades[h] = qty;
+    });
+
+    let rowSum = 0;
+    Object.values(rowObj.accesorios).forEach((v: any) => rowSum += Number(v) || 0);
+    rowObj.totalAccesoriosBs = parseFloat(rowSum.toFixed(2));
+
+    return rowObj;
+  });
+
+  return c.json({
+    success: true,
+    accesorios: headerList,
+    accesoriosInfo,
+    data
+  });
+});
+
+// Store cell override route
+api.put('/accesorios-matriz-celda', async (c) => {
+  const body = await c.req.json();
+  const { itemNumero, accesorioNombre, cantidad } = body;
+  if (itemNumero > 0 && accesorioNombre) {
+    overriddenCellQtyMap.set(`${itemNumero}_${accesorioNombre}`, Number(cantidad) || 0);
+  }
+  return c.json({ success: true });
+});
+
+// GET /api/inputs/mano-de-obra - Costos de mano de obra en los 3 grupos de tallas oficiales (2-10, 12-S, M-4XL)
+api.get('/mano-de-obra', async (c) => {
+  const db = (c as any).db;
+  const colegioId = c.req.query('colegioId');
+
+  let prodQuery = db.select().from(productos);
+  if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
+  const allProds = await prodQuery.orderBy(asc(productos.itemNumero));
+  const allTallas = await db.select().from(tallas).orderBy(asc(tallas.orden));
+
+  let moList: any[] = [];
+  try {
+    moList = await db.select().from(manoObra);
+  } catch (e) {}
+
+  const moDbMap = new Map<string, number>();
+  moList.forEach((m: any) => moDbMap.set(`${m.productoId}_${m.tallaId}`, m.costoBs));
+
+  const inputs = loadExcelInputs();
+  const moRows = inputs ? inputs.moRows : [];
+  const moExcelMap = new Map<number, { grupo1: number; grupo2: number; grupo3: number }>();
+
+  if (moRows && moRows.length > 0) {
+    moRows.slice(2).forEach((r: any) => {
+      if (r && typeof r[0] === 'number') {
+        const itemNum = Number(r[0]);
+        moExcelMap.set(itemNum, {
+          grupo1: Number(r[2]) || 0,
+          grupo2: Number(r[3]) || 0,
+          grupo3: Number(r[4]) || 0,
+        });
+      }
+    });
+  }
+
+  const data = allProds.map((prod: any) => {
+    const excelMo = moExcelMap.get(prod.itemNumero) || { grupo1: 0, grupo2: 0, grupo3: 0 };
+
+    const tGroup1 = allTallas.find((t: any) => ['2', '4', '6', '8', '10'].includes(t.codigo));
+    const tGroup2 = allTallas.find((t: any) => ['12', '14', '16/34', '36/XS', '38/S'].includes(t.codigo));
+    const tGroup3 = allTallas.find((t: any) => ['40/M', '42/L', '44/XL', '46/2XL', '48/3XL', '50/4XL'].includes(t.codigo));
+
+    const g1 = tGroup1 ? (moDbMap.get(`${prod.id}_${tGroup1.id}`) ?? excelMo.grupo1) : excelMo.grupo1;
+    const g2 = tGroup2 ? (moDbMap.get(`${prod.id}_${tGroup2.id}`) ?? excelMo.grupo2) : excelMo.grupo2;
+    const g3 = tGroup3 ? (moDbMap.get(`${prod.id}_${tGroup3.id}`) ?? excelMo.grupo3) : excelMo.grupo3;
+
+    return {
+      productoId: prod.id,
+      itemNumero: prod.itemNumero,
+      descripcion: prod.descripcion,
+      grupo1_tallas_2_10: g1,
+      grupo2_tallas_12_S: g2,
+      grupo3_tallas_M_4XL: g3,
+    };
+  });
+
+  return c.json({
+    success: true,
+    gruposTallas: ['Tallas 2 - 10', 'Tallas 12 - S', 'Tallas M - 4XL'],
+    data
+  });
+});
+
+// GET /api/inputs/fijos-x-prenda - Factor de complejidad y fijos por prenda dinámicos integrados con indirectos
+api.get('/fijos-x-prenda', async (c) => {
+  const db = (c as any).db;
+  const colegioId = c.req.query('colegioId');
+
+  let prodQuery = db.select().from(productos);
+  if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
+  const allProds = await prodQuery.orderBy(asc(productos.itemNumero));
+
+  let indirectosList: any[] = [];
+  try {
+    let q = db.select().from(costosIndirectos);
+    if (colegioId && colegioId !== 'all') q = q.where(eq(costosIndirectos.colegioId, colegioId));
+    indirectosList = await q;
+  } catch (e) {}
+
+  let totalIndirectosMensual = indirectosList.reduce((acc: number, curr: any) => acc + (Number(curr.montoMensual) || 0), 0);
+  if (totalIndirectosMensual === 0) totalIndirectosMensual = 21480;
+
+  const prendasProducidasMes = 1800;
+  const tarifaPuntoComplejidad = totalIndirectosMensual / (prendasProducidasMes * 10);
+
+  const data = allProds.map((p: any) => {
+    const factor = p.factorComplejidad || 1;
+    const costoFijoCalculado = parseFloat((factor * tarifaPuntoComplejidad).toFixed(4));
+
+    return {
+      id: p.id,
+      itemNumero: p.itemNumero,
+      descripcion: p.descripcion,
+      factorComplejidad: factor,
+      costoFijo: costoFijoCalculado,
+      planchadoExtra: p.planchadoExtra || 0,
+      colocacionBotones: p.colocacionBotones || 0,
+    };
+  });
+
+  const indirectosFormatted = indirectosList.map((item: any, idx: number) => ({
+    id: item.id,
+    itemNumero: idx + 1,
+    concepto: item.concepto,
+    montoMensual: item.montoMensual,
+  }));
+
+  return c.json({
+    success: true,
+    tarifaPuntoComplejidad: parseFloat(tarifaPuntoComplejidad.toFixed(6)),
+    totalIndirectosMensual: parseFloat(totalIndirectosMensual.toFixed(2)),
+    prendasProducidasMes,
+    data,
+    indirectos: indirectosFormatted,
+  });
+});
+
+// PUT /api/inputs/mano-de-obra/:productoId - Actualizar tarifas de Mano de Obra por prenda en tiempo real
+api.put('/mano-de-obra/:productoId', async (c) => {
+  const db = (c as any).db;
+  const productoId = c.req.param('productoId');
+  const body = await c.req.json();
+  const { grupo1, grupo2, grupo3 } = body;
+
+  try {
+    const [prod] = await db.select().from(productos).where(eq(productos.id, productoId)).limit(1);
+    if (!prod) return c.json({ success: false, error: 'Producto no encontrado' }, 404);
+
+    const allTallas = await db.select().from(tallas).where(eq(tallas.colegioId, prod.colegioId));
+
+    for (const tallaObj of allTallas) {
+      const code = tallaObj.codigo;
+      let costoBs = Number(grupo3) || 0;
+      if (['2', '4', '6', '8', '10'].includes(code)) costoBs = Number(grupo1) || 0;
+      else if (['12', '14', '16/34', '36/XS', '38/S'].includes(code)) costoBs = Number(grupo2) || 0;
+
+      await db.delete(manoObra).where(and(eq(manoObra.productoId, prod.id), eq(manoObra.tallaId, tallaObj.id)));
+      await db.insert(manoObra).values({
+        productoId: prod.id,
+        tallaId: tallaObj.id,
+        costoBs,
+      });
+    }
+    saveDbToDisk();
+    return c.json({ success: true, message: 'Tarifas de Mano de Obra actualizadas exitosamente' });
+  } catch (e) {
+    console.error('Error actualizando Mano de Obra:', e);
+    return c.json({ success: false, error: String(e) }, 500);
+  }
+});
+
+// PUT /api/inputs/fijos-x-prenda/:id - Actualizar factor de complejidad en tiempo real
+api.put('/fijos-x-prenda/:id', async (c) => {
+  const db = (c as any).db;
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  const { factorComplejidad } = body;
+
+  try {
+    await db.update(productos).set({
+      factorComplejidad: Number(factorComplejidad) || 1,
+    }).where(eq(productos.id, id));
+
+    saveDbToDisk();
+    return c.json({ success: true, message: 'Factor de complejidad actualizado' });
+  } catch (e) {
+    console.error('Error actualizando fijos por prenda:', e);
+    return c.json({ success: false, error: String(e) }, 500);
+  }
+});
+
+// PUT /api/inputs/fij-var/:id - Actualizar costos indirectos mensuales en tiempo real
+api.put('/fij-var/:id', async (c) => {
+  const db = (c as any).db;
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  const { montoMensual, concepto } = body;
+
+  try {
+    await db.update(costosIndirectos).set({
+      montoMensual: Number(montoMensual) || 0,
+      ...(concepto ? { concepto: String(concepto).trim() } : {})
+    }).where(eq(costosIndirectos.id, id));
+
+    saveDbToDisk();
+    return c.json({ success: true, message: 'Costo indirecto actualizado' });
+  } catch (e) {
+    console.error('Error actualizando costo indirecto:', e);
+    return c.json({ success: false, error: String(e) }, 500);
+  }
+});
+
+// PUT /api/inputs/peso-mat-prima - Actualizar peso de materia prima en tiempo real
+api.put('/peso-mat-prima', async (c) => {
+  const db = (c as any).db;
+  const body = await c.req.json();
+  const { productoId, tallaCodigo, pesoConMerma } = body;
+
+  try {
+    const [prod] = await db.select().from(productos).where(eq(productos.id, productoId)).limit(1);
+    if (!prod) return c.json({ success: false, error: 'Producto no encontrado' }, 404);
+
+    const [tallaObj] = await db.select().from(tallas).where(and(eq(tallas.colegioId, prod.colegioId), eq(tallas.codigo, tallaCodigo))).limit(1);
+    if (tallaObj) {
+      const pConMerma = Number(pesoConMerma) || 0;
+      const pExacto = parseFloat((pConMerma / 1.08).toFixed(2));
+      await db.delete(pesoMateriaPrima).where(and(eq(pesoMateriaPrima.productoId, prod.id), eq(pesoMateriaPrima.tallaId, tallaObj.id)));
+      await db.insert(pesoMateriaPrima).values({
+        productoId: prod.id,
+        tallaId: tallaObj.id,
+        pesoExactoGramos: pExacto,
+        pesoGramos: pConMerma,
+        mermaPorcentaje: 8,
+        pesoConMerma: pConMerma,
+      });
+      saveDbToDisk();
+    }
+    return c.json({ success: true, message: 'Peso de materia prima actualizado' });
+  } catch (e) {
+    console.error('Error actualizando peso materia prima:', e);
+    return c.json({ success: false, error: String(e) }, 500);
+  }
+});
+
+export default api;

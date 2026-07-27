@@ -1,0 +1,27 @@
+{
+  "name": "sistema-uniformes",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Sistema centralizado de gestión de uniformes escolares",
+  "scripts": {
+    "dev": "pnpm --filter @sistema-uniformes/api dev:local",
+    "dev:local": "pnpm --filter @sistema-uniformes/api dev:local",
+    "dev:worker": "pnpm --filter @sistema-uniformes/api dev",
+    "db:seed": "pnpm --filter @sistema-uniformes/api db:seed",
+    "build": "turbo build",
+    "lint": "turbo lint"
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5",
+    "tsx": "^4.23.1",
+    "turbo": "^1.13.3",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "packageManager": "pnpm@8.15.0",
+  "workspaces": [
+    "packages/*"
+  ]
+}

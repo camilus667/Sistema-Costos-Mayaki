@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Gestión de Uniformes Escolares - Cambridge & Multi-Colegio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">  <link rel="stylesheet" href="/styles.css">
+</head>
+</head>
+<body>
+
+  <header>
+    <div class="logo-container">
+      <div class="logo-text">
+        <h1>Sistema de Uniformes Escolares</h1>
+        <p>Gestión Multi-Colegio & Motor de Costos de Uniformes</p>
+      </div>
+    </div>
+    
+    <div class="header-controls">
+      <label style="font-size: 0.8rem; color: var(--text-muted);">Colegio Activo:</label>
+      <select id="global-colegio-select" class="colegio-selector" onchange="cambiarColegioGlobal(this.value)">
+        <option value="all">TODOS LOS COLEGIOS</option>
+      </select>
+      <div class="status-badge">
+        <div class="status-dot"></div>
+        <span id="env-status">sql.js / D1 Activo</span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-btn active" onclick="switchTab('resumen')">Resumen General</button>
+    <button class="tab-btn" onclick="switchTab('inputs-excel')">Costos de Producción</button>
+    <button class="tab-btn" onclick="switchTab('matriz-excel')">Matrices Consolidadas</button>
+    <button class="tab-btn" onclick="switchTab('matriz-tallas')">Matriz por Prenda</button>
+    <button class="tab-btn" onclick="switchTab('inventario')">Inventario por Colegio</button>
+  </nav>
+
+  <main>
+
+    <!-- TAB 1: RESUMEN GENERAL AVANZADO (KPIS ESTANDARIZADOS Y CLAROS) -->
+    <div id="tab-resumen" class="tab-content active">
+      
+      <!-- FILA DE KPIS EJECUTIVOS FINANCIEROS -->
+      <div class="grid-stats">
+        <div class="stat-card">
+          <span class="stat-title">PRENDAS EN CATÁLOGO</span>
+          <span class="stat-value" id="st-prendas-kpi">-</span>
+          <span class="stat-subtext" id="st-variaciones-sub">- variaciones por talla</span>
+        </div>
+        <div class="stat-card stat-card-info">
+          <span class="stat-title">STOCK FÍSICO DISPONIBLE</span>
+          <span class="stat-value" id="st-stock-kpi">-</span>
+          <span class="stat-subtext">prendas disponibles en almacén</span>
+        </div>
+        <div class="stat-card stat-card-warning">
+          <span class="stat-title">INVERSIÓN TOTAL EN PRODUCCIÓN</span>
+          <span class="stat-value" id="st-costo-inv-kpi">Bs. 0.00</span>
+          <span class="stat-subtext">costo total de fabricación</span>
+        </div>
+        <div class="stat-card stat-card-info">
+          <span class="stat-title">VENTA TOTAL PROYECTADA</span>
+          <span class="stat-value" id="st-venta-inv-kpi">Bs. 0.00</span>
+          <span class="stat-subtext">recaudación total proyectada</span>
+        </div>
+        <div class="stat-card stat-card-success">
+          <span class="stat-title">GANANCIA BRUTA PROYECTADA</span>
+          <span class="stat-value" id="st-ganancia-kpi">Bs. 0.00</span>
+          <span class="stat-subtext" id="st-ganancia-sub" style="color:var(--success); font-weight:600;">+0.0% ganancia sobre inversión</span>
+        </div>
+      </div>
+
+      <!-- TABLA EJECUTIVA DE RESUMEN FINANCIERO POR PRENDA -->
+      <div class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">Resumen Ejecutivo de Prendas, Precios, Costos y Valorización de Inventario</h2>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Item #</th>
+                <th>Descripción del Uniforme</th>
+                <th>Stock Total (u)</th>
+                <th>Rango Costo Prod. (Bs.)</th>
+                <th>Rango Precio Venta (Bs.)</th>
+                <th>Valor Inv. Costo (Bs.)</th>
+                <th>Valor Inv. Venta (Bs.)</th>
+                <th>Ganancia Estimada (Bs.)</th>
+              </tr>
+            </thead>
+            <tbody id="tb-resumen-prendas">
+              <tr><td colspan="8" style="text-align:center; padding: 2rem;">Cargando resumen ejecutivo de prendas...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: COSTOS DE PRODUCCION -->
+    <div id="tab-inputs-excel" class="tab-content">
+      <div class="panel">
+        <div style="display: flex; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1.25rem;">
+          <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0; white-space: nowrap;">Costos de Producción</h2>
+          <div class="excel-tabs-bar" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">
+            <button class="excel-tab active" onclick="switchInputConcept('Tela', this)">Tela</button>
+            <button class="excel-tab" onclick="switchInputConcept('PesoMatPrima', this)">PesoMatPrima</button>
+            <button class="excel-tab" onclick="switchInputConcept('Acc', this)">Acc (Tabla Auxiliar & Uso)</button>
+            <button class="excel-tab" onclick="switchInputConcept('ManoDeObra', this)">ManoDeObra</button>
+            <button class="excel-tab" onclick="switchInputConcept('fijosXprenda', this)">fijosXprenda & Indirectos</button>
+          </div>
+        </div>
+
+        <div id="acc-view-selector" style="display:none; margin-bottom:1rem; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+          <span style="font-size:0.78rem; color:var(--text-muted); font-weight:600;">Vista Hoja Acc:</span>
+          <button class="subview-btn active" id="btn-acc-aux" onclick="toggleAccSubView('aux')">1. Tabla Auxiliar (Costos)</button>
+          <button class="subview-btn" id="btn-acc-matriz" onclick="toggleAccSubView('matriz')">2. Matriz por Prenda (Uso)</button>
+        </div>
+
+        <div class="table-container">
+          <table id="tb-inputs-table">
+            <thead id="th-inputs-head">
+              <tr><th>Cargando hoja de datos fijos...</th></tr>
+            </thead>
+            <tbody id="tb-inputs-body">
+              <tr><td style="text-align:center; padding: 2rem;">Selecciona una hoja de datos fijos...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: MATRICES CONSOLIDADAS -->
+    <div id="tab-matriz-excel" class="tab-content">
+      <div class="panel">
+        <div style="display: flex; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1.25rem;">
+          <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0; white-space: nowrap;">Matrices Consolidadas</h2>
+          <div class="excel-tabs-bar" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">
+            <button class="excel-tab active" onclick="switchExcelConcept('costoBruto', this)">CostoBruto</button>
+            <button class="excel-tab" onclick="switchExcelConcept('precioVenta', this)">PrecioDeVenta</button>
+            <button class="excel-tab" onclick="switchExcelConcept('costoAntesImp', this)">CostoAntesImp</button>
+            <button class="excel-tab" onclick="switchExcelConcept('costoTotal', this)">CostoTotal</button>
+            <button class="excel-tab" onclick="switchExcelConcept('utilidadNeta', this)">UtilidadNeta</button>
+            <button class="excel-tab" onclick="switchExcelConcept('margenPorcentaje', this)">%Ganancia</button>
+            <button class="excel-tab" onclick="switchExcelConcept('inventarioUnidades', this)">INVENTARIO</button>
+            <button class="excel-tab" onclick="switchExcelConcept('costoInventario', this)">CostoInventario</button>
+            <button class="excel-tab" onclick="switchExcelConcept('precioInventario', this)">PrecioInventario</button>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table id="tb-consolidada-table" class="table-consolidada-fixed">
+            <thead>
+              <tr id="tr-consolidada-head">
+                <th>ITEM</th>
+                <th>DETALLE DEL UNIFORME</th>
+                <th colspan="16" style="text-align:center;">Cargando tallas...</th>
+                <th style="text-align:right;">SUBTOTAL PRENDA</th>
+              </tr>
+            </thead>
+            <tbody id="tb-consolidada-body">
+              <tr><td colspan="19" style="text-align:center; padding: 2rem;">Cargando matriz consolidada...</td></tr>
+            </tbody>
+            <tfoot id="tf-consolidada-foot">
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: MATRIZ POR PRENDA INDIVIDUAL -->
+    <div id="tab-matriz-tallas" class="tab-content">
+      <div class="panel">
+        <div style="display: flex; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1.25rem;">
+          <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0; white-space: nowrap;">Matriz de Costos por Prenda</h2>
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <label for="select-matriz-producto" style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); white-space: nowrap;">Prenda:</label>
+            <select id="select-matriz-producto" class="colegio-selector" style="min-width: 280px;" onchange="generarMatrizPrenda()">
+              <option value="">Cargando lista de uniformes...</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="matriz-container" class="table-container" style="display:none; overflow-x: auto;">
+          <table class="table-matriz-prenda-fixed">
+            <thead>
+              <tr>
+                <th>Concepto / Talla</th>
+                <th id="th-matriz-tallas" colspan="20">Cargando tallas...</th>
+              </tr>
+            </thead>
+            <tbody id="tb-matriz-body">
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: INVENTARIO -->
+    <div id="tab-inventario" class="tab-content">
+      <div class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">Stock e Inventario por Colegio (Solo Artículos Disponible > 0)</h2>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Item #</th>
+                <th>Producto / Uniforme</th>
+                <th>Talla</th>
+                <th>Stock Físico</th>
+                <th>Costo Unit. (Bs.)</th>
+                <th>Precio Venta (Bs.)</th>
+                <th>Valor Inv. (Bs.)</th>
+              </tr>
+            </thead>
+            <tbody id="tb-inventario">
+              <tr><td colspan="7" style="text-align:center; padding: 1.5rem;">Cargando inventario con stock físico...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <footer>
+    Sistema de Inventario & Costeos Cambridge &copy; 2026 - Antigravity AI Engine
+  </footer>
+
+  <script>
+    let colegioFiltroActual = 'all';
+    let rawConsolidadaData = null;
+    let currentExcelConcept = 'costoBruto';
+    let currentInputConcept = 'Tela';
+    let currentAccSubView = 'aux';
+
+    function fmtNum(val) {
+      return (val || 0).toLocaleString('en-US');
+    }
+
+    function fmtMoney(val) {
+      return 'Bs. ' + (val || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function getInputHtml(val, step, extraAttrs) {
+      const hasVal = val !== null && val !== undefined && val > 0;
+      const classNames = hasVal ? 'cell-editable-sm' : 'cell-editable-sm cell-editable-empty';
+      const displayVal = hasVal ? val : '';
+      return `<input type="number" class="${classNames}" value="${displayVal}" placeholder="-" step="${step || '0.01'}" onclick="this.select()" onfocus="this.select()" ${extraAttrs || ''}>`;
+    }
+
+    function getUnidadCompraSelectHtml(id, currentVal) {
+      const options = ['unidad', 'par', 'metro', 'millar', 'ciento', 'paquete', 'rollo', 'carrete', 'docena', 'global'];
+      const norm = (currentVal || 'unidad').trim().toLowerCase();
+      
+      let allOpts = [...options];
+      if (norm && !allOpts.includes(norm)) {
+        allOpts.push(norm);
+      }
+
+      return `<select id="udcomp-${id}" class="cell-editable-sm" style="width:85px; padding:0.15rem; font-weight:600;" onchange="recalcularTablaAuxiliarLive('${id}')">
+        ${allOpts.map(opt => `<option value="${opt}" ${opt === norm ? 'selected' : ''}>${opt}</option>`).join('')}
+      </select>`;
+    }
+
+    function abrevAccHeader(name) {
+      return (name || '')
+        .replace('Botamanga (par)', 'Bota<br>manga')
+        .replace('Cuello de Polo', 'Cuello<br>Polo')
+        .replace('Elastico para berm. y pant.', 'Elást.<br>Pant')
+        .replace('Elastico Short o buzo', 'Elást.<br>Short')
+        .replace('Cinta Antideslizante', 'Cinta<br>Antid.')
+        .replace('Boton de pantalon', 'Boton<br>Pant.')
+        .replace('Boton de 4 huecos para polo', 'Botón<br>Polo')
+        .replace('Boton de chamarra', 'Botón<br>Cham.')
+        .replace('Entretela de chamarra', 'Entr.<br>Cham.')
+        .replace('Entretela de Camisa', 'Entr.<br>Camisa')
+        .replace('Broche metalico', 'Broche<br>Met.')
+        .replace('Cierre corto (pantalon)', 'Cierre<br>Corto')
+        .replace('Cierre Largo (Chamarra)', 'Cierre<br>Largo')
+        .replace('Forro de chamarra', 'Forro<br>Cham.')
+        .replace('Malla interior', 'Malla<br>Buzo')
+        .replace('Bordado logo', 'Bord.<br>Escudo')
+        .replace('Bordado espalda Chamarra', 'Bord.<br>Espal.')
+        .replace('Hebilla', 'Hebilla<br>Falda')
+        .replace('Cordon de buzo y short', 'Cordón<br>Buzo')
+        .replace('Campana para buso y short', 'Campana<br>Buzo')
+        .replace('Bolsa de Polipropileno', 'Bolsa<br>Poly')
+        .replace('Etiqueta de Marca', 'Etiq.<br>Marca')
+        .replace('Etiqueta de Talla', 'Etiq.<br>Talla')
+        .replace('Etiqueta de cuidados', 'Etiq.<br>Cuid.')
+        .replace('Hilo Tex 24 polyester', 'Hilo<br>Tex24')
+        .replace('Vinilo para shorts', 'Vinilo<br>Short')
+        .replace('Vinilo Calzas', 'Vinilo<br>Calza')
+        .replace('Serigrafia escudo polera', 'Serig.<br>Escudo')
+        .replace('Serigrafia rectangulo polera, espalda', 'Serig.<br>Espal.')
+        .replace('Serigrafia polera colores', 'Serig.<br>Color')
+        .replace('Serigrafia Bullying', 'Serig.<br>Bully')
+        .replace('Ojales polo', 'Ojales<br>Polo')
+        .replace('Ojales camisa', 'Ojales<br>Camisa')
+        .replace('Entretela para pantalon', 'Entr.<br>Pant.')
+        .replace('Elastico redondo', 'Elást.<br>Redon.')
+        .replace('Entretela Corbata', 'Entr.<br>Corb.')
+        .replace('Atracados', 'Atra<br>cados');
+    }
+
+    function initCrosshairHighlighting() {
+      const table = document.getElementById('tb-inputs-table');
+      if (!table) return;
+
+      table.addEventListener('mousemove', (e) => {
+        const td = e.target.closest('td, th');
+        if (!td || !table.classList.contains('table-compact-acc')) return;
+
+        const colIndex = td.cellIndex;
+        
+        table.querySelectorAll('.col-active').forEach(el => el.classList.remove('col-active'));
+        table.querySelectorAll('.cell-active').forEach(el => el.classList.remove('cell-active'));
+
+        if (colIndex > 1) {
+          const rows = table.querySelectorAll('tr');
+          rows.forEach(r => {
+            if (r.children[colIndex]) {
+              r.children[colIndex].classList.add('col-active');
+            }
+          });
+          if (td.tagName === 'TD') td.classList.add('cell-active');
+        }
+      });
+
+      table.addEventListener('mouseleave', () => {
+        table.querySelectorAll('.col-active').forEach(el => el.classList.remove('col-active'));
+        table.querySelectorAll('.cell-active').forEach(el => el.classList.remove('cell-active'));
+      });
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      
+      const targetBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(tabId));
+      if (targetBtn) targetBtn.classList.add('active');
+      
+      const targetTab = document.getElementById('tab-' + tabId);
+      if (targetTab) targetTab.classList.add('active');
+
+      if (tabId === 'matriz-excel' && !rawConsolidadaData) {
+        cargarMatrizConsolidada();
+      } else if (tabId === 'inputs-excel') {
+        cargarInputConcept(currentInputConcept);
+      } else if (tabId === 'resumen') {
+        cargarResumen();
+      } else if (tabId === 'matriz-tallas') {
+        generarMatrizPrenda();
+      }
+    }
+
+    function getMarginColor(pct) {
+      if (pct === null || pct === undefined || isNaN(pct)) return 'var(--text-subtle)';
+      let clamped = Math.max(0, Math.min(50, pct));
+      let hue = Math.round((clamped / 50) * 135);
+      return `hsl(${hue}, 85%, 52%)`;
+    }
+
+    async function cargarColegiosHeader() {
+      try {
+        const res = await fetch('/api/colegios');
+        const json = await res.json();
+        const select = document.getElementById('global-colegio-select');
+        if (json.data && json.data.length > 0) {
+          select.innerHTML = `
+            <option value="all">TODOS LOS COLEGIOS</option>
+            ${json.data.map(c => `<option value="${c.id}" ${c.nombre === 'CAMBRIDGE' ? 'selected' : ''}>Colegio ${c.nombre}</option>`).join('')}
+          `;
+          const selectedOpt = select.options[select.selectedIndex];
+          colegioFiltroActual = selectedOpt ? selectedOpt.value : 'all';
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    function cambiarColegioGlobal(val) {
+      colegioFiltroActual = val;
+      cargarResumen();
+      cargarInventario();
+      cargarMatrizConsolidada();
+      cargarInputConcept(currentInputConcept);
+      generarMatrizPrenda();
+    }
+
+    async function cargarResumen() {
+      try {
+        const res = await fetch('/api/dashboard-resumen?colegioId=' + colegioFiltroActual);
+        const data = await res.json();
+        
+        document.getElementById('st-prendas-kpi').textContent = data.productosCount || 0;
+        document.getElementById('st-variaciones-sub').textContent = `${data.variacionesCount || 0} variaciones por talla`;
+        document.getElementById('st-stock-kpi').textContent = fmtNum(data.totalStockUnidades) + ' u';
+        document.getElementById('st-costo-inv-kpi').textContent = fmtMoney(data.totalValorCostoBs);
+        document.getElementById('st-venta-inv-kpi').textContent = fmtMoney(data.totalValorVentaBs);
+        document.getElementById('st-ganancia-kpi').textContent = fmtMoney(data.gananciaTotalBs);
+
+        const pctGananciaInversion = data.totalValorCostoBs > 0 ? ((data.gananciaTotalBs / data.totalValorCostoBs) * 100).toFixed(1) : '0.0';
+        document.getElementById('st-ganancia-sub').textContent = `+${pctGananciaInversion}% de ganancia sobre la inversión`;
+
+        const tbody = document.getElementById('tb-resumen-prendas');
+        if (data.prendas && data.prendas.length > 0) {
+          tbody.innerHTML = data.prendas.map(p => `
+            <tr>
+              <td><span class="col-item">${p.itemNumero}</span></td>
+              <td><strong>${p.descripcion}</strong></td>
+              <td><strong style="color:var(--primary);">${fmtNum(p.stockTotal)} u</strong></td>
+              <td>Bs. ${p.costoMin.toFixed(2)} - ${p.costoMax.toFixed(2)}</td>
+              <td><strong style="color:#38bdf8;">Bs. ${p.precioMin.toFixed(2)} - ${p.precioMax.toFixed(2)}</strong></td>
+              <td>${fmtMoney(p.valorCostoTotalBs)}</td>
+              <td><strong>${fmtMoney(p.valorVentaTotalBs)}</strong></td>
+              <td><strong style="color:var(--success);">${fmtMoney(p.gananciaEstimadaBs)}</strong></td>
+            </tr>
+          `).join('');
+
+          const selectProd = document.getElementById('select-matriz-producto');
+          const currentSel = selectProd.value;
+          selectProd.innerHTML = data.prendas.map(p => {
+            const avgMargin = p.margenPromedioPct || 0;
+            const marginColor = getMarginColor(avgMargin);
+            const marginText = avgMargin > 0 ? ` (+${avgMargin.toFixed(1)}% margen)` : '';
+            return `<option value="${p.id}" data-color="${marginColor}" style="color: ${marginColor}; background: #0d131f; font-weight: 600;">#${p.itemNumero} - ${p.descripcion}${marginText}</option>`;
+          }).join('');
+          if (currentSel) selectProd.value = currentSel;
+          
+          generarMatrizPrenda();
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    function switchInputConcept(concept, btnElem) {
+      currentInputConcept = concept;
+      document.querySelectorAll('#tab-inputs-excel .excel-tab').forEach(b => b.classList.remove('active'));
+      if (btnElem) btnElem.classList.add('active');
+
+      const accSelector = document.getElementById('acc-view-selector');
+      if (concept === 'Acc') {
+        accSelector.style.display = 'flex';
+      } else {
+        accSelector.style.display = 'none';
+      }
+
+      cargarInputConcept(concept);
+    }
+
+    function toggleAccSubView(subView) {
+      currentAccSubView = subView;
+      document.getElementById('btn-acc-aux').classList.toggle('active', subView === 'aux');
+      document.getElementById('btn-acc-matriz').classList.toggle('active', subView === 'matriz');
+      cargarInputConcept('Acc');
+    }
+
+    async function cargarInputConcept(concept) {
+      const thead = document.getElementById('th-inputs-head');
+      const tbody = document.getElementById('tb-inputs-body');
+      const tableElem = document.getElementById('tb-inputs-table');
+
+      tableElem.className = (concept === 'Tela' || concept === 'ManoDeObra' || concept === 'FijVar' || (concept === 'Acc' && currentAccSubView === 'aux')) ? 'table-compact-auto' : (concept === 'PesoMatPrima' ? 'table-consolidada-fixed' : '');
+
+      // Hide fijos split wrapper when not on fijosXprenda
+      const fijosWrapper = document.getElementById('fijos-split-wrapper');
+      if (concept !== 'fijosXprenda') {
+        if (fijosWrapper) fijosWrapper.style.display = 'none';
+        tableElem.style.display = '';
+      }
+
+      if (concept === 'Tela') {
+        const res = await fetch('/api/telas?colegioId=' + colegioFiltroActual);
+        const json = await res.json();
+        thead.innerHTML = `
+          <tr>
+            <th>Item</th><th>Descripción Tela</th><th>Rendimiento (m/kg)</th>
+            <th>Ancho (m)</th><th>Unid.</th><th>Densidad (g/m²)</th>
+            <th>Peso/mt (g)</th><th>Precio Compra (Bs.)</th><th>Precio Bs/Kg</th><th>Precio Bs/g</th>
+          </tr>
+        `;
+        tbody.innerHTML = json.data.map((t, idx) => `
+          <tr>
+            <td><span class="col-item">${idx + 1}</span></td>
+            <td><strong>${t.descripcion}</strong></td>
+            <td><strong style="color:#818cf8;">${t.rendimiento.toFixed(2)} m/kg</strong></td>
+            <td>${getInputHtml(t.anchoMts, '0.01', `id="ancho-${t.id}" onchange="guardarTelaLive('${t.id}')"`)}</td>
+            <td>
+              <select id="unid-${t.id}" class="cell-editable-sm" style="width:65px; padding:0.15rem;" onchange="guardarTelaLive('${t.id}')">
+                <option value="kilo" ${t.unid === 'kilo' ? 'selected' : ''}>kilo</option>
+                <option value="metro" ${t.unid === 'metro' ? 'selected' : ''}>metro</option>
+              </select>
+            </td>
+            <td>${getInputHtml(t.densidadGm2, '1', `id="dens-${t.id}" onchange="guardarTelaLive('${t.id}')"`)}</td>
+            <td><strong>${(t.pesoMtLineal || (t.anchoMts * t.densidadGm2)).toFixed(0)} g</strong></td>
+            <td>${getInputHtml(t.precioCompra, '0.1', `id="precio-${t.id}" onchange="guardarTelaLive('${t.id}')"`)}</td>
+            <td><strong>Bs. ${(t.precioBsKg || t.precioCompra).toFixed(1)}</strong></td>
+            <td><strong style="color:var(--warning);">Bs. ${(t.precioBsG || (t.precioCompra/1000)).toFixed(3)}</strong></td>
+          </tr>
+        `).join('');
+      } else if (concept === 'PesoMatPrima') {
+        const res = await fetch('/api/inputs/peso-mat-prima?colegioId=' + colegioFiltroActual);
+        const json = await res.json();
+        thead.innerHTML = `
+          <tr>
+            <th>ITEM</th><th>DETALLE DE PRENDA</th>
+            ${json.tallas.map(t => `<th style="text-align:center;">${t.codigo}</th>`).join('')}
+          </tr>
+        `;
+        tbody.innerHTML = json.data.map(p => `
+          <tr>
+            <td><span class="col-item">${p.itemNumero}</span></td>
+            <td><strong>${p.descripcion}</strong></td>
+            ${json.tallas.map(t => {
+              const rec = p.tallas[t.codigo];
+              const val = rec ? rec.pesoConMerma : 0;
+              return `<td style="text-align:center;">${getInputHtml(val, '1', `id="peso-${p.productoId}-${t.codigo}" onchange="guardarPesoLive('${p.productoId}', '${t.codigo}', this)"`)}</td>`;
+            }).join('')}
+          </tr>
+        `).join('');
+      } else if (concept === 'ManoDeObra') {
+        const res = await fetch('/api/inputs/mano-de-obra?colegioId=' + colegioFiltroActual);
+        const json = await res.json();
+        thead.innerHTML = `
+          <tr>
+            <th>ITEM</th><th>DETALLE DE PRENDA</th>
+            <th style="text-align:center;">Tallas 2 - 10</th>
+            <th style="text-align:center;">Tallas 12 - S</th>
+            <th style="text-align:center;">Tallas M - 4XL</th>
+          </tr>
+        `;
+        tbody.innerHTML = json.data.map(p => `
+          <tr>
+            <td><span class="col-item">${p.itemNumero}</span></td>
+            <td><strong>${p.descripcion}</strong></td>
+            <td style="text-align:center;">${getInputHtml(p.grupo1_tallas_2_10, '0.5', `id="mo1-${p.productoId}" onchange="guardarManoObraLive('${p.productoId}')"`)}</td>
+            <td style="text-align:center;">${getInputHtml(p.grupo2_tallas_12_S, '0.5', `id="mo2-${p.productoId}" onchange="guardarManoObraLive('${p.productoId}')"`)}</td>
+            <td style="text-align:center;">${getInputHtml(p.grupo3_tallas_M_4XL, '0.5', `id="mo3-${p.productoId}" onchange="guardarManoObraLive('${p.productoId}')"`)}</td>
+          </tr>
+        `).join('');
+      } else if (concept === 'fijosXprenda') {
+        const res = await fetch('/api/inputs/fijos-x-prenda?colegioId=' + colegioFiltroActual);
+        const json = await res.json();
+        
+        let fijosContainer = document.getElementById('fijos-split-wrapper');
+        if (!fijosContainer) {
+          fijosContainer = document.createElement('div');
+          fijosContainer.id = 'fijos-split-wrapper';
+          tableElem.parentNode.appendChild(fijosContainer);
+        }
+        tableElem.style.display = 'none';
+        fijosContainer.style.display = 'grid';
+        fijosContainer.style.gridTemplateColumns = '1.3fr 1fr';
+        fijosContainer.style.gap = '1.5rem';
+        fijosContainer.style.alignItems = 'start';
+
+        const tarifaPunto = json.tarifaPuntoComplejidad || 1.193333;
+        const totalIndirectos = json.totalIndirectosMensual || 21480;
+
+        fijosContainer.innerHTML = `
+          <div style="background:#0f172a; padding:1.25rem; border-radius:10px; border:1px solid #1e293b; box-shadow:0 4px 12px rgba(0,0,0,0.25);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; border-bottom:1px solid #334155; padding-bottom:0.5rem;">
+              <h4 style="margin:0; color:#f8fafc; font-size:1.05rem; font-weight:700;">1. Factor de Complejidad por Prenda</h4>
+              <span style="font-size:0.75rem; color:var(--text-muted);">Tarifa: <strong style="color:var(--warning);">Bs. ${tarifaPunto.toFixed(4)}</strong>/pt</span>
+            </div>
+            <table class="table-compact-auto" style="width:100%;">
+              <thead>
+                <tr>
+                  <th>ITEM</th><th>DETALLE DE PRENDA</th>
+                  <th style="text-align:center;">Factor Complejidad</th>
+                  <th style="text-align:right;">Costo Fijo Base (Bs.)</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${json.data.map(p => `
+                  <tr>
+                    <td><span class="col-item">${p.itemNumero}</span></td>
+                    <td><strong>${p.descripcion}</strong></td>
+                    <td style="text-align:center;">${getInputHtml(p.factorComplejidad, '0.5', `id="comp-${p.id}" onchange="guardarFijoLive('${p.id}')"`)}</td>
+                    <td style="text-align:right;"><strong style="color:var(--warning);">Bs. ${p.costoFijo.toFixed(2)}</strong></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <div style="background:#0f172a; padding:1.25rem; border-radius:10px; border:1px solid #1e293b; box-shadow:0 4px 12px rgba(0,0,0,0.25);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; border-bottom:1px solid #334155; padding-bottom:0.5rem;">
+              <h4 style="margin:0; color:#f8fafc; font-size:1.05rem; font-weight:700;">2. Costos Indirectos de Producción (Fij&Var)</h4>
+            </div>
+            <table class="table-compact-auto" style="width:100%;">
+              <thead>
+                <tr>
+                  <th>#</th><th>Concepto Indirecto</th>
+                  <th style="text-align:right;">Monto Mensual (Bs.)</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(json.indirectos || []).map(item => `
+                  <tr>
+                    <td><span class="col-item">${item.itemNumero}</span></td>
+                    <td><strong style="font-size:0.8rem;">${item.concepto}</strong></td>
+                    <td style="text-align:right;">${getInputHtml(item.montoMensual, '10', `id="fjv-${item.id}" style="text-align:right; font-weight:700;" onchange="guardarFijVarLive('${item.id}')"`)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+              <tfoot>
+                <tr style="border-top:2px solid #334155;">
+                  <td colspan="2"><strong style="font-size:0.85rem;">TOTAL INDIRECTOS MES</strong></td>
+                  <td style="text-align:right;"><strong style="color:var(--success); font-size:0.95rem;">Bs. ${totalIndirectos.toFixed(2)}</strong></td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="font-size:0.75rem; color:var(--text-muted);">Volumen Mensual Estimado</td>
+                  <td style="text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600;">1,800 prendas</td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="font-size:0.75rem; color:var(--text-muted);">Tarifa por Punto Complejidad</td>
+                  <td style="text-align:right; font-size:0.85rem; color:var(--warning); font-weight:800;">Bs. ${tarifaPunto.toFixed(4)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        `;
+      } else if (concept === 'Acc') {
+        if (currentAccSubView === 'aux') {
+          const res = await fetch('/api/inputs/tabla-auxiliar-accesorios?colegioId=' + colegioFiltroActual);
+          const json = await res.json();
+          thead.innerHTML = `
+            <tr>
+              <th>CÓDIGO</th>
+              <th>DESCRIPCIÓN ACCESORIO</th>
+              <th>UNIDAD DE COMPRA</th>
+              <th>Cant. x Ud. Compra</th>
+              <th>COSTO "Ud. Compra" (Bs.)</th>
+              <th>COSTO Unitario (Bs.) [Fórmula]</th>
+              <th>Costo Uso en Prendas (Bs.) [Fórmula]</th>
+              <th>OJALES</th>
+              <th>Uds. x Prenda</th>
+              <th>Uds. x Metro</th>
+              <th>Costo / cm²</th>
+            </tr>
+          `;
+          tbody.innerHTML = json.data.map(a => `
+            <tr>
+              <td><span class="col-item">${a.codigo}</span></td>
+              <td><strong>${a.descripcion}</strong></td>
+              <td>${getUnidadCompraSelectHtml(a.id, a.unidadCompra)}</td>
+              <td>${getInputHtml(a.cantidadXUd, '1', `id="cantud-${a.id}" onchange="recalcularTablaAuxiliarLive('${a.id}')"`)}</td>
+              <td>${getInputHtml(a.costoUdCompra, '0.5', `id="costoud-${a.id}" onchange="recalcularTablaAuxiliarLive('${a.id}')"`)}</td>
+              <td><strong id="costounit-${a.id}" style="color:var(--warning);">Bs. ${a.costoUnitario.toFixed(4)}</strong></td>
+              <td><strong id="costouso-${a.id}" style="color:var(--success);">Bs. ${a.costoUsoPrendas.toFixed(2)}</strong></td>
+              <td>${getInputHtml(a.ojales, '1', `id="ojales-${a.id}" onchange="recalcularTablaAuxiliarLive('${a.id}')"`)}</td>
+              <td>${getInputHtml(a.unidadesPorPrenda, '0.1', `id="udprenda-${a.id}" onchange="recalcularTablaAuxiliarLive('${a.id}')"`)}</td>
+              <td>${getInputHtml(a.unidadesPorMetro, '1', `id="udmetro-${a.id}" onchange="recalcularTablaAuxiliarLive('${a.id}')"`)}</td>
+              <td>${getInputHtml(a.costoCm2, '0.0001', `id="costocm2-${a.id}" onchange="recalcularTablaAuxiliarLive('${a.id}')"`)}</td>
+            </tr>
+          `).join('');
+        } else {
+          const res = await fetch('/api/inputs/accesorios-matriz?colegioId=' + colegioFiltroActual);
+          const json = await res.json();
+
+          tableElem.className = 'table-compact-acc';
+
+          const accInfoMap = {};
+          if (json.accesoriosInfo) {
+            json.accesoriosInfo.forEach(info => accInfoMap[info.nombre] = info);
+          }
+
+          thead.innerHTML = `
+            <tr>
+              <th style="width:38px; text-align:center; vertical-align:middle;">ITEM</th>
+              <th style="width:130px; text-align:left; vertical-align:middle;">DETALLE DE PRENDA</th>
+              <th style="width:62px; color:var(--warning); border-right:2px solid var(--border); text-align:right; padding-right:0.25rem; vertical-align:middle;">Total Acc.</th>
+              ${json.accesorios.map(a => {
+                const info = accInfoMap[a] || {};
+                const uCost = info.costoUnitarioBs || 0;
+                const udComp = info.unidadCompra || 'unidad';
+                const cantUd = info.cantidadXUd || 1;
+                const costoUd = (info.costoUdCompra && info.costoUdCompra > 0) ? info.costoUdCompra : (uCost * cantUd);
+
+                const tooltipText = `ACCESORIO: ${a}\n-----------------------------------\n• UNIDAD DE COMPRA: ${udComp}\n• Cant. x Ud. Compra: ${cantUd}\n• COSTO "Ud. Compra" (Bs.): Bs. ${costoUd.toFixed(2)}\n-----------------------------------\n📌 COSTO UNITARIO FINAL: Bs. ${uCost.toFixed(4)}/u`;
+
+                return `<th title="${tooltipText}" style="text-align:center; font-size:0.58rem; cursor:help;">
+                  <div class="th-flex-wrapper">
+                    <span class="header-title-text">${abrevAccHeader(a)}</span>
+                    <span class="header-unit-cost">${uCost > 0 ? uCost.toFixed(2) : '-'}</span>
+                  </div>
+                </th>`;
+              }).join('')}
+            </tr>
+          `;
+
+          tbody.innerHTML = json.data.map(p => `
+            <tr>
+              <td><span class="col-item">${p.itemNumero}</span></td>
+              <td title="${p.descripcion}" style="text-align:left; overflow:hidden; text-overflow:ellipsis;"><strong>${p.descripcion}</strong></td>
+              <td style="border-right:2px solid var(--border); text-align:right; padding-right:0.25rem;">
+                <strong style="color:var(--warning);" id="total-acc-row-${p.itemNumero}">${p.totalAccesoriosBs.toFixed(2)}</strong>
+              </td>
+              ${json.accesorios.map(a => {
+                const info = accInfoMap[a] || {};
+                const uCost = info.costoUnitarioBs || 0;
+                const qty = p.unidades ? (p.unidades[a] || 0) : 0;
+                const cost = p.accesorios ? (p.accesorios[a] || 0) : 0;
+                const accId = a.replace(/[^a-zA-Z0-9]/g, '_');
+
+                if (cost === 0 && qty === 0) return '<td style="text-align:center; color: var(--text-muted);">-</td>';
+
+                const tooltipText = `${a}:\n${qty} unidades × Bs. ${uCost.toFixed(3)}/u = Bs. ${cost.toFixed(2)}`;
+
+                return `<td style="text-align:center; padding:0.05rem;" title="${tooltipText}">
+                  <div class="acc-cell-wrapper">
+                    ${qty > 0 ? `<span class="acc-qty-badge" id="badge-${p.itemNumero}-${accId}">${qty}</span>` : `<span class="acc-qty-badge" id="badge-${p.itemNumero}-${accId}" style="display:none;"></span>`}
+                    <span class="acc-cost-display" id="costdisp-${p.itemNumero}-${accId}">${cost > 0 ? cost.toFixed(2) : '-'}</span>
+                    <input type="number" 
+                           class="acc-cell-input" 
+                           value="${qty > 0 ? qty : ''}" 
+                           placeholder="0" 
+                           step="0.1" 
+                           min="0" 
+                           data-uc="${uCost}"
+                           onclick="this.select()" 
+                           onfocus="this.select()" 
+                           onchange="recalcularMatrizAccLive(${p.itemNumero}, '${a.replace(/'/g, "\\'")}', ${uCost}, this)">
+                  </div>
+                </td>`;
+              }).join('')}
+            </tr>
+          `).join('');
+        }
+      } else if (concept === 'FijVar') {
+        const res = await fetch('/api/inputs/fij-var?colegioId=' + colegioFiltroActual);
+        const json = await res.json();
+        thead.innerHTML = `
+          <tr><th>ITEM</th><th>Costos Indirectos de Producción</th><th>Costo Mensual en Bs.</th></tr>
+        `;
+        tbody.innerHTML = json.data.map((c) => `
+          <tr>
+            <td><span class="col-item">${c.itemNumero}</span></td>
+            <td><strong>${c.concepto}</strong></td>
+            <td>${getInputHtml(c.montoMensual, '50')}</td>
+          </tr>
+        `).join('');
+      }
+    }
+
+    async function recalcularMatrizAccLive(itemNum, accName, uCost, inputElem) {
+      const newQty = parseFloat(inputElem.value) || 0;
+      const newCost = uCost > 0 ? (newQty * uCost) : (newQty > 0 ? newQty : 0);
+
+      const accId = accName.replace(/[^a-zA-Z0-9]/g, '_');
+      const badgeElem = document.getElementById(`badge-${itemNum}-${accId}`);
+      const costDispElem = document.getElementById(`costdisp-${itemNum}-${accId}`);
+
+      if (costDispElem) costDispElem.textContent = newCost > 0 ? newCost.toFixed(2) : '-';
+      if (badgeElem) {
+        if (newQty > 0) {
+          badgeElem.textContent = `${newQty}`;
+          badgeElem.style.display = 'inline-block';
+        } else {
+          badgeElem.style.display = 'none';
+        }
+      }
+
+      const rowInputs = inputElem.closest('tr').querySelectorAll('.acc-cell-input');
+      let rowTotalBs = 0;
+      rowInputs.forEach(inp => {
+        const q = parseFloat(inp.value) || 0;
+        const uc = parseFloat(inp.getAttribute('data-uc')) || uCost;
+        rowTotalBs += (q * uc);
+      });
+
+      const rowTotalElem = document.getElementById(`total-acc-row-${itemNum}`);
+      if (rowTotalElem) rowTotalElem.textContent = rowTotalBs.toFixed(2);
+
+      try {
+        await fetch('/api/inputs/accesorios-matriz-celda', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ itemNumero: itemNum, accesorioNombre: accName, cantidad: newQty })
+        });
+        await fetch('/api/calculo/accesorio-total', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ itemNumero: itemNum, totalAccBs: rowTotalBs })
+        });
+        cargarMatrizConsolidada();
+        cargarResumen();
+      } catch (e) { console.error('Error al guardar celda de accesorios:', e); }
+    }
+
+    async function recalcularTablaAuxiliarLive(id) {
+      const udComp = (document.getElementById('udcomp-' + id)?.value || 'unidad').trim();
+      const cantUd = parseFloat(document.getElementById('cantud-' + id)?.value) || 1;
+      const costoUd = parseFloat(document.getElementById('costoud-' + id)?.value) || 0;
+      const ojalesVal = document.getElementById('ojales-' + id)?.value;
+      const ojales = (ojalesVal !== undefined && ojalesVal !== '') ? parseInt(ojalesVal) : null;
+      const udPrenda = parseFloat(document.getElementById('udprenda-' + id)?.value) || 1;
+      const udMetroVal = document.getElementById('udmetro-' + id)?.value;
+      const udMetro = (udMetroVal !== undefined && udMetroVal !== '') ? parseFloat(udMetroVal) : null;
+      const costoCm2Val = document.getElementById('costocm2-' + id)?.value;
+      const costoCm2 = (costoCm2Val !== undefined && costoCm2Val !== '') ? parseFloat(costoCm2Val) : null;
+
+      let costoUnit = cantUd > 0 ? (costoUd / cantUd) : costoUd;
+      if (costoUd === 0 && costoUnit === 0) {
+        const currentUnitElem = document.getElementById('costounit-' + id);
+        if (currentUnitElem) {
+          const text = currentUnitElem.textContent.replace('Bs.', '').trim();
+          costoUnit = parseFloat(text) || 0;
+        }
+      }
+
+      let costoUso = costoUnit;
+      if (costoCm2 && costoCm2 > 0) {
+        costoUso = 500 * costoCm2;
+      } else if (udPrenda && udPrenda > 0) {
+        costoUso = costoUnit * udPrenda;
+      }
+
+      const unitElem = document.getElementById('costounit-' + id);
+      if (unitElem) unitElem.textContent = 'Bs. ' + costoUnit.toFixed(4);
+
+      const usoElem = document.getElementById('costouso-' + id);
+      if (usoElem) usoElem.textContent = 'Bs. ' + costoUso.toFixed(2);
+
+      const body = {
+        unidadCompra: udComp,
+        cantidadXUd: cantUd,
+        costoUdCompra: costoUd,
+        costoUnitario: costoUnit,
+        costoUsoPrendas: costoUso,
+        ojales,
+        unidadesPorPrenda: udPrenda,
+        unidadesPorMetro: udMetro,
+        costoCm2
+      };
+
+      try {
+        await fetch('/api/inputs/tabla-auxiliar-accesorios/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        cargarMatrizConsolidada();
+        cargarResumen();
+      } catch (e) { console.error('Error al actualizar Tabla Auxiliar:', e); }
+    }
+
+    async function guardarTelaLive(id) {
+      const body = {
+        anchoMts: parseFloat(document.getElementById('ancho-' + id).value) || 0,
+        unid: document.getElementById('unid-' + id).value,
+        densidadGm2: parseFloat(document.getElementById('dens-' + id).value) || 0,
+        precioCompra: parseFloat(document.getElementById('precio-' + id).value) || 0
+      };
+
+      try {
+        const res = await fetch('/api/telas/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const json = await res.json();
+        if (json.success) {
+          cargarInputConcept('Tela');
+          cargarMatrizConsolidada();
+          cargarResumen();
+        }
+      } catch (e) { console.error('Error al actualizar tela en BD:', e); }
+    }
+
+    async function guardarFijoLive(id) {
+      const compElem = document.getElementById('comp-' + id);
+      const body = {
+        factorComplejidad: parseFloat(compElem.value) || 1,
+      };
+
+      try {
+        const res = await fetch('/api/inputs/fijos-x-prenda/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const json = await res.json();
+        if (json.success) {
+          cargarInputConcept('fijosXprenda');
+          await cargarMatrizConsolidada();
+          generarMatrizPrenda();
+          cargarResumen();
+        }
+      } catch (e) { console.error('Error al actualizar fijos en BD:', e); }
+    }
+
+    async function guardarFijVarLive(id) {
+      const elem = document.getElementById('fjv-' + id);
+      const body = { montoMensual: parseFloat(elem.value) || 0 };
+      try {
+        const res = await fetch('/api/inputs/fij-var/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const json = await res.json();
+        if (json.success) {
+          cargarInputConcept('fijosXprenda');
+          await cargarMatrizConsolidada();
+          generarMatrizPrenda();
+          cargarResumen();
+        }
+      } catch (e) { console.error('Error al actualizar Fij&Var en BD:', e); }
+    }
+
+    async function guardarManoObraLive(productoId) {
+      const grupo1 = parseFloat(document.getElementById('mo1-' + productoId).value) || 0;
+      const grupo2 = parseFloat(document.getElementById('mo2-' + productoId).value) || 0;
+      const grupo3 = parseFloat(document.getElementById('mo3-' + productoId).value) || 0;
+
+      try {
+        const res = await fetch('/api/inputs/mano-de-obra/' + productoId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ grupo1, grupo2, grupo3 })
+        });
+        const json = await res.json();
+        if (json.success) {
+          await cargarMatrizConsolidada();
+          generarMatrizPrenda();
+          cargarResumen();
+        }
+      } catch (e) { console.error('Error al actualizar Mano de Obra:', e); }
+    }
+
+    async function guardarPesoLive(productoId, tallaCodigo, inputElem) {
+      const pesoConMerma = parseFloat(inputElem.value) || 0;
+      try {
+        const res = await fetch('/api/inputs/peso-mat-prima', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productoId, tallaCodigo, pesoConMerma })
+        });
+        const json = await res.json();
+        if (json.success) {
+          await cargarMatrizConsolidada();
+          generarMatrizPrenda();
+          cargarResumen();
+        }
+      } catch (e) { console.error('Error al actualizar Peso:', e); }
+    }
+
+    async function guardarFijVarLive(id) {
+      const montoMensual = parseFloat(document.getElementById('fjv-' + id).value) || 0;
+      try {
+        const res = await fetch('/api/inputs/fij-var/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ montoMensual })
+        });
+        const json = await res.json();
+        if (json.success) {
+          await cargarMatrizConsolidada();
+          generarMatrizPrenda();
+          cargarResumen();
+        }
+      } catch (e) { console.error('Error al actualizar Costo Indirecto:', e); }
+    }
+
+    async function cargarMatrizConsolidada() {
+      try {
+        const res = await fetch('/api/calculo/matriz-consolidada?colegioId=' + colegioFiltroActual);
+        const json = await res.json();
+        if (json.success) {
+          rawConsolidadaData = json;
+          renderMatrizConsolidada();
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    function switchExcelConcept(concept, btnElem) {
+      currentExcelConcept = concept;
+      document.querySelectorAll('#tab-matriz-excel .excel-tab').forEach(b => b.classList.remove('active'));
+      if (btnElem) btnElem.classList.add('active');
+      renderMatrizConsolidada();
+    }
+
+    async function guardarPrecioVentaMatriz(itemNum, tallaCode, inputElem) {
+      const precioBs = parseFloat(inputElem.value) || 0;
+      try {
+        await fetch('/api/calculo/precio-venta', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ itemNumero: itemNum, tallaCodigo: tallaCode, precioBs })
+        });
+        await cargarMatrizConsolidada();
+        cargarInventario();
+        cargarResumen();
+      } catch (e) { console.error(e); }
+    }
+
+    async function guardarInventarioMatriz(itemNum, tallaCode, inputElem) {
+      const cantidad = parseInt(inputElem.value) || 0;
+      try {
+        await fetch('/api/calculo/inventario-unidades', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ itemNumero: itemNum, tallaCodigo: tallaCode, cantidad })
+        });
+        await cargarMatrizConsolidada();
+        cargarInventario();
+        cargarResumen();
+      } catch (e) { console.error(e); }
+    }
+
+    function renderMatrizConsolidada() {
+      if (!rawConsolidadaData) return;
+      const tallas = rawConsolidadaData.tallas;
+      const prods = rawConsolidadaData.data;
+
+      const showSubtotalColumn = ['inventarioUnidades', 'costoInventario', 'precioInventario'].includes(currentExcelConcept);
+
+      const trHead = document.getElementById('tr-consolidada-head');
+      trHead.innerHTML = `
+        <th>ITEM</th>
+        <th>DETALLE DEL UNIFORME</th>
+        ${tallas.map(t => `<th style="text-align:center; padding:0.4rem 0.15rem;">${t.codigo}</th>`).join('')}
+        ${showSubtotalColumn 
+          ? `<th style="text-align:right; color:var(--warning); border-left:2px solid var(--border); padding-right:0.4rem;">${currentExcelConcept === 'inventarioUnidades' ? 'SUBTOTAL' : 'SUBTOTAL Bs'}</th>` 
+          : '<th style="border-left:2px solid transparent;"></th>'}
+      `;
+
+      const colTotals = {};
+      tallas.forEach(t => colTotals[t.codigo] = 0);
+      let grandTotal = 0;
+
+      const tbody = document.getElementById('tb-consolidada-body');
+      tbody.innerHTML = prods.map(p => {
+        let rowSubtotal = 0;
+
+        const cellsHtml = tallas.map(t => {
+          const cell = p.tallas[t.codigo];
+          if (!cell) return '<td style="text-align:center;">-</td>';
+
+          const val = cell[currentExcelConcept] || 0;
+          rowSubtotal += val;
+          colTotals[t.codigo] += val;
+
+          if (currentExcelConcept === 'precioVenta') {
+            return `<td style="text-align:center;">${getInputHtml(val, '1', `onchange="guardarPrecioVentaMatriz(${p.itemNumero}, '${t.codigo}', this)"`)}</td>`;
+          } else if (currentExcelConcept === 'inventarioUnidades') {
+            return `<td style="text-align:center;">${getInputHtml(val, '1', `onchange="guardarInventarioMatriz(${p.itemNumero}, '${t.codigo}', this)"`)}</td>`;
+          } else {
+            if (val === null || val === undefined || val === 0) return '<td style="text-align:center; color: var(--text-muted);">-</td>';
+            let formattedVal = '-';
+            if (currentExcelConcept === 'margenPorcentaje') {
+              formattedVal = `<strong style="color:${getMarginColor(val)}; font-weight:700;">${val.toFixed(1)}%</strong>`;
+            } else if (currentExcelConcept === 'precioInventario') {
+              formattedVal = val.toLocaleString('es-BO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+            } else {
+              formattedVal = val.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+            return `<td style="text-align:center;">${formattedVal}</td>`;
+          }
+        }).join('');
+
+        grandTotal += rowSubtotal;
+
+        let subtotalCellHtml = '<td style="border-left:2px solid transparent;"></td>';
+        if (showSubtotalColumn) {
+          let formattedSubtotal = '-';
+          if (currentExcelConcept === 'inventarioUnidades') {
+            formattedSubtotal = rowSubtotal > 0 ? `<strong style="color:var(--primary); font-size:0.78rem;">${rowSubtotal.toLocaleString()}</strong>` : '-';
+          } else if (currentExcelConcept === 'precioInventario') {
+            formattedSubtotal = rowSubtotal > 0 ? `<strong style="color:var(--warning); font-size:0.78rem;">${rowSubtotal.toLocaleString('es-BO', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</strong>` : '-';
+          } else if (currentExcelConcept === 'costoInventario') {
+            formattedSubtotal = rowSubtotal > 0 ? `<strong style="color:var(--warning); font-size:0.78rem;">${rowSubtotal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>` : '-';
+          }
+          subtotalCellHtml = `<td style="text-align:right; border-left:2px solid var(--border); padding-right:0.4rem;">${formattedSubtotal}</td>`;
+        }
+
+        return `
+          <tr>
+            <td><span class="col-item">${p.itemNumero}</span></td>
+            <td><strong>${p.descripcion}</strong></td>
+            ${cellsHtml}
+            ${subtotalCellHtml}
+          </tr>
+        `;
+      }).join('');
+
+      let tfootElem = document.getElementById('tf-consolidada-foot');
+      if (tfootElem) {
+        const colTotalsCells = tallas.map(t => {
+          const cTot = colTotals[t.codigo] || 0;
+          if (cTot === 0) return '<th style="text-align:center; color: var(--text-muted); padding: 0.4rem 0.15rem;">-</th>';
+          let fTot = '';
+          if (currentExcelConcept === 'inventarioUnidades') {
+            fTot = cTot.toLocaleString();
+          } else if (currentExcelConcept === 'precioInventario') {
+            fTot = cTot.toLocaleString('es-BO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+          } else if (currentExcelConcept === 'margenPorcentaje') {
+            fTot = '-';
+          } else {
+            fTot = cTot.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          }
+          return `<th style="text-align:center; color:#f8fafc; font-weight:700; padding: 0.4rem 0.15rem;">${fTot}</th>`;
+        }).join('');
+
+        let subtotalFootHtml = '<td style="border-left:2px solid transparent;"></td>';
+        if (showSubtotalColumn) {
+          let formattedGrandTotal = '-';
+          if (currentExcelConcept === 'inventarioUnidades') {
+            formattedGrandTotal = `${grandTotal.toLocaleString()}`;
+          } else if (currentExcelConcept === 'precioInventario') {
+            formattedGrandTotal = grandTotal.toLocaleString('es-BO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+          } else if (currentExcelConcept === 'costoInventario') {
+            formattedGrandTotal = grandTotal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          }
+          subtotalFootHtml = `<td style="text-align:right; border-left:2px solid var(--border); padding-right:0.4rem; color:var(--success); font-size:0.82rem; font-weight:800;">${formattedGrandTotal}</td>`;
+        }
+
+        tfootElem.innerHTML = `
+          <tr style="border-top: 2px solid var(--border);">
+            <th colspan="2" style="text-align:left; padding: 0.5rem 0.5rem; color:var(--warning); font-size:0.8rem; font-weight:800;">TOTAL GENERAL</th>
+            ${colTotalsCells}
+            ${subtotalFootHtml}
+          </tr>
+        `;
+      }
+    }
+
+    async function generarMatrizPrenda() {
+      const selectElem = document.getElementById('select-matriz-producto');
+      let productoId = selectElem ? selectElem.value : null;
+
+      if (selectElem && selectElem.selectedIndex >= 0) {
+        const selectedOpt = selectElem.options[selectElem.selectedIndex];
+        if (selectedOpt && selectedOpt.getAttribute('data-color')) {
+          selectElem.style.color = selectedOpt.getAttribute('data-color');
+        }
+      }
+
+      if (!productoId && selectElem && selectElem.options.length > 0) {
+        for (let opt of selectElem.options) {
+          if (opt.value) {
+            selectElem.value = opt.value;
+            productoId = opt.value;
+            if (opt.getAttribute('data-color')) selectElem.style.color = opt.getAttribute('data-color');
+            break;
+          }
+        }
+      }
+
+      if (!productoId) return;
+
+      try {
+        const res = await fetch('/api/calculo/matriz-prenda/' + productoId);
+        const json = await res.json();
+        if (json.success && json.data) {
+          const container = document.getElementById('matriz-container');
+          const titulo = document.getElementById('matriz-titulo');
+          const tbody = document.getElementById('tb-matriz-body');
+
+          container.style.display = 'block';
+          if (titulo) titulo.textContent = `Matriz de Costos por Talla: ${json.producto.descripcion} (#${json.producto.itemNumero})`;
+
+          const tallas = json.data;
+          
+          const activeProducedTallas = tallas.filter(t => t.costoTotal > 0 && t.margenPorcentaje !== null && t.margenPorcentaje !== undefined && t.margenPorcentaje !== 0);
+          if (activeProducedTallas.length > 0) {
+            const realAvgMargin = activeProducedTallas.reduce((sum, t) => sum + t.margenPorcentaje, 0) / activeProducedTallas.length;
+            const marginColor = getMarginColor(realAvgMargin);
+            
+            if (selectElem && selectElem.selectedIndex >= 0) {
+              const opt = selectElem.options[selectElem.selectedIndex];
+              if (opt) {
+                opt.setAttribute('data-color', marginColor);
+                opt.style.color = marginColor;
+                opt.textContent = `#${json.producto.itemNumero} - ${json.producto.descripcion} (+${realAvgMargin.toFixed(1)}% margen)`;
+                selectElem.style.color = marginColor;
+              }
+            }
+          }
+          
+          let htmlHead = `<tr><th>Concepto / Talla</th>${tallas.map(t => `<th style="text-align:center;">${t.tallaCodigo}</th>`).join('')}</tr>`;
+          document.querySelector('#matriz-container table thead').innerHTML = htmlHead;
+
+          let rows = [
+            { name: 'Peso Exacto (g)', desc: 'Peso neto de la tela consumida para confeccionar esta prenda sin incluir desperdicios de corte.', key: 'pesoExacto', fmt: v => v ? v + ' g' : '-' },
+            { name: 'Peso con Merma (8%)', desc: 'Peso total de tela requerida considerando el 8% estandarizado de merma o desperdicio de corte.', key: 'pesoConMerma', fmt: v => v ? v + ' g' : '-' },
+            { name: 'Costo Tela (Bs.)', desc: 'Costo directo de la tela por prenda calculado según su peso con merma y el precio por metro o kilo de tela.', key: 'costoTela', fmt: v => v ? 'Bs. ' + v.toFixed(2) : '-' },
+            { name: 'Costo Accesorios (Bs.)', desc: 'Suma del costo de todos los insumos (botones, cierres, hilos, elásticos, etiquetas) usados en la prenda.', key: 'costoAccesorios', fmt: v => v ? 'Bs. ' + v.toFixed(2) : '-' },
+            { name: 'Costo Mano Obra (Bs.)', desc: 'Costo directo pagado por el corte, confección y armado de la prenda según su rango de talla.', key: 'costoManoObra', fmt: v => v ? '<strong style="color:var(--warning);">Bs. ' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Costo Bruto (Bs.)', desc: 'Suma directa de Costo Tela + Costo Accesorios + Costo Mano de Obra (sin costos fijos ni indirectos).', key: 'costoBruto', fmt: v => v ? '<strong style="color:var(--warning);">Bs. ' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Costos Fijos Variables (Bs.)', desc: 'Gastos fijos de taller prorrateados según el factor de complejidad de la prenda (incluye costos indirectos de producción).', key: 'costoFijosVariable', fmt: v => v ? '<strong style="color:var(--warning);">Bs. ' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Costo Antes Impuestos (Bs.)', desc: 'Subtotal del costo de producción antes de aplicar la tasa impositiva del 13% IVA para facturar.', key: 'costoAntesImpuestos', fmt: v => v ? '<strong style="color:var(--warning);">Bs. ' + v.toFixed(2) + '</strong>' : '-' },
+            { name: '13% IVA (Bs.)', desc: 'Impuesto al Valor Agregado (13%) calculado sobre el costo para la emisión de factura de producción.', key: 'iva', fmt: v => v ? '<strong style="color:var(--warning);">Bs. ' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'COSTO TOTAL PRODUCCIÓN (Bs.)', desc: 'Costo final unitario de producción terminada (Costo Antes Impuestos + 13% IVA).', key: 'costoTotal', fmt: v => v ? '<strong style="color:var(--warning); font-size:0.9rem;">Bs. ' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Precio de Venta (Bs.)', desc: 'Precio final de venta al público fijado para esta talla en la matriz comercial.', key: 'precioVenta', fmt: v => v ? '<strong>Bs. ' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Utilidad Neta (Bs.)', desc: 'Ganancia neta en Bolivianos obtenida por cada prenda vendida (Precio Venta - Costo Total Producción).', key: 'utilidadNeta', fmt: v => v !== null && v !== 0 ? '<strong style="color:var(--success);">Bs. ' + v.toFixed(2) + '</strong>' : '-' },
+            { name: '% Margen Ganancia', desc: 'Porcentaje de utilidad neta obtenida sobre el costo total de producción de la prenda.', key: 'margenPorcentaje', fmt: v => v !== null && v !== 0 ? `<strong style="color:${getMarginColor(v)}; font-weight:700;">` + v.toFixed(2) + '%</strong>' : '-' }
+          ];
+
+          tbody.innerHTML = rows.map(r => `
+            <tr>
+              <td title="${r.desc}" style="cursor:help; border-right:1px solid var(--border); padding-left:0.5rem;">
+                <span style="border-bottom:1px dotted #818cf8;"><strong>${r.name}</strong></span>
+              </td>
+              ${tallas.map(t => `<td style="text-align:center;">${r.fmt(t[r.key])}</td>`).join('')}
+            </tr>
+          `).join('');
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    async function cargarInventario() {
+      try {
+        const res = await fetch('/api/inventario/stock?colegioId=' + colegioFiltroActual);
+        const json = await res.json();
+        const tbody = document.getElementById('tb-inventario');
+        if (json.data && json.data.length > 0) {
+          tbody.innerHTML = json.data.map(i => `
+            <tr>
+              <td><span class="col-item">${i.itemNumero || '-'}</span></td>
+              <td><strong>${i.producto || '-'}</strong></td>
+              <td>Talla ${i.talla || '-'}</td>
+              <td><strong style="color:var(--primary);">${fmtNum(i.cantidad)} unidades</strong></td>
+              <td>Bs. ${(i.costoUnitario || 0).toFixed(2)}</td>
+              <td><strong style="color:var(--success);">Bs. ${(i.precioVenta || 0).toFixed(2)}</strong></td>
+              <td><strong>${fmtMoney(i.valorTotalStock)}</strong></td>
+            </tr>
+          `).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 1.5rem; color: var(--text-muted);">No hay stock registrado en la BD para este filtro.</td></tr>';
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await cargarColegiosHeader();
+      cargarResumen();
+      cargarInventario();
+      initCrosshairHighlighting();
+    });
+  </script>
+</body>
+</html>
