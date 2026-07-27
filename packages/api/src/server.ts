@@ -34,32 +34,54 @@ const getDashboardHtml = async () => {
   return await fs.readFile(dashboardHtmlPath, 'utf8');
 };
 
-// Servir CSS centralizado
-const stylesCssPath = path.join(__dirname, 'public', 'styles.css');
-app.get('/styles.css', async (c) => {
-  try {
-    const fs = await import('fs/promises');
-    const css = await fs.readFile(stylesCssPath, 'utf8');
-    c.header('Content-Type', 'text/css');
-    return c.body(css);
-  } catch (err) {
-    return c.text('/* Error al cargar styles.css */', 404);
+// Servir cualquier archivo estático alojado en packages/api/src/public/ (favicon.ico, favicon.png, favicon.svg, styles.css, etc.)
+app.use('/*', async (c, next) => {
+  const reqPath = c.req.path;
+  if (reqPath === '/' || reqPath === '/dashboard' || reqPath.startsWith('/api')) {
+    return next();
   }
-});
 
-// Servir Favicon
-const faviconSvgPath = path.join(__dirname, 'public', 'favicon.svg');
-app.get('/favicon.svg', async (c) => {
+  const publicDir = path.join(__dirname, 'public');
+  const fileName = reqPath.replace(/^\//, '');
+  const filePath = path.join(publicDir, fileName);
+
   try {
     const fs = await import('fs/promises');
-    const svg = await fs.readFile(faviconSvgPath, 'utf8');
-    c.header('Content-Type', 'image/svg+xml');
-    return c.body(svg);
+    const stat = await fs.stat(filePath);
+    if (stat.isFile()) {
+      const ext = path.extname(filePath).toLowerCase();
+      const contentTypes: Record<string, string> = {
+        '.css': 'text/css',
+        '.svg': 'image/svg+xml',
+        '.ico': 'image/x-icon',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.webp': 'image/webp',
+        '.js': 'text/javascript',
+        '.json': 'application/json'
+      };
+      const contentType = contentTypes[ext] || 'application/octet-stream';
+      const data = await fs.readFile(filePath);
+      c.header('Content-Type', contentType);
+      c.header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+      return c.body(data);
+    }
   } catch (err) {
-    return c.text('Not found', 404);
+    // Si no existe favicon específico pero piden favicon.ico, intentar servir favicon.svg o favicon.png
+    if (reqPath === '/favicon.ico' || reqPath === '/favicon.png') {
+      try {
+        const fs = await import('fs/promises');
+        const svgPath = path.join(publicDir, 'favicon.svg');
+        const data = await fs.readFile(svgPath);
+        c.header('Content-Type', 'image/svg+xml');
+        c.header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        return c.body(data);
+      } catch (e) {}
+    }
   }
+  return next();
 });
-app.get('/favicon.ico', (c) => c.redirect('/favicon.svg'));
 
 // Dashboard HTML en la raíz y /dashboard
 app.get('/', async (c) => {
