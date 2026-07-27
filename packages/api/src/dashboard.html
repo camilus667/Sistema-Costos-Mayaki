@@ -24,7 +24,7 @@
       <select id="global-colegio-select" class="colegio-selector" onchange="cambiarColegioGlobal(this.value)">
         <option value="all">TODOS LOS COLEGIOS</option>
       </select>
-      <button class="btn-icon-admin" onclick="abrirModalAdminColegio()" title="Centro de Configuración y Administración del Colegio">⚙️ Configuración</button>
+      <button class="btn-icon-admin" onclick="switchTab('admin-colegio')" title="Centro de Configuración y Administración del Colegio">⚙️ Configuración</button>
       <div class="status-badge">
         <div class="status-dot"></div>
         <span id="env-status">sql.js / D1 Activo</span>
@@ -38,6 +38,7 @@
     <button class="tab-btn" onclick="switchTab('matriz-excel')">Matrices Consolidadas</button>
     <button class="tab-btn" onclick="switchTab('matriz-tallas')">Matriz por Prenda</button>
     <button class="tab-btn" onclick="switchTab('inventario')">Inventario por Colegio</button>
+    <button class="tab-btn" onclick="switchTab('admin-colegio')">⚙️ Configuración del Colegio</button>
   </nav>
 
   <main>
@@ -228,6 +229,184 @@
       </div>
     </div>
 
+    <!-- TAB 6: CENTRO DE CONFIGURACIÓN Y ADMINISTRACIÓN DEL COLEGIO (PÁGINA INDEPENDIENTE) -->
+    <div id="tab-admin-colegio" class="tab-content">
+      <div class="panel">
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #334155; padding-bottom: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+          <div style="display:flex; align-items:center; gap:0.75rem;">
+            <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0;">⚙️ Configuración y Administración del Colegio</h2>
+            <span id="modal-colegio-name-badge" class="badge-tag" style="background:#10b98122; color:#34d399; border-color:#05966944; font-size:0.85rem; padding:0.25rem 0.65rem;">CAMBRIDGE</span>
+          </div>
+
+          <div class="admin-tabs-bar" style="border-bottom:none; margin:0; padding:0;">
+            <button class="admin-tab-btn active" id="btn-atab-prendas" onclick="switchAdminTab('prendas')">👔 Prendas & Reordenamiento</button>
+            <button class="admin-tab-btn" id="btn-atab-telas" onclick="switchAdminTab('telas')">🧵 Telas del Colegio</button>
+            <button class="admin-tab-btn" id="btn-atab-tallas" onclick="switchAdminTab('tallas')">📏 Tallas Habilitadas</button>
+            <button class="admin-tab-btn" id="btn-atab-colegios" onclick="switchAdminTab('colegios')">🏛️ Perfil & Nuevos Colegios</button>
+          </div>
+        </div>
+
+        <div class="admin-body" style="padding:0;">
+          <!-- SUBTAB 1: PRENDAS & REORDENAMIENTO -->
+          <div id="admin-sec-prendas">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+              <p style="font-size:0.82rem; color:var(--text-muted); margin:0;">
+                💡 <strong>Reordena las prendas:</strong> Arrastra la fila desde el ícono <strong>`⋮⋮`</strong> o usa los botones ▲ / ▼ para cambiar la secuencia. Asigna la <strong>Tela específica</strong> que usa cada prenda para calcular dinámicamente su costo.
+              </p>
+              <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.4rem 0.8rem;" onclick="mostrarFormNuevaPrenda()">+ Dar de Alta Nueva Prenda</button>
+            </div>
+
+            <div id="form-nueva-prenda-container" style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
+              <h4 style="margin-top:0; margin-bottom:0.75rem; color:#38bdf8; font-size:0.9rem;">✨ Registrar Nueva Prenda para este Colegio</h4>
+              <div style="display:grid; grid-template-columns: 80px 1fr 1fr 100px auto; gap:0.75rem; align-items:end;">
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Item N°</label>
+                  <input type="number" id="np-item" class="cell-editable-sm" style="width:100%; text-align:center;" value="28">
+                </div>
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Descripción Prenda</label>
+                  <input type="text" id="np-desc" class="cell-editable-sm" style="width:100%;" placeholder="Ej. Chaleco de invierno">
+                </div>
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Tela Asignada</label>
+                  <select id="np-tela" class="cell-editable-sm" style="width:100%; padding:0.3rem;">
+                    <option value="">-- Sin tela / Promedio --</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Factor Comp.</label>
+                  <input type="number" id="np-factor" class="cell-editable-sm" style="width:100%; text-align:center;" value="1" step="0.1">
+                </div>
+                <div>
+                  <button class="btn" style="padding:0.45rem 1rem;" onclick="crearNuevaPrendaAdmin()">Guardar Prenda</button>
+                </div>
+              </div>
+            </div>
+
+            <div style="max-height: 540px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
+              <table class="table-compact-auto" style="width:100%;">
+                <thead>
+                  <tr>
+                    <th style="width:60px; text-align:center;">Orden</th>
+                    <th style="width:65px; text-align:center;">Item N°</th>
+                    <th style="text-align:left;">Descripción de Prenda</th>
+                    <th style="width:260px; text-align:left;">Tela Asignada (Selector)</th>
+                    <th style="width:90px; text-align:center;">Factor Comp.</th>
+                    <th style="width:70px; text-align:center;">Activo</th>
+                  </tr>
+                </thead>
+                <tbody id="tb-admin-prendas-body">
+                  <tr><td colspan="6" style="text-align:center; padding:2rem;">Cargando catálogo de prendas...</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div style="margin-top:1.25rem; text-align:right;">
+              <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; padding:0.6rem 1.4rem;" onclick="guardarConfigPrendasAdmin()">💾 Guardar Reordenamiento y Cambios</button>
+            </div>
+          </div>
+
+          <!-- SUBTAB 2: TELAS DEL COLEGIO -->
+          <div id="admin-sec-telas" style="display:none;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+              <p style="font-size:0.82rem; color:var(--text-muted); margin:0;">
+                💡 <strong>Ordena y gestiona las telas:</strong> Arrastra la fila desde el ícono <strong>`⋮⋮`</strong> o usa los botones ▲ / ▼ para ordenar las telas. El orden definido aquí aparecerá automáticamente en el selector desplegable <strong>"Tela Asignada"</strong> de cada prenda.
+              </p>
+              <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.4rem 0.8rem;" onclick="mostrarFormNuevaTela()">+ Dar de Alta Nueva Tela</button>
+            </div>
+
+            <div id="form-nueva-tela-container" style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
+              <h4 style="margin-top:0; margin-bottom:0.75rem; color:#34d399; font-size:0.9rem;">✨ Registrar Nueva Tela para este Colegio</h4>
+              <div style="display:grid; grid-template-columns: 1fr auto; gap:0.75rem; align-items:end;">
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Nombre / Descripción de la Tela *</label>
+                  <input type="text" id="nt-desc" class="cell-editable-sm" style="width:100%; font-weight:600;" placeholder="Ej. Gabardina 100% Algodón">
+                </div>
+                <div>
+                  <button class="btn" style="padding:0.45rem 1rem;" onclick="crearNuevaTelaAdmin()">Guardar Tela</button>
+                </div>
+              </div>
+            </div>
+
+            <div style="max-height: 540px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
+              <table class="table-compact-auto" style="width:100%;">
+                <thead>
+                  <tr>
+                    <th style="width:70px; text-align:center;">Orden</th>
+                    <th style="text-align:left;">Nombre / Descripción de la Tela</th>
+                    <th style="width:70px; text-align:center;">Activo</th>
+                  </tr>
+                </thead>
+                <tbody id="tb-admin-telas-body">
+                  <tr><td colspan="3" style="text-align:center; padding:2rem;">Cargando telas del colegio...</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div style="margin-top:1.25rem; text-align:right;">
+              <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; padding:0.6rem 1.4rem;" onclick="guardarConfigTelasAdmin()">💾 Guardar Orden y Cambios de Telas</button>
+            </div>
+          </div>
+
+          <!-- SUBTAB 3: TALLAS HABILITADAS -->
+          <div id="admin-sec-tallas" style="display:none;">
+            <p style="font-size:0.82rem; color:var(--text-muted); margin-top:0; margin-bottom:1rem;">
+              ⚙️ Marca o desmarca las tallas que opera este colegio. El orden y estado afectarán a toda la matriz de costos.
+            </p>
+
+            <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap:0.75rem;" id="container-admin-tallas">
+              <!-- Tallas cargadas por JS -->
+            </div>
+
+            <div style="margin-top:1.5rem; text-align:right;">
+              <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; padding:0.6rem 1.4rem;" onclick="guardarTallasAdmin()">💾 Guardar Configuración de Tallas</button>
+            </div>
+          </div>
+
+          <!-- SUBTAB 4: COLEGIOS & PERFIL -->
+          <div id="admin-sec-colegios" style="display:none;">
+            <div style="background:#1e293b; padding:1.25rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.5rem;">
+              <h4 style="margin-top:0; color:#f8fafc;">🏛️ Datos del Colegio Activo</h4>
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
+                <div>
+                  <label style="font-size:0.78rem; color:#94a3b8;">Nombre del Colegio</label>
+                  <input type="text" id="col-edit-nombre" class="cell-editable-sm" style="width:100%; font-weight:700;">
+                </div>
+                <div>
+                  <label style="font-size:0.78rem; color:#94a3b8;">NIT / Identificación</label>
+                  <input type="text" id="col-edit-nit" class="cell-editable-sm" style="width:100%;">
+                </div>
+                <div>
+                  <label style="font-size:0.78rem; color:#94a3b8;">Dirección</label>
+                  <input type="text" id="col-edit-dir" class="cell-editable-sm" style="width:100%;">
+                </div>
+                <div>
+                  <label style="font-size:0.78rem; color:#94a3b8;">Teléfono de Contacto</label>
+                  <input type="text" id="col-edit-tel" class="cell-editable-sm" style="width:100%;">
+                </div>
+              </div>
+              <button class="btn" onclick="actualizarColegioActualAdmin()">Guardar Datos del Colegio</button>
+            </div>
+
+            <div style="background:#0f172a; padding:1.25rem; border-radius:10px; border:1px solid #1e293b;">
+              <h4 style="margin-top:0; color:#34d399;">➕ Dar de Alta un Nuevo Colegio en el Sistema</h4>
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
+                <div>
+                  <label style="font-size:0.78rem; color:#94a3b8;">Nombre del Nuevo Colegio *</label>
+                  <input type="text" id="ncol-nombre" class="cell-editable-sm" style="width:100%;" placeholder="Ej. Colegio San Agustín">
+                </div>
+                <div>
+                  <label style="font-size:0.78rem; color:#94a3b8;">NIT</label>
+                  <input type="text" id="ncol-nit" class="cell-editable-sm" style="width:100%;" placeholder="Opcional">
+                </div>
+              </div>
+              <button class="btn" style="background:#059669;" onclick="crearNuevoColegioAdmin()">Crear Colegio e Inicializar Catálogo</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </main>
 
   <footer>
@@ -359,6 +538,8 @@
         cargarResumen();
       } else if (tabId === 'matriz-tallas') {
         generarMatrizPrenda();
+      } else if (tabId === 'admin-colegio') {
+        cargarConfigAdminColegio();
       }
     }
 
@@ -1373,211 +1554,8 @@
         }
       } catch (e) { console.error(e); }
     }
-  </script>
-
-  <!-- MODAL CENTRO DE CONFIGURACIÓN Y ADMINISTRACIÓN DEL COLEGIO -->
-  <div id="modal-admin-colegio" class="modal-backdrop" style="display:none;">
-    <div class="modal-content-lg">
-      <div class="modal-header-admin">
-        <div class="modal-title-admin">
-          ⚙️ <span>Centro de Configuración y Administración del Colegio</span>
-          <span id="modal-colegio-name-badge" class="badge-tag" style="background:#10b98122; color:#34d399; border-color:#05966944;"></span>
-        </div>
-        <button class="modal-close-btn" onclick="cerrarModalAdminColegio()">✕</button>
-      </div>
-
-      <div class="admin-tabs-bar">
-        <button class="admin-tab-btn active" id="btn-atab-prendas" onclick="switchAdminTab('prendas')">👔 Prendas & Reordenamiento</button>
-        <button class="admin-tab-btn" id="btn-atab-telas" onclick="switchAdminTab('telas')">🧵 Telas del Colegio</button>
-        <button class="admin-tab-btn" id="btn-atab-tallas" onclick="switchAdminTab('tallas')">📏 Tallas Habilitadas</button>
-        <button class="admin-tab-btn" id="btn-atab-colegios" onclick="switchAdminTab('colegios')">🏛️ Perfil & Nuevos Colegios</button>
-      </div>
-
-      <div class="admin-body">
-        <!-- SUBTAB 1: PRENDAS & REORDENAMIENTO -->
-        <div id="admin-sec-prendas">
-          <div style="display:flex; align-items:center; justify-space-between; margin-bottom:1rem;">
-            <p style="font-size:0.82rem; color:var(--text-muted); margin:0;">
-              💡 <strong>Reordena las prendas:</strong> Arrastra la fila desde el ícono <strong>`⋮⋮`</strong> o usa los botones ▲ / ▼ para cambiar la secuencia. Asigna la <strong>Tela específica</strong> que usa cada prenda para calcular dinámicamente su costo.
-            </p>
-            <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.4rem 0.8rem;" onclick="mostrarFormNuevaPrenda()">+ Dar de Alta Nueva Prenda</button>
-          </div>
-
-          <div id="form-nueva-prenda-container" style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
-            <h4 style="margin-top:0; margin-bottom:0.75rem; color:#38bdf8; font-size:0.9rem;">✨ Registrar Nueva Prenda para este Colegio</h4>
-            <div style="display:grid; grid-template-columns: 80px 1fr 1fr 100px auto; gap:0.75rem; align-items:end;">
-              <div>
-                <label style="font-size:0.72rem; color:#94a3b8;">Item N°</label>
-                <input type="number" id="np-item" class="cell-editable-sm" style="width:100%; text-align:center;" value="28">
-              </div>
-              <div>
-                <label style="font-size:0.72rem; color:#94a3b8;">Descripción Prenda</label>
-                <input type="text" id="np-desc" class="cell-editable-sm" style="width:100%;" placeholder="Ej. Chaleco de invierno">
-              </div>
-              <div>
-                <label style="font-size:0.72rem; color:#94a3b8;">Tela Asignada</label>
-                <select id="np-tela" class="cell-editable-sm" style="width:100%; padding:0.3rem;">
-                  <option value="">-- Sin tela / Promedio --</option>
-                </select>
-              </div>
-              <div>
-                <label style="font-size:0.72rem; color:#94a3b8;">Factor Comp.</label>
-                <input type="number" id="np-factor" class="cell-editable-sm" style="width:100%; text-align:center;" value="1" step="0.1">
-              </div>
-              <div>
-                <button class="btn" style="padding:0.45rem 1rem;" onclick="crearNuevaPrendaAdmin()">Guardar Prenda</button>
-              </div>
-            </div>
-          </div>
-
-          <div style="max-height: 480px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
-            <table class="table-compact-auto" style="width:100%;">
-              <thead>
-                <tr>
-                  <th style="width:60px; text-align:center;">Orden</th>
-                  <th style="width:65px; text-align:center;">Item N°</th>
-                  <th style="text-align:left;">Descripción de Prenda</th>
-                  <th style="width:260px; text-align:left;">Tela Asignada (Selector)</th>
-                  <th style="width:90px; text-align:center;">Factor Comp.</th>
-                  <th style="width:70px; text-align:center;">Activo</th>
-                </tr>
-              </thead>
-              <tbody id="tb-admin-prendas-body">
-                <tr><td colspan="6" style="text-align:center; padding:2rem;">Cargando catálogo de prendas...</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div style="margin-top:1.25rem; text-align:right;">
-            <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; padding:0.6rem 1.4rem;" onclick="guardarConfigPrendasAdmin()">💾 Guardar Reordenamiento y Cambios</button>
-          </div>
-        </div>
-
-        <!-- SUBTAB: TELAS DEL COLEGIO -->
-        <div id="admin-sec-telas" style="display:none;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
-            <p style="font-size:0.82rem; color:var(--text-muted); margin:0;">
-              💡 <strong>Ordena y gestiona las telas:</strong> Arrastra la fila desde el ícono <strong>`⋮⋮`</strong> o usa los botones ▲ / ▼ para ordenar las telas. El orden definido aquí aparecerá automáticamente en el selector desplegable <strong>"Tela Asignada"</strong> de cada prenda.
-            </p>
-            <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.4rem 0.8rem;" onclick="mostrarFormNuevaTela()">+ Dar de Alta Nueva Tela</button>
-          </div>
-
-          <div id="form-nueva-tela-container" style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
-            <h4 style="margin-top:0; margin-bottom:0.75rem; color:#34d399; font-size:0.9rem;">✨ Registrar Nueva Tela para este Colegio</h4>
-            <div style="display:grid; grid-template-columns: 1fr auto; gap:0.75rem; align-items:end;">
-              <div>
-                <label style="font-size:0.72rem; color:#94a3b8;">Nombre / Descripción de la Tela *</label>
-                <input type="text" id="nt-desc" class="cell-editable-sm" style="width:100%; font-weight:600;" placeholder="Ej. Gabardina 100% Algodón">
-              </div>
-              <div>
-                <button class="btn" style="padding:0.45rem 1rem;" onclick="crearNuevaTelaAdmin()">Guardar Tela</button>
-              </div>
-            </div>
-          </div>
-
-          <div style="max-height: 480px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
-            <table class="table-compact-auto" style="width:100%;">
-              <thead>
-                <tr>
-                  <th style="width:70px; text-align:center;">Orden</th>
-                  <th style="text-align:left;">Nombre / Descripción de la Tela</th>
-                  <th style="width:70px; text-align:center;">Activo</th>
-                </tr>
-              </thead>
-              <tbody id="tb-admin-telas-body">
-                <tr><td colspan="3" style="text-align:center; padding:2rem;">Cargando telas del colegio...</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div style="margin-top:1.25rem; text-align:right;">
-            <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; padding:0.6rem 1.4rem;" onclick="guardarConfigTelasAdmin()">💾 Guardar Orden y Cambios de Telas</button>
-          </div>
-        </div>
-
-        <!-- SUBTAB 2: TALLAS HABILITADAS -->
-        <div id="admin-sec-tallas" style="display:none;">
-          <p style="font-size:0.82rem; color:var(--text-muted); margin-top:0; margin-bottom:1rem;">
-            ⚙️ Marca o desmarca las tallas que opera este colegio. El orden y estado afectarán a toda la matriz de costos.
-          </p>
-
-          <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap:0.75rem;" id="container-admin-tallas">
-            <!-- Tallas cargadas por JS -->
-          </div>
-
-          <div style="margin-top:1.5rem; text-align:right;">
-            <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; padding:0.6rem 1.4rem;" onclick="guardarTallasAdmin()">💾 Guardar Configuración de Tallas</button>
-          </div>
-        </div>
-
-        <!-- SUBTAB 3: COLEGIOS & PERFIL -->
-        <div id="admin-sec-colegios" style="display:none;">
-          <div style="background:#1e293b; padding:1.25rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.5rem;">
-            <h4 style="margin-top:0; color:#f8fafc;">🏛️ Datos del Colegio Activo</h4>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
-              <div>
-                <label style="font-size:0.78rem; color:#94a3b8;">Nombre del Colegio</label>
-                <input type="text" id="col-edit-nombre" class="cell-editable-sm" style="width:100%; font-weight:700;">
-              </div>
-              <div>
-                <label style="font-size:0.78rem; color:#94a3b8;">NIT / Identificación</label>
-                <input type="text" id="col-edit-nit" class="cell-editable-sm" style="width:100%;">
-              </div>
-              <div>
-                <label style="font-size:0.78rem; color:#94a3b8;">Dirección</label>
-                <input type="text" id="col-edit-dir" class="cell-editable-sm" style="width:100%;">
-              </div>
-              <div>
-                <label style="font-size:0.78rem; color:#94a3b8;">Teléfono de Contacto</label>
-                <input type="text" id="col-edit-tel" class="cell-editable-sm" style="width:100%;">
-              </div>
-            </div>
-            <button class="btn" onclick="actualizarColegioActualAdmin()">Guardar Datos del Colegio</button>
-          </div>
-
-          <div style="background:#0f172a; padding:1.25rem; border-radius:10px; border:1px solid #1e293b;">
-            <h4 style="margin-top:0; color:#34d399;">➕ Dar de Alta un Nuevo Colegio en el Sistema</h4>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
-              <div>
-                <label style="font-size:0.78rem; color:#94a3b8;">Nombre del Nuevo Colegio *</label>
-                <input type="text" id="ncol-nombre" class="cell-editable-sm" style="width:100%;" placeholder="Ej. Colegio San Agustín">
-              </div>
-              <div>
-                <label style="font-size:0.78rem; color:#94a3b8;">NIT</label>
-                <input type="text" id="ncol-nit" class="cell-editable-sm" style="width:100%;" placeholder="Opcional">
-              </div>
-            </div>
-            <button class="btn" style="background:#059669;" onclick="crearNuevoColegioAdmin()">Crear Colegio e Inicializar Catálogo</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <script>
     let adminConfigData = null;
-
-    async function abrirModalAdminColegio() {
-      if (!colegioFiltroActual || colegioFiltroActual === 'all') {
-        const select = document.getElementById('global-colegio-select');
-        for (let opt of select.options) {
-          if (opt.value && opt.value !== 'all') {
-            colegioFiltroActual = opt.value;
-            select.value = opt.value;
-            break;
-          }
-        }
-      }
-
-      const modal = document.getElementById('modal-admin-colegio');
-      if (modal) modal.style.display = 'flex';
-      await cargarConfigAdminColegio();
-    }
-
-    function cerrarModalAdminColegio() {
-      const modal = document.getElementById('modal-admin-colegio');
-      if (modal) modal.style.display = 'none';
-    }
 
     function switchAdminTab(tabName) {
       document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
