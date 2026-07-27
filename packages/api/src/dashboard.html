@@ -249,11 +249,14 @@
         <div class="admin-body" style="padding:0;">
           <!-- SUBTAB 1: TELAS DEL COLEGIO -->
           <div id="admin-sec-telas">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:0.75rem;">
               <p style="font-size:0.82rem; color:var(--text-muted); margin:0;">
                 💡 <strong>Ordena y gestiona las telas:</strong> Arrastra la fila desde el ícono <strong>`⋮⋮`</strong> o usa los botones ▲ / ▼ para ordenar las telas. El orden definido aquí aparecerá automáticamente en el selector desplegable <strong>"Tela Asignada"</strong> de cada prenda.
               </p>
-              <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.4rem 0.8rem;" onclick="mostrarFormNuevaTela()">+ Dar de Alta Nueva Tela</button>
+              <div style="display:flex; gap:0.6rem; align-items:center; flex-shrink:0;">
+                <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.45rem 0.85rem;" onclick="mostrarFormNuevaTela()">+ Dar de Alta Nueva Tela</button>
+                <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; font-size:0.78rem; padding:0.45rem 0.95rem;" onclick="guardarConfigTelasAdmin()">💾 Guardar Orden y Cambios de Telas</button>
+              </div>
             </div>
 
             <div id="form-nueva-tela-container" style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
@@ -269,7 +272,7 @@
               </div>
             </div>
 
-            <div style="max-height: 540px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
+            <div style="max-height: 680px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
               <table class="table-compact-auto" style="width:100%; min-width:850px;">
                 <thead>
                   <tr>
@@ -283,19 +286,18 @@
                 </tbody>
               </table>
             </div>
-
-            <div style="margin-top:1.25rem; text-align:right;">
-              <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; padding:0.6rem 1.4rem;" onclick="guardarConfigTelasAdmin()">💾 Guardar Orden y Cambios de Telas</button>
-            </div>
           </div>
 
           <!-- SUBTAB 2: PRENDAS & REORDENAMIENTO -->
           <div id="admin-sec-prendas" style="display:none;">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:0.75rem;">
               <p style="font-size:0.82rem; color:var(--text-muted); margin:0;">
                 💡 <strong>Reordena las prendas:</strong> Arrastra la fila desde el ícono <strong>`⋮⋮`</strong> o usa los botones ▲ / ▼ para cambiar la secuencia. Asigna la <strong>Tela específica</strong> que usa cada prenda para calcular dinámicamente su costo.
               </p>
-              <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.4rem 0.8rem;" onclick="mostrarFormNuevaPrenda()">+ Dar de Alta Nueva Prenda</button>
+              <div style="display:flex; gap:0.6rem; align-items:center; flex-shrink:0;">
+                <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.45rem 0.85rem;" onclick="mostrarFormNuevaPrenda()">+ Dar de Alta Nueva Prenda</button>
+                <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; font-size:0.78rem; padding:0.45rem 0.95rem;" onclick="guardarConfigPrendasAdmin()">💾 Guardar Reordenamiento y Cambios</button>
+              </div>
             </div>
 
             <div id="form-nueva-prenda-container" style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
@@ -325,7 +327,7 @@
               </div>
             </div>
 
-            <div style="max-height: 540px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
+            <div style="max-height: 680px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
               <table class="table-compact-auto" style="width:100%; min-width:1100px;">
                 <thead>
                   <tr>
@@ -341,10 +343,6 @@
                   <tr><td colspan="6" style="text-align:center; padding:2rem;">Cargando catálogo de prendas...</td></tr>
                 </tbody>
               </table>
-            </div>
-
-            <div style="margin-top:1.25rem; text-align:right;">
-              <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; padding:0.6rem 1.4rem;" onclick="guardarConfigPrendasAdmin()">💾 Guardar Reordenamiento y Cambios</button>
             </div>
           </div>
 
