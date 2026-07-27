@@ -87,9 +87,12 @@ api.get('/stock', async (c) => {
     }
     return true;
   }).sort((a: any, b: any) => {
-    if (a.itemNumero !== b.itemNumero) {
-      return a.itemNumero - b.itemNumero;
-    }
+    const pA = prodMap.get(a.productoId);
+    const pB = prodMap.get(b.productoId);
+    const ordenA = pA ? (pA.orden ?? pA.itemNumero) : a.itemNumero;
+    const ordenB = pB ? (pB.orden ?? pB.itemNumero) : b.itemNumero;
+    if (ordenA !== ordenB) return ordenA - ordenB;
+    if (a.itemNumero !== b.itemNumero) return a.itemNumero - b.itemNumero;
     return a.tallaOrden - b.tallaOrden;
   });
 

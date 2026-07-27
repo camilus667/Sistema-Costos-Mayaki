@@ -100,6 +100,7 @@ export const pesoMateriaPrima = sqliteTable('peso_mat_prima', {
 export const telas = sqliteTable('tela', {
   id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
   colegioId: text('colegio_id').notNull().references(() => colegios.id),
+  orden: integer('orden').default(0),
   descripcion: text('descripcion').notNull(),
   rendimiento: real('rendimiento').notNull(), // m/kg
   anchoMts: real('ancho_mts'), // m

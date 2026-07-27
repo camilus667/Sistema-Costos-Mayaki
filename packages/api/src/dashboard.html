@@ -1388,6 +1388,7 @@
 
       <div class="admin-tabs-bar">
         <button class="admin-tab-btn active" id="btn-atab-prendas" onclick="switchAdminTab('prendas')">👔 Prendas & Reordenamiento</button>
+        <button class="admin-tab-btn" id="btn-atab-telas" onclick="switchAdminTab('telas')">🧵 Telas del Colegio</button>
         <button class="admin-tab-btn" id="btn-atab-tallas" onclick="switchAdminTab('tallas')">📏 Tallas Habilitadas</button>
         <button class="admin-tab-btn" id="btn-atab-colegios" onclick="switchAdminTab('colegios')">🏛️ Perfil & Nuevos Colegios</button>
       </div>
@@ -1449,6 +1450,73 @@
 
           <div style="margin-top:1.25rem; text-align:right;">
             <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; padding:0.6rem 1.4rem;" onclick="guardarConfigPrendasAdmin()">💾 Guardar Reordenamiento y Cambios</button>
+          </div>
+        </div>
+
+        <!-- SUBTAB: TELAS DEL COLEGIO -->
+        <div id="admin-sec-telas" style="display:none;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+            <p style="font-size:0.82rem; color:var(--text-muted); margin:0;">
+              💡 <strong>Ordena y gestiona las telas:</strong> Usa ▲ / ▼ para ordenar las telas. El orden definido aquí aparecerá automáticamente en el selector desplegable <strong>"Tela Asignada"</strong> de cada prenda.
+            </p>
+            <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.4rem 0.8rem;" onclick="mostrarFormNuevaTela()">+ Dar de Alta Nueva Tela</button>
+          </div>
+
+          <div id="form-nueva-tela-container" style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
+            <h4 style="margin-top:0; margin-bottom:0.75rem; color:#34d399; font-size:0.9rem;">✨ Registrar Nueva Tela para este Colegio</h4>
+            <div style="display:grid; grid-template-columns: 1.5fr 80px 80px 80px 100px auto; gap:0.75rem; align-items:end;">
+              <div>
+                <label style="font-size:0.72rem; color:#94a3b8;">Nombre de la Tela *</label>
+                <input type="text" id="nt-desc" class="cell-editable-sm" style="width:100%;" placeholder="Ej. Gabardina 100% Algodón">
+              </div>
+              <div>
+                <label style="font-size:0.72rem; color:#94a3b8;">Ancho (m)</label>
+                <input type="number" id="nt-ancho" class="cell-editable-sm" style="width:100%; text-align:center;" value="1.5" step="0.01">
+              </div>
+              <div>
+                <label style="font-size:0.72rem; color:#94a3b8;">Unidad</label>
+                <select id="nt-unid" class="cell-editable-sm" style="width:100%; padding:0.2rem;">
+                  <option value="kilo">kilo</option>
+                  <option value="metro">metro</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:0.72rem; color:#94a3b8;">Densidad (g/m²)</label>
+                <input type="number" id="nt-dens" class="cell-editable-sm" style="width:100%; text-align:center;" value="200" step="1">
+              </div>
+              <div>
+                <label style="font-size:0.72rem; color:#94a3b8;">Precio Compra (Bs.)</label>
+                <input type="number" id="nt-precio" class="cell-editable-sm" style="width:100%; text-align:center;" value="50" step="0.5">
+              </div>
+              <div>
+                <button class="btn" style="padding:0.45rem 1rem;" onclick="crearNuevaTelaAdmin()">Guardar Tela</button>
+              </div>
+            </div>
+          </div>
+
+          <div style="max-height: 480px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
+            <table class="table-compact-auto" style="width:100%;">
+              <thead>
+                <tr>
+                  <th style="width:60px; text-align:center;">Orden</th>
+                  <th style="text-align:left;">Nombre / Descripción Tela</th>
+                  <th style="width:75px; text-align:center;">Ancho (m)</th>
+                  <th style="width:65px; text-align:center;">Unid</th>
+                  <th style="width:85px; text-align:center;">Dens. (g/m²)</th>
+                  <th style="width:95px; text-align:center;">Peso/mt (g)</th>
+                  <th style="width:105px; text-align:center;">Precio Compra</th>
+                  <th style="width:90px; text-align:center;">Precio Bs/g</th>
+                  <th style="width:60px; text-align:center;">Activo</th>
+                </tr>
+              </thead>
+              <tbody id="tb-admin-telas-body">
+                <tr><td colspan="9" style="text-align:center; padding:2rem;">Cargando telas del colegio...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div style="margin-top:1.25rem; text-align:right;">
+            <button class="btn" style="background:#38bdf8; color:#0f172a; font-weight:800; padding:0.6rem 1.4rem;" onclick="guardarConfigTelasAdmin()">💾 Guardar Orden y Cambios de Telas</button>
           </div>
         </div>
 
@@ -1541,6 +1609,8 @@
       document.getElementById('btn-atab-' + tabName).classList.add('active');
 
       document.getElementById('admin-sec-prendas').style.display = tabName === 'prendas' ? 'block' : 'none';
+      const secTelas = document.getElementById('admin-sec-telas');
+      if (secTelas) secTelas.style.display = tabName === 'telas' ? 'block' : 'none';
       document.getElementById('admin-sec-tallas').style.display = tabName === 'tallas' ? 'block' : 'none';
       document.getElementById('admin-sec-colegios').style.display = tabName === 'colegios' ? 'block' : 'none';
     }
@@ -1554,6 +1624,7 @@
         if (json.success) {
           adminConfigData = json;
           renderAdminPrendas();
+          renderAdminTelas();
           renderAdminTallas();
           renderAdminPerfilColegio();
         }
@@ -1684,6 +1755,141 @@
           await cargarConfigAdminColegio();
         }
       } catch (e) { alert('Error al crear prenda: ' + e); }
+    }
+
+    function renderAdminTelas() {
+      if (!adminConfigData) return;
+      const telas = adminConfigData.telas || [];
+
+      const tbody = document.getElementById('tb-admin-telas-body');
+      if (!tbody) return;
+
+      tbody.innerHTML = telas.map((t, idx) => `
+        <tr>
+          <td style="text-align:center;">
+            <button class="btn-move" onclick="moverTelaUp(${idx})" ${idx === 0 ? 'disabled style="opacity:0.3;"' : ''}>▲</button>
+            <button class="btn-move" onclick="moverTelaDown(${idx})" ${idx === telas.length - 1 ? 'disabled style="opacity:0.3;"' : ''}>▼</button>
+          </td>
+          <td>
+            <input type="text" id="at-desc-${t.id}" class="cell-editable-sm" style="width:100%; font-weight:600; color:#f8fafc;" value="${t.descripcion}">
+          </td>
+          <td style="text-align:center;">
+            <input type="number" id="at-ancho-${t.id}" class="cell-editable-sm" style="width:55px; text-align:center;" value="${t.anchoMts || 1.5}" step="0.01">
+          </td>
+          <td style="text-align:center;">
+            <select id="at-unid-${t.id}" class="cell-editable-sm" style="width:60px; padding:0.15rem;">
+              <option value="kilo" ${t.unid === 'kilo' ? 'selected' : ''}>kilo</option>
+              <option value="metro" ${t.unid === 'metro' ? 'selected' : ''}>metro</option>
+            </select>
+          </td>
+          <td style="text-align:center;">
+            <input type="number" id="at-dens-${t.id}" class="cell-editable-sm" style="width:65px; text-align:center;" value="${t.densidadGm2 || 200}" step="1">
+          </td>
+          <td style="text-align:center;">
+            <strong>${(t.pesoMtLineal || ((t.anchoMts || 1.5) * (t.densidadGm2 || 200))).toFixed(0)} g</strong>
+          </td>
+          <td style="text-align:center;">
+            <input type="number" id="at-precio-${t.id}" class="cell-editable-sm" style="width:75px; text-align:center; color:#34d399; font-weight:700;" value="${t.precioCompra || 0}" step="0.1">
+          </td>
+          <td style="text-align:center;">
+            <strong style="color:var(--warning);">Bs. ${(t.precioBsG || 0.1475).toFixed(3)}</strong>
+          </td>
+          <td style="text-align:center;">
+            <input type="checkbox" id="at-act-${t.id}" ${t.activo !== false ? 'checked' : ''}>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function moverTelaUp(idx) {
+      if (idx <= 0 || !adminConfigData || !adminConfigData.telas) return;
+      const telas = adminConfigData.telas;
+      const temp = telas[idx];
+      telas[idx] = telas[idx - 1];
+      telas[idx - 1] = temp;
+      
+      telas.forEach((t, i) => t.orden = i + 1);
+      renderAdminTelas();
+      renderAdminPrendas();
+    }
+
+    function moverTelaDown(idx) {
+      if (!adminConfigData || !adminConfigData.telas || idx >= adminConfigData.telas.length - 1) return;
+      const telas = adminConfigData.telas;
+      const temp = telas[idx];
+      telas[idx] = telas[idx + 1];
+      telas[idx + 1] = temp;
+
+      telas.forEach((t, i) => t.orden = i + 1);
+      renderAdminTelas();
+      renderAdminPrendas();
+    }
+
+    async function guardarConfigTelasAdmin() {
+      if (!adminConfigData || !adminConfigData.telas) return;
+      const payload = adminConfigData.telas.map((t, i) => ({
+        id: t.id,
+        orden: i + 1,
+        descripcion: document.getElementById('at-desc-' + t.id).value.trim(),
+        precioCompra: parseFloat(document.getElementById('at-precio-' + t.id).value) || t.precioCompra,
+        activo: document.getElementById('at-act-' + t.id).checked
+      }));
+
+      try {
+        const res = await fetch('/api/colegios/' + colegioFiltroActual + '/config-telas', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telas: payload })
+        });
+        const json = await res.json();
+        if (json.success) {
+          alert('✅ Reordenamiento y configuración de telas guardados exitosamente.');
+          await cargarInputConcept('Tela');
+          await cargarMatrizConsolidada();
+          generarMatrizPrenda();
+          await cargarConfigAdminColegio();
+        }
+      } catch (e) { alert('Error al guardar telas: ' + e); }
+    }
+
+    function mostrarFormNuevaTela() {
+      const container = document.getElementById('form-nueva-tela-container');
+      if (container) container.style.display = container.style.display === 'none' ? 'block' : 'none';
+    }
+
+    async function crearNuevaTelaAdmin() {
+      const descripcion = document.getElementById('nt-desc').value.trim();
+      const anchoMts = parseFloat(document.getElementById('nt-ancho').value) || 1.5;
+      const unid = document.getElementById('nt-unid').value || 'kilo';
+      const densidadGm2 = parseFloat(document.getElementById('nt-dens').value) || 200;
+      const precioCompra = parseFloat(document.getElementById('nt-precio').value) || 50;
+
+      if (!descripcion) return alert('Por favor ingresa la descripción de la tela.');
+
+      try {
+        const res = await fetch('/api/telas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            colegioId: colegioFiltroActual,
+            descripcion,
+            anchoMts,
+            unid,
+            densidadGm2,
+            precioCompra
+          })
+        });
+        const json = await res.json();
+        if (json.success) {
+          document.getElementById('form-nueva-tela-container').style.display = 'none';
+          document.getElementById('nt-desc').value = '';
+          alert('🎉 Nueva tela registrada exitosamente.');
+          await cargarInputConcept('Tela');
+          await cargarMatrizConsolidada();
+          generarMatrizPrenda();
+          await cargarConfigAdminColegio();
+        }
+      } catch (e) { alert('Error al crear tela: ' + e); }
     }
 
     function renderAdminTallas() {

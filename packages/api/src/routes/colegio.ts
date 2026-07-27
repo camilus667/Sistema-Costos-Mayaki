@@ -141,7 +141,7 @@ api.get('/:id/config', async (c) => {
   if (!col) return c.json({ success: false, error: 'Colegio no encontrado' }, 404);
 
   const prods = await db.select().from(productos).where(eq(productos.colegioId, id)).orderBy(asc(productos.orden), asc(productos.itemNumero));
-  const tList = await db.select().from(telas).where(eq(telas.colegioId, id)).orderBy(asc(telas.descripcion));
+  const tList = await db.select().from(telas).where(eq(telas.colegioId, id)).orderBy(asc(telas.orden), asc(telas.descripcion));
   const taList = await db.select().from(tallas).where(eq(tallas.colegioId, id)).orderBy(asc(tallas.orden));
 
   return c.json({
@@ -151,6 +151,28 @@ api.get('/:id/config', async (c) => {
     telas: tList,
     tallas: taList,
   });
+});
+
+// PUT /api/colegios/:id/config-telas - Reordenar y configurar telas del colegio
+api.put('/:id/config-telas', async (c) => {
+  const db = (c as any).db;
+  const body = await c.req.json();
+
+  if (Array.isArray(body.telas)) {
+    for (const t of body.telas) {
+      if (!t.id) continue;
+      const updateData: any = {};
+      if (t.orden !== undefined) updateData.orden = t.orden;
+      if (t.descripcion !== undefined) updateData.descripcion = t.descripcion;
+      if (t.precioCompra !== undefined) updateData.precioCompra = t.precioCompra;
+      if (t.activo !== undefined) updateData.activo = t.activo;
+
+      await db.update(telas).set(updateData).where(eq(telas.id, t.id));
+    }
+    saveDbToDisk();
+  }
+
+  return c.json({ success: true, message: 'Configuración de telas guardada exitosamente' });
 });
 
 // PUT /api/colegios/:id/config-prendas - Guardar reordenamiento y configuración de prendas

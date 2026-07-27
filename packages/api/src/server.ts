@@ -117,7 +117,7 @@ app.get('/api/dashboard-resumen', async (c) => {
   
   let prodQuery = db.select().from(schema.productos);
   if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(schema.productos.colegioId, colegioId));
-  const productos = await prodQuery.orderBy(asc(schema.productos.itemNumero));
+  const productos = await prodQuery.orderBy(asc(schema.productos.orden), asc(schema.productos.itemNumero));
 
   const telas = await db.select().from(schema.telas);
   const accesorios = await db.select().from(schema.accesorios);

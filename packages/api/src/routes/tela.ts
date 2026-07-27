@@ -25,7 +25,7 @@ api.get('/', async (c) => {
     query = query.where(eq(telas.colegioId, colegioId));
   }
   
-  const allTelas = await query.orderBy(asc(telas.descripcion));
+  const allTelas = await query.orderBy(asc(telas.orden), asc(telas.descripcion));
   
   return c.json({
     success: true,

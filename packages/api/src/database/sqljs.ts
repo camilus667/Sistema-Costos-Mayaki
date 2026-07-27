@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS "producto" (
 CREATE TABLE IF NOT EXISTS "tela" (
  "id" text PRIMARY KEY NOT NULL,
  "colegio_id" text NOT NULL,
+ "orden" integer DEFAULT 0,
  "descripcion" text NOT NULL,
  "rendimiento" real NOT NULL,
  "ancho_mts" real,
@@ -230,6 +231,7 @@ export async function getDb() {
 
   try { dbInstance.run('ALTER TABLE "producto" ADD COLUMN "orden" INTEGER DEFAULT 0;'); } catch (e) {}
   try { dbInstance.run('ALTER TABLE "producto" ADD COLUMN "tela_id" TEXT;'); } catch (e) {}
+  try { dbInstance.run('ALTER TABLE "tela" ADD COLUMN "orden" INTEGER DEFAULT 0;'); } catch (e) {}
 
   dbDrizzle = drizzle(dbInstance, { schema: schemaModule });
 
