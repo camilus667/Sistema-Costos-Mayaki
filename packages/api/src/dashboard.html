@@ -1464,29 +1464,10 @@
 
           <div id="form-nueva-tela-container" style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
             <h4 style="margin-top:0; margin-bottom:0.75rem; color:#34d399; font-size:0.9rem;">✨ Registrar Nueva Tela para este Colegio</h4>
-            <div style="display:grid; grid-template-columns: 1.5fr 80px 80px 80px 100px auto; gap:0.75rem; align-items:end;">
+            <div style="display:grid; grid-template-columns: 1fr auto; gap:0.75rem; align-items:end;">
               <div>
-                <label style="font-size:0.72rem; color:#94a3b8;">Nombre de la Tela *</label>
-                <input type="text" id="nt-desc" class="cell-editable-sm" style="width:100%;" placeholder="Ej. Gabardina 100% Algodón">
-              </div>
-              <div>
-                <label style="font-size:0.72rem; color:#94a3b8;">Ancho (m)</label>
-                <input type="number" id="nt-ancho" class="cell-editable-sm" style="width:100%; text-align:center;" value="1.5" step="0.01">
-              </div>
-              <div>
-                <label style="font-size:0.72rem; color:#94a3b8;">Unidad</label>
-                <select id="nt-unid" class="cell-editable-sm" style="width:100%; padding:0.2rem;">
-                  <option value="kilo">kilo</option>
-                  <option value="metro">metro</option>
-                </select>
-              </div>
-              <div>
-                <label style="font-size:0.72rem; color:#94a3b8;">Densidad (g/m²)</label>
-                <input type="number" id="nt-dens" class="cell-editable-sm" style="width:100%; text-align:center;" value="200" step="1">
-              </div>
-              <div>
-                <label style="font-size:0.72rem; color:#94a3b8;">Precio Compra (Bs.)</label>
-                <input type="number" id="nt-precio" class="cell-editable-sm" style="width:100%; text-align:center;" value="50" step="0.5">
+                <label style="font-size:0.72rem; color:#94a3b8;">Nombre / Descripción de la Tela *</label>
+                <input type="text" id="nt-desc" class="cell-editable-sm" style="width:100%; font-weight:600;" placeholder="Ej. Gabardina 100% Algodón">
               </div>
               <div>
                 <button class="btn" style="padding:0.45rem 1rem;" onclick="crearNuevaTelaAdmin()">Guardar Tela</button>
@@ -1498,19 +1479,13 @@
             <table class="table-compact-auto" style="width:100%;">
               <thead>
                 <tr>
-                  <th style="width:60px; text-align:center;">Orden</th>
-                  <th style="text-align:left;">Nombre / Descripción Tela</th>
-                  <th style="width:75px; text-align:center;">Ancho (m)</th>
-                  <th style="width:65px; text-align:center;">Unid</th>
-                  <th style="width:85px; text-align:center;">Dens. (g/m²)</th>
-                  <th style="width:95px; text-align:center;">Peso/mt (g)</th>
-                  <th style="width:105px; text-align:center;">Precio Compra</th>
-                  <th style="width:90px; text-align:center;">Precio Bs/g</th>
-                  <th style="width:60px; text-align:center;">Activo</th>
+                  <th style="width:70px; text-align:center;">Orden</th>
+                  <th style="text-align:left;">Nombre / Descripción de la Tela</th>
+                  <th style="width:70px; text-align:center;">Activo</th>
                 </tr>
               </thead>
               <tbody id="tb-admin-telas-body">
-                <tr><td colspan="9" style="text-align:center; padding:2rem;">Cargando telas del colegio...</td></tr>
+                <tr><td colspan="3" style="text-align:center; padding:2rem;">Cargando telas del colegio...</td></tr>
               </tbody>
             </table>
           </div>
@@ -1774,27 +1749,6 @@
             <input type="text" id="at-desc-${t.id}" class="cell-editable-sm" style="width:100%; font-weight:600; color:#f8fafc;" value="${t.descripcion}">
           </td>
           <td style="text-align:center;">
-            <input type="number" id="at-ancho-${t.id}" class="cell-editable-sm" style="width:55px; text-align:center;" value="${t.anchoMts || 1.5}" step="0.01">
-          </td>
-          <td style="text-align:center;">
-            <select id="at-unid-${t.id}" class="cell-editable-sm" style="width:60px; padding:0.15rem;">
-              <option value="kilo" ${t.unid === 'kilo' ? 'selected' : ''}>kilo</option>
-              <option value="metro" ${t.unid === 'metro' ? 'selected' : ''}>metro</option>
-            </select>
-          </td>
-          <td style="text-align:center;">
-            <input type="number" id="at-dens-${t.id}" class="cell-editable-sm" style="width:65px; text-align:center;" value="${t.densidadGm2 || 200}" step="1">
-          </td>
-          <td style="text-align:center;">
-            <strong>${(t.pesoMtLineal || ((t.anchoMts || 1.5) * (t.densidadGm2 || 200))).toFixed(0)} g</strong>
-          </td>
-          <td style="text-align:center;">
-            <input type="number" id="at-precio-${t.id}" class="cell-editable-sm" style="width:75px; text-align:center; color:#34d399; font-weight:700;" value="${t.precioCompra || 0}" step="0.1">
-          </td>
-          <td style="text-align:center;">
-            <strong style="color:var(--warning);">Bs. ${(t.precioBsG || 0.1475).toFixed(3)}</strong>
-          </td>
-          <td style="text-align:center;">
             <input type="checkbox" id="at-act-${t.id}" ${t.activo !== false ? 'checked' : ''}>
           </td>
         </tr>
@@ -1831,7 +1785,6 @@
         id: t.id,
         orden: i + 1,
         descripcion: document.getElementById('at-desc-' + t.id).value.trim(),
-        precioCompra: parseFloat(document.getElementById('at-precio-' + t.id).value) || t.precioCompra,
         activo: document.getElementById('at-act-' + t.id).checked
       }));
 
@@ -1843,7 +1796,7 @@
         });
         const json = await res.json();
         if (json.success) {
-          alert('✅ Reordenamiento y configuración de telas guardados exitosamente.');
+          alert('✅ Reordenamiento y lista de telas guardados exitosamente.');
           await cargarInputConcept('Tela');
           await cargarMatrizConsolidada();
           generarMatrizPrenda();
@@ -1859,11 +1812,6 @@
 
     async function crearNuevaTelaAdmin() {
       const descripcion = document.getElementById('nt-desc').value.trim();
-      const anchoMts = parseFloat(document.getElementById('nt-ancho').value) || 1.5;
-      const unid = document.getElementById('nt-unid').value || 'kilo';
-      const densidadGm2 = parseFloat(document.getElementById('nt-dens').value) || 200;
-      const precioCompra = parseFloat(document.getElementById('nt-precio').value) || 50;
-
       if (!descripcion) return alert('Por favor ingresa la descripción de la tela.');
 
       try {
@@ -1873,12 +1821,11 @@
           body: JSON.stringify({
             colegioId: colegioFiltroActual,
             descripcion,
-            anchoMts,
-            unid,
-            densidadGm2,
-            precioCompra
+            anchoMts: 1.5,
+            unid: 'kilo',
+            densidadGm2: 200,
+            precioCompra: 50
           })
-        });
         const json = await res.json();
         if (json.success) {
           document.getElementById('form-nueva-tela-container').style.display = 'none';
