@@ -1,6 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <rect width="100" height="100" rx="24" fill="#0f172a"/>
-  <path d="M25 28 L42 42 L50 34 L58 42 L75 28 L85 38 L75 84 L25 84 L15 38 Z" fill="#10b981"/>
-  <path d="M50 34 L43 55 L50 78 L57 55 Z" fill="#38bdf8"/>
-  <circle cx="50" cy="22" r="5" fill="#fbbf24"/>
+  <path d="M 44,4 L 56,4 L 58,16 A 35,35 0 0,1 68,20 L 78,12 L 88,22 L 80,32 A 35,35 0 0,1 84,42 L 96,44 L 96,56 L 84,58 A 35,35 0 0,1 80,68 L 88,78 L 78,88 L 68,80 A 35,35 0 0,1 58,84 L 56,96 L 44,96 L 42,84 A 35,35 0 0,1 32,80 L 22,88 L 12,78 L 20,68 A 35,35 0 0,1 16,58 L 4,56 L 4,44 L 16,42 A 35,35 0 0,1 20,32 L 12,22 L 22,12 L 32,20 A 35,35 0 0,1 42,16 Z" fill="#334155"/>
+  <path d="M 50,4 L 56,4 L 58,16 A 35,35 0 0,1 68,20 L 78,12 L 88,22 L 80,32 A 35,35 0 0,1 84,42 L 96,44 L 96,56 L 84,58 A 35,35 0 0,1 80,68 L 88,78 L 78,88 L 68,80 A 35,35 0 0,1 58,84 L 56,96 L 50,96 Z" fill="#1e293b"/>
+  <circle cx="50" cy="50" r="28" fill="#ffffff"/>
+  <circle cx="50" cy="50" r="21" fill="#10b981"/>
+  <path d="M 50,29 A 21,21 0 0,1 50,71 Z" fill="#059669"/>
+  <text x="50" y="52" font-family="'Inter', system-ui, -apple-system, sans-serif" font-size="28" font-weight="900" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">$</text>
 </svg>
