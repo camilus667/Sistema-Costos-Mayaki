@@ -197,6 +197,14 @@ api.get('/peso-mat-prima', async (c) => {
   const rows = inputs ? inputs.pesoRows : [];
   const tallasHeader = inputs ? inputs.tallasHeaderPeso : [];
 
+  let globalMermaPct = 8;
+  if (rows && rows.length > 0) {
+    const mermaRow = rows.find((r: any) => r && String(r[0]).trim().toUpperCase() === 'MERMA');
+    if (mermaRow && typeof mermaRow[1] === 'number') {
+      globalMermaPct = Number(mermaRow[1]);
+    }
+  }
+
   const topMap = new Map<string, number>();
   const bottomMap = new Map<string, number>();
 
@@ -222,6 +230,13 @@ api.get('/peso-mat-prima', async (c) => {
     });
   }
 
+  // Detect DB merma global if any record has it
+  pesos.forEach((p: any) => {
+    if (p.mermaPorcentaje && p.mermaPorcentaje > 0) {
+      globalMermaPct = p.mermaPorcentaje;
+    }
+  });
+
   const data = allProds.map((prod: any) => {
     const rowObj: any = {
       productoId: prod.id,
@@ -234,13 +249,20 @@ api.get('/peso-mat-prima', async (c) => {
       const dbRec = pesoMap.get(`${prod.id}_${talla.id}`);
       const key = `${prod.itemNumero}_${talla.codigo}`;
 
-      const conMerma = dbRec ? dbRec.pesoGramos : (topMap.get(key) || 0);
-      const exacto = dbRec ? (dbRec.pesoExactoGramos || parseFloat((conMerma / 1.08).toFixed(2))) : (bottomMap.get(key) || (conMerma > 0 ? parseFloat((conMerma / 1.08).toFixed(2)) : 0));
+      const recMerma = dbRec?.mermaPorcentaje || globalMermaPct;
+      const exacto = dbRec ? dbRec.pesoExactoGramos : (bottomMap.get(key) || 0);
+      let conMerma = dbRec ? dbRec.pesoGramos : (topMap.get(key) || 0);
+
+      if (exacto > 0 && (!conMerma || conMerma === 0)) {
+        conMerma = parseFloat((exacto * (1 + recMerma / 100)).toFixed(2));
+      } else if (conMerma > 0 && (!exacto || exacto === 0)) {
+        exacto = parseFloat((conMerma / (1 + recMerma / 100)).toFixed(2));
+      }
 
       rowObj.tallas[talla.codigo] = {
-        pesoConMerma: parseFloat(conMerma.toFixed(2)),
-        pesoExacto: parseFloat(exacto.toFixed(2)),
-        mermaPorcentaje: 8
+        pesoConMerma: parseFloat((conMerma || 0).toFixed(2)),
+        pesoExacto: parseFloat((exacto || 0).toFixed(2)),
+        mermaPorcentaje: recMerma
       };
     });
 
@@ -249,6 +271,7 @@ api.get('/peso-mat-prima', async (c) => {
 
   return c.json({
     success: true,
+    mermaGlobalPct: globalMermaPct,
     tallas: allTallas.map((t: any) => ({ id: t.id, codigo: t.codigo })),
     data
   });
@@ -619,27 +642,56 @@ api.put('/fij-var/:id', async (c) => {
   }
 });
 
-// PUT /api/inputs/peso-mat-prima - Actualizar peso de materia prima en tiempo real
+// PUT /api/inputs/peso-mat-prima - Actualizar peso de materia prima o porcentaje de merma en tiempo real
 api.put('/peso-mat-prima', async (c) => {
   const db = (c as any).db;
   const body = await c.req.json();
-  const { productoId, tallaCodigo, pesoConMerma } = body;
+  const { productoId, tallaCodigo, pesoExacto, pesoConMerma, mermaPorcentaje, bulkMerma } = body;
 
   try {
+    if (bulkMerma && typeof mermaPorcentaje === 'number') {
+      const newMerma = Number(mermaPorcentaje) || 8;
+      const allPesos = await db.select().from(pesoMateriaPrima);
+      for (const rec of allPesos) {
+        const pExacto = rec.pesoExactoGramos || parseFloat((rec.pesoGramos / (1 + newMerma / 100)).toFixed(2));
+        const pConMerma = parseFloat((pExacto * (1 + newMerma / 100)).toFixed(2));
+        await db.update(pesoMateriaPrima)
+          .set({
+            mermaPorcentaje: newMerma,
+            pesoGramos: pConMerma,
+            pesoConMerma: pConMerma,
+          })
+          .where(eq(pesoMateriaPrima.id, rec.id));
+      }
+      saveDbToDisk();
+      return c.json({ success: true, message: `Merma global actualizada a ${newMerma}%` });
+    }
+
     const [prod] = await db.select().from(productos).where(eq(productos.id, productoId)).limit(1);
     if (!prod) return c.json({ success: false, error: 'Producto no encontrado' }, 404);
 
     const [tallaObj] = await db.select().from(tallas).where(and(eq(tallas.colegioId, prod.colegioId), eq(tallas.codigo, tallaCodigo))).limit(1);
     if (tallaObj) {
-      const pConMerma = Number(pesoConMerma) || 0;
-      const pExacto = parseFloat((pConMerma / 1.08).toFixed(2));
+      const mermaPct = typeof mermaPorcentaje === 'number' ? Number(mermaPorcentaje) : 8;
+      
+      let pExacto = 0;
+      let pConMerma = 0;
+
+      if (typeof pesoExacto === 'number' && pesoExacto >= 0) {
+        pExacto = Number(pesoExacto);
+        pConMerma = parseFloat((pExacto * (1 + mermaPct / 100)).toFixed(2));
+      } else if (typeof pesoConMerma === 'number' && pesoConMerma >= 0) {
+        pConMerma = Number(pesoConMerma);
+        pExacto = parseFloat((pConMerma / (1 + mermaPct / 100)).toFixed(2));
+      }
+
       await db.delete(pesoMateriaPrima).where(and(eq(pesoMateriaPrima.productoId, prod.id), eq(pesoMateriaPrima.tallaId, tallaObj.id)));
       await db.insert(pesoMateriaPrima).values({
         productoId: prod.id,
         tallaId: tallaObj.id,
         pesoExactoGramos: pExacto,
         pesoGramos: pConMerma,
-        mermaPorcentaje: 8,
+        mermaPorcentaje: mermaPct,
         pesoConMerma: pConMerma,
       });
       saveDbToDisk();

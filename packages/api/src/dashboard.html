@@ -130,6 +130,7 @@
             </tbody>
           </table>
         </div>
+        <div id="peso-merma-container" style="display:none;"></div>
       </div>
     </div>
 
@@ -473,6 +474,11 @@
         tableElem.style.display = '';
       }
 
+      const pesoMermaContainer = document.getElementById('peso-merma-container');
+      if (concept !== 'PesoMatPrima' && pesoMermaContainer) {
+        pesoMermaContainer.style.display = 'none';
+      }
+
       if (concept === 'Tela') {
         const res = await fetch('/api/telas?colegioId=' + colegioFiltroActual);
         const json = await res.json();
@@ -503,22 +509,68 @@
           </tr>
         `).join('');
       } else if (concept === 'PesoMatPrima') {
+        tableElem.className = 'table-compact-acc';
+        const mermaContainer = document.getElementById('peso-merma-container');
+        if (mermaContainer) mermaContainer.style.display = 'block';
+
         const res = await fetch('/api/inputs/peso-mat-prima?colegioId=' + colegioFiltroActual);
         const json = await res.json();
+        
+        const mermaVal = json.mermaGlobalPct || 8;
+        if (mermaContainer) {
+          mermaContainer.innerHTML = `
+            <div style="margin-top: 1.25rem; background: #0f172a; padding: 1rem 1.25rem; border-radius: 10px; border: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+              <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <span style="font-size: 0.88rem; font-weight: 700; color: #f8fafc;">⚙️ Porcentaje de Merma Global:</span>
+                <div style="display: flex; align-items: center; gap: 0.35rem;">
+                  <input type="number" id="input-global-merma" class="cell-editable-sm" style="width: 75px; font-weight: 700; text-align: center; color: var(--warning); padding: 0.3rem;" value="${mermaVal}" step="0.5" min="0" max="100" onchange="aplicarMermaGlobalLive(this.value)">
+                  <span style="font-weight: 700; color: var(--warning); font-size: 0.95rem;">%</span>
+                </div>
+                <span style="font-size: 0.76rem; color: var(--text-muted);">(Recalcula en vivo el Peso con Merma para todas las prendas)</span>
+              </div>
+              <div style="font-size: 0.78rem; color: #38bdf8; font-weight: 600;">
+                💡 <strong style="color:#fff;">Insignia cian (esquina):</strong> Peso Real Sin Merma (g) &nbsp;|&nbsp; <strong style="color:#fff;">Texto central:</strong> Peso Con Merma (g)
+              </div>
+            </div>
+          `;
+        }
+
         thead.innerHTML = `
           <tr>
-            <th>ITEM</th><th>DETALLE DE PRENDA</th>
-            ${json.tallas.map(t => `<th style="text-align:center;">${t.codigo}</th>`).join('')}
+            <th style="width:38px; text-align:center; vertical-align:middle;">ITEM</th>
+            <th style="width:180px; text-align:left; vertical-align:middle;">DETALLE DE PRENDA</th>
+            ${json.tallas.map(t => `<th style="text-align:center; vertical-align:middle;">${t.codigo}</th>`).join('')}
           </tr>
         `;
+
         tbody.innerHTML = json.data.map(p => `
           <tr>
             <td><span class="col-item">${p.itemNumero}</span></td>
-            <td><strong>${p.descripcion}</strong></td>
+            <td title="${p.descripcion}" style="text-align:left; overflow:hidden; text-overflow:ellipsis;"><strong>${p.descripcion}</strong></td>
             ${json.tallas.map(t => {
-              const rec = p.tallas[t.codigo];
-              const val = rec ? rec.pesoConMerma : 0;
-              return `<td style="text-align:center;">${getInputHtml(val, '1', `id="peso-${p.productoId}-${t.codigo}" onchange="guardarPesoLive('${p.productoId}', '${t.codigo}', this)"`)}</td>`;
+              const rec = p.tallas[t.codigo] || { pesoExacto: 0, pesoConMerma: 0 };
+              const exacto = rec.pesoExacto || 0;
+              const conMerma = rec.pesoConMerma || 0;
+              const cellKey = `${p.productoId}_${t.codigo}`;
+
+              return `<td style="text-align:center; padding:0.05rem;">
+                <div class="acc-cell-wrapper">
+                  <span class="acc-qty-badge" id="badge-peso-${cellKey}" title="Peso Real sin merma" style="${exacto > 0 ? '' : 'display:none;'}">${exacto > 0 ? exacto.toFixed(0) + 'g' : ''}</span>
+                  <span class="acc-cost-display" id="disp-peso-${cellKey}">${conMerma > 0 ? conMerma.toFixed(1) : '-'}</span>
+                  <input type="number" 
+                         class="acc-cell-input" 
+                         id="input-peso-${cellKey}"
+                         value="${exacto > 0 ? exacto : ''}" 
+                         placeholder="0" 
+                         step="1" 
+                         min="0" 
+                         data-prodid="${p.productoId}"
+                         data-tcodigo="${t.codigo}"
+                         onclick="this.select()" 
+                         onfocus="this.select()" 
+                         onchange="recalcularPesoLive('${p.productoId}', '${t.codigo}', this)">
+                </div>
+              </td>`;
             }).join('')}
           </tr>
         `).join('');
@@ -871,6 +923,87 @@
           cargarResumen();
         }
       } catch (e) { console.error('Error al actualizar tela en BD:', e); }
+    }
+
+    async function recalcularPesoLive(productoId, tallaCodigo, inputElem) {
+      const pesoExacto = parseFloat(inputElem.value) || 0;
+      const mermaElem = document.getElementById('input-global-merma');
+      const mermaPct = mermaElem ? (parseFloat(mermaElem.value) || 8) : 8;
+
+      const cellKey = productoId + '_' + tallaCodigo;
+      const dispElem = document.getElementById('disp-peso-' + cellKey);
+      const badgeElem = document.getElementById('badge-peso-' + cellKey);
+
+      const pesoConMerma = pesoExacto > 0 ? parseFloat((pesoExacto * (1 + mermaPct / 100)).toFixed(1)) : 0;
+
+      if (dispElem) dispElem.textContent = pesoConMerma > 0 ? pesoConMerma.toFixed(1) : '-';
+      if (badgeElem) {
+        if (pesoExacto > 0) {
+          badgeElem.textContent = pesoExacto.toFixed(0) + 'g';
+          badgeElem.style.display = '';
+        } else {
+          badgeElem.style.display = 'none';
+        }
+      }
+
+      try {
+        await fetch('/api/inputs/peso-mat-prima', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            productoId,
+            tallaCodigo,
+            pesoExacto,
+            mermaPorcentaje: mermaPct
+          })
+        });
+        await cargarMatrizConsolidada();
+        generarMatrizPrenda();
+        cargarResumen();
+      } catch (e) {
+        console.error('Error al guardar peso materia prima:', e);
+      }
+    }
+
+    async function aplicarMermaGlobalLive(mermaVal) {
+      const newMerma = parseFloat(mermaVal) || 8;
+
+      document.querySelectorAll('.acc-cell-input[data-prodid]').forEach(input => {
+        const prodId = input.dataset.prodid;
+        const tCode = input.dataset.tcodigo;
+        const pExacto = parseFloat(input.value) || 0;
+
+        const cellKey = prodId + '_' + tCode;
+        const dispElem = document.getElementById('disp-peso-' + cellKey);
+        const badgeElem = document.getElementById('badge-peso-' + cellKey);
+
+        const pesoConMerma = pExacto > 0 ? parseFloat((pExacto * (1 + newMerma / 100)).toFixed(1)) : 0;
+        if (dispElem) dispElem.textContent = pesoConMerma > 0 ? pesoConMerma.toFixed(1) : '-';
+        if (badgeElem) {
+          if (pExacto > 0) {
+            badgeElem.textContent = pExacto.toFixed(0) + 'g';
+            badgeElem.style.display = '';
+          } else {
+            badgeElem.style.display = 'none';
+          }
+        }
+      });
+
+      try {
+        await fetch('/api/inputs/peso-mat-prima', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bulkMerma: true,
+            mermaPorcentaje: newMerma
+          })
+        });
+        await cargarMatrizConsolidada();
+        generarMatrizPrenda();
+        cargarResumen();
+      } catch (e) {
+        console.error('Error al aplicar merma global:', e);
+      }
     }
 
     async function guardarFijoLive(id) {

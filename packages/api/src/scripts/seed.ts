@@ -227,11 +227,15 @@ export async function seedData(db: any) {
     }
   }
 
-  // 8. PESO MATERIA PRIMA (Top: con merma, Bottom: exacto sin merma)
+  // 8. PESO MATERIA PRIMA (Top: con merma, Bottom: exacto sin merma desde 'PESO DE MATERIA PRIMA ESTIMADO EN GRAMOS')
   const existingPeso = await db.select().from(schema.pesoMateriaPrima);
   if (existingPeso.length === 0 && workbook.Sheets['PesoMatPrima']) {
     const pesoRows = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets['PesoMatPrima'], { header: 1 });
     
+    // Buscar el porcentaje de merma inicial (fila 61: ['Merma', 8])
+    const mermaRow = pesoRows.find(r => r && String(r[0]).trim().toUpperCase() === 'MERMA');
+    const mermaPct = mermaRow && typeof mermaRow[1] === 'number' ? Number(mermaRow[1]) : 8;
+
     const sinMermaHeaderIdx = pesoRows.findIndex(r => r && String(r[0]).toUpperCase().includes('ESTIMADO'));
     
     const topRows = pesoRows.slice(2, sinMermaHeaderIdx !== -1 ? sinMermaHeaderIdx : 30).filter(r => r && typeof r[0] === 'number');
@@ -253,8 +257,9 @@ export async function seedData(db: any) {
       if (!prod) return;
 
       tallas.forEach((talla: any, idx: number) => {
-        const pesoConMermaVal = Number(row[2 + idx]) || 0;
-        const pesoExactoVal = bottomMap.get(`${itemNum}_${idx}`) || (pesoConMermaVal / 1.08);
+        const pesoConMermaExcel = Number(row[2 + idx]) || 0;
+        const pesoExactoVal = bottomMap.get(`${itemNum}_${idx}`) || (pesoConMermaExcel > 0 ? parseFloat((pesoConMermaExcel / (1 + mermaPct / 100)).toFixed(2)) : 0);
+        const pesoConMermaVal = pesoExactoVal > 0 ? parseFloat((pesoExactoVal * (1 + mermaPct / 100)).toFixed(2)) : pesoConMermaExcel;
 
         if (pesoConMermaVal >= 0 || pesoExactoVal >= 0) {
           pesoInserts.push({
@@ -262,8 +267,8 @@ export async function seedData(db: any) {
             tallaId: talla.id,
             pesoExactoGramos: parseFloat(pesoExactoVal.toFixed(2)),
             pesoGramos: parseFloat(pesoConMermaVal.toFixed(2)),
-            mermaPorcentaje: 8,
-            pesoConMerma: parseFloat((pesoExactoVal * 1.08).toFixed(2)),
+            mermaPorcentaje: mermaPct,
+            pesoConMerma: parseFloat(pesoConMermaVal.toFixed(2)),
           });
         }
       });
@@ -271,7 +276,7 @@ export async function seedData(db: any) {
 
     if (pesoInserts.length > 0) {
       await db.insert(schema.pesoMateriaPrima).values(pesoInserts);
-      console.log(`  ✅ Registros Peso Materia Prima en DB: ${pesoInserts.length}`);
+      console.log(`  ✅ Registros Peso Materia Prima en DB: ${pesoInserts.length} (Merma: ${mermaPct}%)`);
     }
   }
 
