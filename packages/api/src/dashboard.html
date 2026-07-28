@@ -179,7 +179,6 @@
             </tbody>
           </table>
         </div>
-        <div id="peso-merma-container" style="display:none;"></div>
       </div>
     </div>
 
@@ -857,11 +856,6 @@
       const desgloseSelector = document.getElementById('desglose-prenda-selector');
       const desgloseContainer = document.getElementById('desglose-producto-container');
       const tableContainer = document.getElementById('inputs-table-container');
-      const pesoMermaContainer = document.getElementById('peso-merma-container');
-
-      if (pesoMermaContainer) {
-        pesoMermaContainer.style.display = concept === 'PesoMatPrima' ? 'block' : 'none';
-      }
 
       if (concept === 'DesgloseProducto') {
         desgloseSelector.style.display = 'flex';
@@ -1123,11 +1117,6 @@
         tableElem.style.display = '';
       }
 
-      const pesoMermaContainer = document.getElementById('peso-merma-container');
-      if (concept !== 'PesoMatPrima' && pesoMermaContainer) {
-        pesoMermaContainer.style.display = 'none';
-      }
-
       if (concept === 'Tela') {
         const res = await fetch('/api/telas?colegioId=' + colegioFiltroActual);
         const json = await res.json();
@@ -1159,30 +1148,9 @@
         `).join('');
       } else if (concept === 'PesoMatPrima') {
         tableElem.className = 'table-compact-acc table-compact-peso';
-        const mermaContainer = document.getElementById('peso-merma-container');
-        if (mermaContainer) mermaContainer.style.display = 'block';
 
         const res = await fetch('/api/inputs/peso-mat-prima?colegioId=' + colegioFiltroActual);
         const json = await res.json();
-
-        const mermaVal = json.mermaGlobalPct || 8;
-        if (mermaContainer) {
-          mermaContainer.innerHTML = `
-            <div style="margin-top: 1.25rem; background: #0f172a; padding: 1rem 1.25rem; border-radius: 10px; border: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
-              <div style="display: flex; align-items: center; gap: 0.75rem;">
-                <span style="font-size: 0.88rem; font-weight: 700; color: #f8fafc;">⚙️ Porcentaje de Merma Global:</span>
-                <div style="display: flex; align-items: center; gap: 0.35rem;">
-                  <input type="number" id="input-global-merma" class="cell-editable-sm" style="width: 75px; font-weight: 700; text-align: center; color: var(--warning); padding: 0.3rem;" value="${mermaVal}" step="0.5" min="0" max="100" onchange="aplicarMermaGlobalLive(this.value)">
-                  <span style="font-weight: 700; color: var(--warning); font-size: 0.95rem;">%</span>
-                </div>
-                <span style="font-size: 0.76rem; color: var(--text-muted);">(Recalcula en vivo el Peso con Merma para todas las prendas)</span>
-              </div>
-              <div style="font-size: 0.78rem; color: #38bdf8; font-weight: 600;">
-                💡 <strong style="color:#fff;">Insignia cian (esquina):</strong> Peso Real Sin Merma &nbsp;|&nbsp; <strong style="color:#fff;">Texto central:</strong> Peso Con Merma (enteros)
-              </div>
-            </div>
-          `;
-        }
 
         thead.innerHTML = `
           <tr>
