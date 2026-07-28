@@ -126,41 +126,13 @@ api.post('/calcular', zValidator('json', calcularSchema), async (c) => {
   return c.json({ success: true, data: resultado });
 });
 
-// Tabla fija de costos de mano de obra por item (fallback si no hay datos en DB)
-const MO_RATES_BY_ITEM: Record<number, { g1: number; g2: number; g3: number }> = {
-  1: { g1: 45, g2: 50, g3: 55 },
-  2: { g1: 18, g2: 21, g3: 25 },
-  3: { g1: 19, g2: 22, g3: 26 },
-  4: { g1: 3.5, g2: 3.5, g3: 3.5 },
-  5: { g1: 18, g2: 21, g3: 25 },
-  6: { g1: 18, g2: 21, g3: 25 },
-  7: { g1: 5, g2: 5, g3: 5 },
-  8: { g1: 5.5, g2: 5.5, g3: 5.5 },
-  9: { g1: 5, g2: 5, g3: 5 },
-  10: { g1: 5, g2: 7, g3: 9 },
-  11: { g1: 6, g2: 8, g3: 10 },
-  12: { g1: 25, g2: 25, g3: 25 },
-  13: { g1: 18, g2: 21, g3: 25 },
-  14: { g1: 19, g2: 22, g3: 26 },
-  15: { g1: 3, g2: 3, g3: 3 },
-  16: { g1: 20, g2: 20, g3: 20 },
-  17: { g1: 15, g2: 15, g3: 15 },
-  18: { g1: 20, g2: 20, g3: 20 },
-  19: { g1: 0, g2: 0, g3: 0 },
-  20: { g1: 0, g2: 0, g3: 0 },
-  21: { g1: 25, g2: 30, g3: 35 },
-  22: { g1: 25, g2: 30, g3: 35 },
-  23: { g1: 27, g2: 32, g3: 37 },
-  24: { g1: 16, g2: 18, g3: 20 },
-  25: { g1: 5, g2: 5, g3: 5 },
-  26: { g1: 5, g2: 5, g3: 5 },
-  27: { g1: 100, g2: 120, g3: 150 },
-};
+import { getSystemConfig } from '../services/configService';
 
 // GET /api/calculo/matriz-consolidada - Replicando las 9 pestañas del Excel con cálculo 100% dinámico DB
 api.get('/matriz-consolidada', async (c) => {
   const db = (c as any).db;
   const colegioId = c.req.query('colegioId');
+  const sysConfig = await getSystemConfig(db);
 
   let prodQuery = db.select().from(productos);
   if (colegioId && colegioId !== 'all') {
@@ -192,12 +164,12 @@ api.get('/matriz-consolidada', async (c) => {
   const invMap = new Map<string, number>();
   invList.forEach((inv: any) => invMap.set(`${inv.productoId}_${inv.tallaId}`, inv.cantidad));
 
-  // Dynamic tarifa calculation from costosIndirectos DB
+  // Dynamic tarifa calculation from costosIndirectos DB & System Config
   let indirectosList: any[] = [];
   try { indirectosList = await db.select().from(costosIndirectos); } catch (e) {}
-  let totalIndirectos = indirectosList.reduce((acc: number, ci: any) => acc + (Number(ci.montoMensual) || 0), 0);
-  if (totalIndirectos === 0) totalIndirectos = 21480;
-  const tarifaPunto = totalIndirectos / (1800 * 10);
+  const totalIndirectos = indirectosList.reduce((acc: number, ci: any) => acc + (Number(ci.montoMensual) || 0), 0);
+  const prendasProducidasMes = sysConfig.volumenMensualProduccion;
+  const tarifaPunto = prendasProducidasMes > 0 ? (totalIndirectos / (prendasProducidasMes * 10)) : 0;
 
   const excelData = loadExcelMatrices();
 
@@ -218,21 +190,10 @@ api.get('/matriz-consolidada', async (c) => {
       const pvValDb = precioMap.get(`${prod.id}_${talla.id}`);
       const invValDb = invMap.get(`${prod.id}_${talla.id}`);
 
-      let costoMO = moValDb;
-      if (costoMO === undefined || costoMO === null || costoMO === 0) {
-        const rates = MO_RATES_BY_ITEM[prod.itemNumero];
-        if (rates) {
-          const code = talla.codigo;
-          if (['2', '4', '6', '8', '10'].includes(code)) costoMO = rates.g1;
-          else if (['12', '14', '16/34', '36/XS', '38/S'].includes(code)) costoMO = rates.g2;
-          else costoMO = rates.g3;
-        } else {
-          costoMO = 0;
-        }
-      }
+      let costoMO = moValDb ?? 0;
 
-      const pesoConMerma = pRec?.pesoGramos || (pRec?.pesoExactoGramos ? pRec.pesoExactoGramos * 1.08 : 0);
-      let costoTela = pesoConMerma > 0 ? (pesoConMerma * 0.32) : 0;
+      const pesoConMerma = pRec?.pesoGramos || (pRec?.pesoExactoGramos ? pRec.pesoExactoGramos * (1 + sysConfig.mermaPorcentajeEstandar / 100) : 0);
+      let costoTela = 0;
 
       const excelCb = excelData ? (excelData.costoBruto.get(key) || 0) : 0;
       let cb = 0;
@@ -251,12 +212,12 @@ api.get('/matriz-consolidada', async (c) => {
 
       const ca = cb > 0 ? (cb + fijosXprendaVal) : 0;
       const excelCt = excelData ? (excelData.costoTotal.get(key) || 0) : 0;
-      const ct = ca > 0 ? parseFloat((ca * 1.13).toFixed(2)) : (excelCt > 0 ? excelCt : 0);
+      const ct = ca > 0 ? parseFloat((ca * sysConfig.factorIva).toFixed(2)) : (excelCt > 0 ? excelCt : 0);
 
       const pv = pvValDb !== undefined && pvValDb !== null && pvValDb > 0 ? pvValDb : (excelData ? (excelData.precioVenta.get(key) || 0) : 0);
 
       const un = pv > 0 && ct > 0 ? (pv - ct) : 0;
-      const mg = ct > 0 && un !== 0 ? (un / ct) * 100 : 0;
+      const mg = pv > 0 && un !== 0 ? (un / pv) * 100 : 0;
 
       const inv = invValDb !== undefined && invValDb !== null ? invValDb : (excelData ? (excelData.inventarioUnidades.get(key) || 0) : 0);
       const ci = inv * ct;
@@ -300,7 +261,7 @@ api.put('/precio-venta', async (c) => {
     const ct = excelData.costoTotal.get(key) || 0;
     const nuevoPv = Number(precioBs) || 0;
     const nuevaUn = nuevoPv > 0 && ct > 0 ? nuevoPv - ct : 0;
-    const nuevoMg = ct > 0 ? (nuevaUn / ct) * 100 : 0;
+    const nuevoMg = nuevoPv > 0 ? (nuevaUn / nuevoPv) * 100 : 0;
 
     excelData.utilidadNeta.set(key, nuevaUn);
     excelData.margenPorcentaje.set(key, nuevoMg);
@@ -378,6 +339,7 @@ api.put('/accesorio-total', async (c) => {
 api.get('/matriz-prenda/:productoId', async (c) => {
   const db = (c as any).db;
   const productoId = c.req.param('productoId');
+  const sysConfig = await getSystemConfig(db);
 
   const [prod] = await db.select().from(productos).where(eq(productos.id, productoId)).limit(1);
   if (!prod) {
@@ -402,28 +364,19 @@ api.get('/matriz-prenda/:productoId', async (c) => {
   const precioMap = new Map<string, any>();
   precios.forEach((pr: any) => precioMap.set(pr.tallaId, pr));
 
-  // Dynamic tarifa calculation from costosIndirectos DB
+  // Dynamic tarifa calculation from costosIndirectos DB and System Config
   let indirectosListP: any[] = [];
   try { indirectosListP = await db.select().from(costosIndirectos); } catch (e) {}
-  let totalIndirectosP = indirectosListP.reduce((acc: number, ci: any) => acc + (Number(ci.montoMensual) || 0), 0);
-  if (totalIndirectosP === 0) totalIndirectosP = 21480;
-  const tarifaPuntoP = totalIndirectosP / (1800 * 10);
+  const totalIndirectosP = indirectosListP.reduce((acc: number, ci: any) => acc + (Number(ci.montoMensual) || 0), 0);
+  const prendasProducidasMesP = sysConfig.volumenMensualProduccion;
+  const tarifaPuntoP = prendasProducidasMesP > 0 ? (totalIndirectosP / (prendasProducidasMesP * 10)) : 0;
 
   const excelData = loadExcelMatrices();
 
   const getMoVal = (t: any) => {
     const code = t.codigo;
     const dbVal = moMap.get(code) ?? moMap.get(t.id);
-    if (dbVal && dbVal > 0) return dbVal;
-    
-    const itemNum = Number(prod.itemNumero);
-    const rates = MO_RATES_BY_ITEM[itemNum];
-    if (rates) {
-      if (['2', '4', '6', '8', '10'].includes(code)) return rates.g1;
-      if (['12', '14', '16/34', '36/XS', '38/S'].includes(code)) return rates.g2;
-      return rates.g3;
-    }
-    return 0;
+    return dbVal || 0;
   };
 
   const costoAcc = excelData ? (excelData.itemAccMap.get(prod.itemNumero) || 0) : 0;
@@ -445,8 +398,6 @@ api.get('/matriz-prenda/:productoId', async (c) => {
     let costoTelaVal = 0;
     if (excelCb > 0) {
       costoTelaVal = Math.max(0, excelCb - costoMO - costoAcc);
-    } else if (pesoConMerma > 0) {
-      costoTelaVal = parseFloat((pesoConMerma * 0.1475).toFixed(2));
     }
 
     const isProduced = (pesoConMerma > 0 || excelCb > 0) && (costoMO > 0 || costoAcc > 0 || costoTelaVal > 0);
@@ -455,10 +406,10 @@ api.get('/matriz-prenda/:productoId', async (c) => {
     const dynamicCostoFijoP = (prod.factorComplejidad || 0) * tarifaPuntoP;
     const fijosXprendaVal = excelCa > 0 && excelCb > 0 ? parseFloat((excelCa - excelCb).toFixed(2)) : dynamicCostoFijoP;
     const ca = cb > 0 ? (excelCa > 0 ? excelCa : parseFloat((cb + fijosXprendaVal).toFixed(2))) : 0;
-    const ct = ca > 0 ? (excelCt > 0 ? excelCt : parseFloat((ca * 1.13).toFixed(2))) : 0;
+    const ct = ca > 0 ? (excelCt > 0 ? excelCt : parseFloat((ca * sysConfig.factorIva).toFixed(2))) : 0;
 
     const un = (precioVentaVal > 0 && ct > 0) ? parseFloat((precioVentaVal - ct).toFixed(2)) : null;
-    const mg = (ct > 0 && un !== null && un !== 0) ? parseFloat(((un / ct) * 100).toFixed(2)) : null;
+    const mg = (precioVentaVal > 0 && un !== null && un !== 0) ? parseFloat(((un / precioVentaVal) * 100).toFixed(2)) : null;
 
     return {
       tallaId: t.id,

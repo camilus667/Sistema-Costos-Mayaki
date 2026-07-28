@@ -21,7 +21,9 @@
     <div class="logo-container">
       <div class="logo-text">
         <h1 style="display:flex; align-items:center; gap:0.75rem;">
-          <img src="/favicon.svg" width="40" height="40" alt="Logo" style="vertical-align:middle; filter:drop-shadow(0 3px 6px rgba(0,0,0,0.45)); flex-shrink:0; object-fit:contain;" onerror="this.onerror=null; this.src='/favicon.png';">
+          <img src="/favicon.svg" width="40" height="40" alt="Logo"
+            style="vertical-align:middle; filter:drop-shadow(0 3px 6px rgba(0,0,0,0.45)); flex-shrink:0; object-fit:contain;"
+            onerror="this.onerror=null; this.src='/favicon.png';">
           Sistema de Uniformes Escolares
         </h1>
         <p>Gestión Multi-Colegio & Motor de Costos de Uniformes</p>
@@ -46,7 +48,7 @@
     <button class="tab-btn active" onclick="switchTab('resumen')">Resumen General</button>
     <button class="tab-btn" onclick="switchTab('inputs-excel')">Costos de Producción</button>
     <button class="tab-btn" onclick="switchTab('matriz-excel')">Matrices Consolidadas</button>
-    <button class="tab-btn" onclick="switchTab('matriz-tallas')">Matriz por Prenda</button>
+    <button class="tab-btn" onclick="switchTab('matriz-tallas')">Matriz de costeo por prenda</button>
     <button class="tab-btn" onclick="switchTab('inventario')">Inventario por Colegio</button>
     <button class="tab-btn" onclick="switchTab('admin-colegio')">⚙️ Configuración del Colegio</button>
   </nav>
@@ -125,23 +127,27 @@
           <div class="excel-tabs-bar" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">
             <button class="excel-tab active" onclick="switchInputConcept('Tela', this)">Tela</button>
             <button class="excel-tab" onclick="switchInputConcept('PesoMatPrima', this)">PesoMatPrima</button>
-            <button class="excel-tab" onclick="switchInputConcept('Acc', this)">Acc (Tabla Auxiliar & Uso)</button>
+            <button class="excel-tab" onclick="switchInputConcept('Acc', this)">Uso de Accesorios</button>
             <button class="excel-tab" onclick="switchInputConcept('ManoDeObra', this)">ManoDeObra</button>
             <button class="excel-tab" onclick="switchInputConcept('fijosXprenda', this)">fijosXprenda &
               Indirectos</button>
-            <button class="excel-tab" style="background:#059669; color:#ffffff; font-weight:700;" onclick="switchInputConcept('DesgloseProducto', this)">📊 Desglose Inteligente por Producto</button>
+            <button class="excel-tab" style="background:#059669; color:#ffffff; font-weight:700;"
+              onclick="switchInputConcept('DesgloseProducto', this)">Desglose Inteligente por Producto</button>
           </div>
         </div>
 
         <!-- Selector de prenda para vista Desglose Inteligente -->
-        <div id="desglose-prenda-selector" style="display:none; align-items:center; gap:0.75rem; margin-bottom:1.1rem; flex-wrap:wrap; padding:0.85rem 1rem; background:#1e293b; border-radius:10px; border:1px solid #334155;">
-          <span style="font-size:0.78rem; font-weight:700; color:#94a3b8; white-space:nowrap;">🔎 Prenda:</span>
-          <select id="select-desglose-producto" class="colegio-selector" style="min-width:280px; max-width:480px;" onchange="onDesglosePrendaChange()">
+        <div id="desglose-prenda-selector"
+          style="display:none; align-items:center; gap:0.75rem; margin-bottom:1.1rem; flex-wrap:wrap; padding:0.85rem 1rem; background:#1e293b; border-radius:10px; border:1px solid #334155;">
+          <span style="font-size:0.78rem; font-weight:700; color:#94a3b8; white-space:nowrap;">Prenda:</span>
+          <select id="select-desglose-producto" class="colegio-selector" style="min-width:280px; max-width:480px;"
+            onchange="onDesglosePrendaChange()">
             <option value="">Cargando prendas...</option>
           </select>
           <span style="color:#334155; font-size:1rem;">|</span>
-          <span style="font-size:0.78rem; font-weight:700; color:#94a3b8; white-space:nowrap;">📏 Talla:</span>
-          <select id="select-desglose-talla" class="colegio-selector" style="min-width:120px; max-width:200px;" onchange="generarDesgloseProducto()">
+          <span style="font-size:0.78rem; font-weight:700; color:#94a3b8; white-space:nowrap;">Talla:</span>
+          <select id="select-desglose-talla" class="colegio-selector" style="min-width:120px; max-width:200px;"
+            onchange="generarDesgloseProducto()">
             <option value="">— seleccione —</option>
           </select>
           <span id="desglose-total-badge" style="margin-left:auto; font-size:0.82rem; color:#64748b;"></span>
@@ -185,15 +191,19 @@
           <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0; white-space: nowrap;">Matrices
             Consolidadas</h2>
           <div class="excel-tabs-bar" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">
-            <button class="excel-tab active" onclick="switchExcelConcept('costoBruto', this)">CostoBruto</button>
-            <button class="excel-tab" onclick="switchExcelConcept('precioVenta', this)">PrecioDeVenta</button>
-            <button class="excel-tab" onclick="switchExcelConcept('costoAntesImp', this)">CostoAntesImp</button>
-            <button class="excel-tab" onclick="switchExcelConcept('costoTotal', this)">CostoTotal</button>
-            <button class="excel-tab" onclick="switchExcelConcept('utilidadNeta', this)">UtilidadNeta</button>
-            <button class="excel-tab" onclick="switchExcelConcept('margenPorcentaje', this)">%Ganancia</button>
+            <button class="excel-tab active" onclick="switchExcelConcept('costoBruto', this)">COSTO DIRECTO
+              TOTAL</button>
+            <button class="excel-tab" onclick="switchExcelConcept('precioVenta', this)">Precio de Venta al
+              Público</button>
+            <button class="excel-tab" onclick="switchExcelConcept('costoAntesImp', this)">Subtotal antes de
+              impuestos</button>
+            <button class="excel-tab" onclick="switchExcelConcept('costoTotal', this)">Precio final con IVA</button>
+            <button class="excel-tab" onclick="switchExcelConcept('utilidadNeta', this)">Utilidad Bruta</button>
+            <button class="excel-tab" onclick="switchExcelConcept('margenPorcentaje', this)">Margen Bruto Real
+              (%)</button>
             <button class="excel-tab" onclick="switchExcelConcept('inventarioUnidades', this)">INVENTARIO</button>
-            <button class="excel-tab" onclick="switchExcelConcept('costoInventario', this)">CostoInventario</button>
-            <button class="excel-tab" onclick="switchExcelConcept('precioInventario', this)">PrecioInventario</button>
+            <button class="excel-tab" onclick="switchExcelConcept('costoInventario', this)">Costo Inventario</button>
+            <button class="excel-tab" onclick="switchExcelConcept('precioInventario', this)">Precio Inventario</button>
           </div>
         </div>
 
@@ -225,7 +235,7 @@
         <div
           style="display: flex; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1.25rem;">
           <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0; white-space: nowrap;">Matriz de
-            Costos por Prenda</h2>
+            costeo por prenda</h2>
           <div style="display: flex; align-items: center; gap: 0.75rem;">
             <label for="select-matriz-producto"
               style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); white-space: nowrap;">Prenda:</label>
@@ -300,6 +310,8 @@
               Habilitadas</button>
             <button class="admin-tab-btn" id="btn-atab-colegios" onclick="switchAdminTab('colegios')">🏛️ Perfil &
               Nuevos Colegios</button>
+            <button class="admin-tab-btn" id="btn-atab-sistema" onclick="switchAdminTab('sistema')">⚙️ Parámetros del
+              Sistema</button>
           </div>
         </div>
 
@@ -470,6 +482,67 @@
               </div>
               <button class="btn" style="background:#059669;" onclick="crearNuevoColegioAdmin()">Crear Colegio e
                 Inicializar Catálogo</button>
+            </div>
+          </div>
+
+          <!-- SUBTAB 5: PARÁMETROS DEL SISTEMA -->
+          <div id="admin-sec-sistema" style="display:none;">
+            <div
+              style="background:#1e293b; padding:1.5rem; border-radius:12px; border:1px solid #334155; margin-bottom:1.5rem;">
+              <h4 style="margin-top:0; color:#38bdf8; font-size:1.05rem; font-weight:700; margin-bottom:1.25rem;">⚙️
+                Configuración General del Sistema (Constantes Impositivas & Operativas)</h4>
+
+              <div
+                style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:1.25rem; margin-bottom:1.5rem;">
+                <div style="background:#0f172a; border:1px solid #334155; padding:1.15rem; border-radius:10px;">
+                  <label
+                    style="font-size:0.8rem; font-weight:700; color:#f8fafc; display:block; margin-bottom:0.35rem;">Tasa
+                    Impositiva IVA (%)</label>
+                  <div style="font-size:0.72rem; color:#64748b; margin-bottom:0.6rem;">Impuesto al valor agregado
+                    aplicado al subtotal para obtener el precio final con IVA.</div>
+                  <input type="number" id="cfg-tasa-iva" class="cell-editable-sm"
+                    style="width:100%; font-size:1rem; font-weight:800; color:#38bdf8; text-align:right; padding:0.4rem 0.75rem;"
+                    step="0.1" value="13">
+                </div>
+
+                <div style="background:#0f172a; border:1px solid #334155; padding:1.15rem; border-radius:10px;">
+                  <label
+                    style="font-size:0.8rem; font-weight:700; color:#f8fafc; display:block; margin-bottom:0.35rem;">Volumen
+                    Mensual de Producción (Prendas)</label>
+                  <div style="font-size:0.72rem; color:#64748b; margin-bottom:0.6rem;">Divisor base para prorratear los
+                    costos indirectos mensuales según el factor de complejidad.</div>
+                  <input type="number" id="cfg-vol-prod" class="cell-editable-sm"
+                    style="width:100%; font-size:1rem; font-weight:800; color:#34d399; text-align:right; padding:0.4rem 0.75rem;"
+                    step="1" value="1800">
+                </div>
+
+                <div style="background:#0f172a; border:1px solid #334155; padding:1.15rem; border-radius:10px;">
+                  <label
+                    style="font-size:0.8rem; font-weight:700; color:#f8fafc; display:block; margin-bottom:0.35rem;">Merma
+                    Estándar de Tela (%)</label>
+                  <div style="font-size:0.72rem; color:#64748b; margin-bottom:0.6rem;">Porcentaje base de desperdicio de
+                    tela aplicado cuando una prenda no tiene merma personalizada.</div>
+                  <input type="number" id="cfg-merma-std" class="cell-editable-sm"
+                    style="width:100%; font-size:1rem; font-weight:800; color:#fbbf24; text-align:right; padding:0.4rem 0.75rem;"
+                    step="0.5" value="8">
+                </div>
+
+                <div style="background:#0f172a; border:1px solid #334155; padding:1.15rem; border-radius:10px;">
+                  <label
+                    style="font-size:0.8rem; font-weight:700; color:#f8fafc; display:block; margin-bottom:0.35rem;">Talla
+                    Predeterminada</label>
+                  <div style="font-size:0.72rem; color:#64748b; margin-bottom:0.6rem;">Selecciona la talla
+                    predeterminada registrada en la Base de Datos para el Desglose Inteligente.</div>
+                  <select id="cfg-talla-def" class="cell-editable-sm"
+                    style="width:100%; font-size:0.95rem; font-weight:800; color:#a78bfa; padding:0.45rem 0.75rem; background:#1e293b; border:1px solid #475569; border-radius:6px; cursor:pointer;">
+                    <option value="16/34">Cargando tallas desde BD...</option>
+                  </select>
+                </div>
+              </div>
+
+              <button class="btn"
+                style="background:#059669; font-weight:800; padding:0.65rem 1.4rem; font-size:0.88rem;"
+                onclick="guardarConfigSistemaAdmin()">💾 Guardar Parámetros en la BD</button>
             </div>
           </div>
         </div>
@@ -784,6 +857,12 @@
       const desgloseSelector = document.getElementById('desglose-prenda-selector');
       const desgloseContainer = document.getElementById('desglose-producto-container');
       const tableContainer = document.getElementById('inputs-table-container');
+      const pesoMermaContainer = document.getElementById('peso-merma-container');
+
+      if (pesoMermaContainer) {
+        pesoMermaContainer.style.display = concept === 'PesoMatPrima' ? 'block' : 'none';
+      }
+
       if (concept === 'DesgloseProducto') {
         desgloseSelector.style.display = 'flex';
         desgloseContainer.style.display = '';
@@ -809,7 +888,7 @@
       const tallaSel = document.getElementById('select-desglose-talla');
       const selectEl = document.getElementById('select-desglose-producto');
       try {
-        const res  = await fetch('/api/tallas?colegioId=' + colegioFiltroActual);
+        const res = await fetch('/api/tallas?colegioId=' + colegioFiltroActual);
         const json = await res.json();
         const tallas = (json.tallas || json.data || json || []).filter(t => t.activo !== false);
         tallas.sort((a, b) => (a.orden || 0) - (b.orden || 0));
@@ -834,20 +913,19 @@
       }
     }
 
-    // Cuando se cambia la PRENDA: recarga dropdown de tallas y luego el card
+    // Cuando se cambia la PRENDA: resetea indicador de talla y recalculado
     async function onDesglosePrendaChange() {
       const tallaSel = document.getElementById('select-desglose-talla');
-      tallaSel.innerHTML = '<option value="">⏳ cargando...</option>';
-      await cargarTallasDesglose();
+      if (tallaSel) tallaSel.innerHTML = '<option value="">⏳ cargando...</option>';
       await generarDesgloseProducto();
     }
 
-    // Fase 2: renderizar card con tallaId ya seleccionado en el dropdown
+    // Fase 2: renderizar card con tallaId seleccionado o por defecto
     async function generarDesgloseProducto() {
       const container = document.getElementById('desglose-producto-container');
-      const selectEl  = document.getElementById('select-desglose-producto');
-      const tallaSel  = document.getElementById('select-desglose-talla');
-      const badge     = document.getElementById('desglose-total-badge');
+      const selectEl = document.getElementById('select-desglose-producto');
+      const tallaSel = document.getElementById('select-desglose-talla');
+      const badge = document.getElementById('desglose-total-badge');
 
       const selectedItemNum = selectEl.value;
       const selectedTallaId = tallaSel ? tallaSel.value : '';
@@ -859,7 +937,7 @@
       container.innerHTML = '<div style="text-align:center; padding:2.5rem; color:#64748b; font-size:0.9rem;">⏳ Cargando desglose...</div>';
 
       try {
-        const res  = await fetch(url);
+        const res = await fetch(url);
         const json = await res.json();
         const allData = json.data || [];
 
@@ -884,32 +962,48 @@
 
         const tallaActual = p.tallaActual;
 
+        // Poblar/actualizar selector de tallas con las tallas disponibles de este producto/colegio
+        if (tallaSel && p.tallasDisponibles && p.tallasDisponibles.length > 0) {
+          const hasRealOptions = Array.from(tallaSel.options).some(opt => opt.value !== '' && opt.value !== '⏳ cargando...');
+          if (!hasRealOptions) {
+            tallaSel.innerHTML = p.tallasDisponibles.map(t =>
+              `<option value="${t.tallaId}">${t.codigo}</option>`
+            ).join('');
+          }
+          if (tallaActual) {
+            tallaSel.value = tallaActual.tallaId;
+          }
+        }
+
         // Extraer valores con fallbacks
-        const moCost    = (p.manoDeObra && typeof p.manoDeObra.totalManoObraBs === 'number') ? p.manoDeObra.totalManoObraBs : 15.0;
-        const moConf    = (p.manoDeObra && typeof p.manoDeObra.costoConfeccion === 'number') ? p.manoDeObra.costoConfeccion : moCost;
+        const moCost = (p.manoDeObra && typeof p.manoDeObra.totalManoObraBs === 'number') ? p.manoDeObra.totalManoObraBs : 15.0;
+        const moConf = (p.manoDeObra && typeof p.manoDeObra.costoConfeccion === 'number') ? p.manoDeObra.costoConfeccion : moCost;
         const fijosCost = (p.fijosEIndirectos && typeof p.fijosEIndirectos.totalFijosBs === 'number') ? p.fijosEIndirectos.totalFijosBs : 1.5;
-        const fijosXp   = (p.fijosEIndirectos && typeof p.fijosEIndirectos.fijosXprenda === 'number') ? p.fijosEIndirectos.fijosXprenda : 1.0;
-        const indirXp   = (p.fijosEIndirectos && typeof p.fijosEIndirectos.indirectosXprenda === 'number') ? p.fijosEIndirectos.indirectosXprenda : 0.5;
-        const telaCost  = (p.tela && typeof p.tela.costoTelaBs === 'number') ? p.tela.costoTelaBs : 0.0;
-        const pesoG     = (p.tela && p.tela.pesoGramos != null) ? p.tela.pesoGramos : 0;
-        const accCost   = typeof p.subtotalAccesoriosBs === 'number' ? p.subtotalAccesoriosBs : 0.0;
-        const totalProd = (typeof p.costoTotalProduccionBs === 'number' && !isNaN(p.costoTotalProduccionBs))
-          ? p.costoTotalProduccionBs : (telaCost + accCost + moCost + fijosCost);
+        const fijosXp = (p.fijosEIndirectos && typeof p.fijosEIndirectos.fijosXprenda === 'number') ? p.fijosEIndirectos.fijosXprenda : 1.0;
+        const indirXp = (p.fijosEIndirectos && typeof p.fijosEIndirectos.indirectosXprenda === 'number') ? p.fijosEIndirectos.indirectosXprenda : 0.5;
+        const telaCost = (p.tela && typeof p.tela.costoTelaBs === 'number') ? p.tela.costoTelaBs : 0.0;
+        const pesoG = (p.tela && p.tela.pesoGramos != null) ? p.tela.pesoGramos : 0;
+        const accCost = typeof p.subtotalAccesoriosBs === 'number' ? p.subtotalAccesoriosBs : 0.0;
 
-        const pctTela = totalProd > 0 ? (telaCost / totalProd * 100) : 0;
-        const pctAcc  = totalProd > 0 ? (accCost  / totalProd * 100) : 0;
-        const pctMo   = totalProd > 0 ? (moCost   / totalProd * 100) : 0;
-        const pctFij  = totalProd > 0 ? (fijosCost / totalProd * 100) : 0;
+        const subtotalAntesImp = (typeof p.costoAntesImpuestosBs === 'number' && !isNaN(p.costoAntesImpuestosBs))
+          ? p.costoAntesImpuestosBs : (telaCost + accCost + moCost + fijosCost);
+        const precioFinalIva = (typeof p.precioFinalConIvaBs === 'number' && !isNaN(p.precioFinalConIvaBs))
+          ? p.precioFinalConIvaBs : (subtotalAntesImp * 1.13);
 
-        badge.innerHTML = `<strong style="color:#34d399;">Total:</strong> <span style="color:#f8fafc; font-weight:700;">Bs. ${totalProd.toFixed(2)}</span>`;
+        const pctTela = subtotalAntesImp > 0 ? (telaCost / subtotalAntesImp * 100) : 0;
+        const pctAcc = subtotalAntesImp > 0 ? (accCost / subtotalAntesImp * 100) : 0;
+        const pctMo = subtotalAntesImp > 0 ? (moCost / subtotalAntesImp * 100) : 0;
+        const pctFij = subtotalAntesImp > 0 ? (fijosCost / subtotalAntesImp * 100) : 0;
+
+        badge.innerHTML = `<strong style="color:#fbbf24;">Subtotal:</strong> <span style="color:#f8fafc; font-weight:700;">Bs. ${subtotalAntesImp.toFixed(2)}</span>`;
 
         const accRows = (p.accesoriosIntervinientes && p.accesoriosIntervinientes.length > 0)
           ? p.accesoriosIntervinientes.map(a => `
             <tr>
               <td style="padding:0.45rem 0.75rem; color:#cbd5e1;">• ${a.nombre}</td>
-              <td style="text-align:center; color:#94a3b8; font-size:0.78rem;">${a.cantidad} ${a.unidadCompra}</td>
-              <td style="text-align:right; color:#94a3b8; font-size:0.78rem;">Bs. ${(a.costoUnitarioBs || 0).toFixed(4)}/u</td>
-              <td style="text-align:right; color:#34d399; font-weight:700;">Bs. ${(a.costoTotalBs || 0).toFixed(3)}</td>
+              <td style="text-align:center; color:#94a3b8; font-size:0.78rem;">${a.cantidad}</td>
+              <td style="text-align:right; color:#94a3b8; font-size:0.78rem;">Bs. ${(a.costoUnitarioBs || 0).toFixed(2)}</td>
+              <td style="text-align:right; color:#34d399; font-weight:700;">Bs. ${(a.costoTotalBs || 0).toFixed(2)}</td>
             </tr>`).join('')
           : `<tr><td colspan="4" style="text-align:center; color:#475569; padding:1rem; font-style:italic;">Sin accesorios asignados</td></tr>`;
 
@@ -924,16 +1018,12 @@
             <div style="background: linear-gradient(135deg, #1e293b 60%, #0f172a); border:1px solid #334155; border-radius:14px; padding:1.5rem 1.75rem; display:flex; align-items:center; gap:1.25rem; flex-wrap:wrap;">
               <div style="background:#059669; color:#fff; font-size:1.35rem; font-weight:900; border-radius:10px; padding:0.55rem 1rem; min-width:52px; text-align:center;">#${p.itemNumero}</div>
               <div style="flex:1; min-width:200px;">
-                <div style="font-size:1.2rem; font-weight:800; color:#f8fafc;">${p.descripcion} ${tallaLabel}</div>
-                <div style="font-size:0.8rem; color:#64748b; margin-top:0.2rem;">
-                  Tela: <strong style="color:#38bdf8;">${p.tela ? p.tela.nombre : '—'}</strong>
-                  &nbsp;|&nbsp; Peso c/merma: <strong style="color:#94a3b8;">${pesoG > 0 ? pesoG + 'g' : 'N/D'}</strong>
-                  &nbsp;|&nbsp; Bs/g: <strong style="color:#94a3b8;">${p.tela ? (p.tela.precioBsGramo || 0).toFixed(4) : '—'}</strong>
-                </div>
+                <div style="font-size:1.3rem; font-weight:800; color:#f8fafc;">${p.descripcion} ${tallaLabel}</div>
               </div>
               <div style="text-align:right;">
-                <div style="font-size:0.72rem; color:#64748b; text-transform:uppercase; letter-spacing:1px;">COSTO TOTAL PRODUCCIÓN</div>
-                <div style="font-size:2rem; font-weight:900; color:#34d399; line-height:1.1;">Bs. ${totalProd.toFixed(2)}</div>
+                <div style="font-size:0.72rem; color:#94a3b8; text-transform:uppercase; letter-spacing:1px; font-weight:700;">Subtotal antes de impuestos</div>
+                <div style="font-size:2rem; font-weight:900; color:#fbbf24; line-height:1.1;">Bs. ${subtotalAntesImp.toFixed(2)}</div>
+                <div style="font-size:0.78rem; color:#34d399; font-weight:700; margin-top:0.35rem;">Precio final con IVA: <strong>Bs. ${precioFinalIva.toFixed(2)}</strong></div>
               </div>
             </div>
 
@@ -941,49 +1031,57 @@
             <div style="background:#1e293b; border:1px solid #334155; border-radius:12px; padding:1.1rem 1.5rem;">
               <div style="font-size:0.72rem; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:1px; margin-bottom:0.75rem;">Composición del Costo</div>
               <div style="height:14px; border-radius:8px; overflow:hidden; display:flex; width:100%; margin-bottom:0.65rem;">
-                <div style="width:${pctTela.toFixed(1)}%; background:#38bdf8; transition:width 0.4s;" title="Tela ${pctTela.toFixed(1)}%"></div>
-                <div style="width:${pctAcc.toFixed(1)}%; background:#34d399; transition:width 0.4s;" title="Accesorios ${pctAcc.toFixed(1)}%"></div>
-                <div style="width:${pctMo.toFixed(1)}%; background:#fbbf24; transition:width 0.4s;" title="Mano de Obra ${pctMo.toFixed(1)}%"></div>
-                <div style="width:${pctFij.toFixed(1)}%; background:#a78bfa; transition:width 0.4s;" title="Fijos ${pctFij.toFixed(1)}%"></div>
+                <div style="width:${pctTela.toFixed(1)}%; background:#38bdf8; transition:width 0.4s;" title="Costo de tela ${pctTela.toFixed(1)}%"></div>
+                <div style="width:${pctAcc.toFixed(1)}%; background:#34d399; transition:width 0.4s;" title="Costo accesorios ${pctAcc.toFixed(1)}%"></div>
+                <div style="width:${pctMo.toFixed(1)}%; background:#fbbf24; transition:width 0.4s;" title="Mano de Obra Directa ${pctMo.toFixed(1)}%"></div>
+                <div style="width:${pctFij.toFixed(1)}%; background:#a78bfa; transition:width 0.4s;" title="Costos Indirectos ${pctFij.toFixed(1)}%"></div>
               </div>
               <div style="display:flex; gap:1.5rem; flex-wrap:wrap; font-size:0.75rem; font-weight:600;">
-                <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#38bdf8;margin-right:4px;"></span>Tela (${pctTela.toFixed(1)}%)</span>
-                <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#34d399;margin-right:4px;"></span>Accesorios (${pctAcc.toFixed(1)}%)</span>
-                <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#fbbf24;margin-right:4px;"></span>Mano de Obra (${pctMo.toFixed(1)}%)</span>
-                <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#a78bfa;margin-right:4px;"></span>Fijos & Ind. (${pctFij.toFixed(1)}%)</span>
+                <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#38bdf8;margin-right:4px;"></span>Costo de tela (${pctTela.toFixed(1)}%)</span>
+                <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#34d399;margin-right:4px;"></span>Costo accesorios (${pctAcc.toFixed(1)}%)</span>
+                <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#fbbf24;margin-right:4px;"></span>Mano de Obra Directa (${pctMo.toFixed(1)}%)</span>
+                <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#a78bfa;margin-right:4px;"></span>Costos Indirectos (${pctFij.toFixed(1)}%)</span>
               </div>
             </div>
 
             <!-- 4 tarjetas -->
-            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:1rem;">
-              <div style="background:#0f172a; border:1px solid #1e3a5f; border-radius:12px; padding:1.15rem 1.25rem;">
-                <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:1px; color:#38bdf8; font-weight:700; margin-bottom:0.5rem;">🧵 Tela Asignada</div>
-                <div style="font-size:0.82rem; font-weight:700; color:#e2e8f0; margin-bottom:0.15rem;">${p.tela ? p.tela.nombre : '—'}</div>
-                ${pesoG > 0 ? `<div style="font-size:0.72rem; color:#64748b;">${pesoG}g (c/merma) &nbsp;|&nbsp; Bs. ${(p.tela ? p.tela.precioBsGramo || 0 : 0).toFixed(4)}/g</div>` : '<div style="font-size:0.72rem; color:#f59e0b;">⚠️ Sin peso registrado</div>'}
-                <div style="margin-top:0.75rem; font-size:1.45rem; font-weight:900; color:#38bdf8;">Bs. ${telaCost.toFixed(2)}</div>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:1rem; align-items:stretch;">
+              <div style="background:#0f172a; border:1px solid #1e3a5f; border-radius:12px; padding:1.15rem 1.25rem; display:flex; flex-direction:column; justify-content:space-between;">
+                <div>
+                  <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:1px; color:#38bdf8; font-weight:700; margin-bottom:0.5rem;">COSTO DE TELA</div>
+                  <div style="font-size:0.82rem; font-weight:700; color:#e2e8f0; margin-bottom:0.15rem;">${p.tela ? p.tela.nombre : '—'}</div>
+                  ${pesoG > 0 ? `<div style="font-size:0.72rem; color:#64748b;">${pesoG}g (c/merma) &nbsp;|&nbsp; Bs. ${(p.tela ? p.tela.precioBsGramo || 0 : 0).toFixed(4)}/g</div>` : '<div style="font-size:0.72rem; color:#f59e0b;">Sin peso registrado</div>'}
+                </div>
+                <div style="margin-top:auto; padding-top:0.85rem; font-size:1.45rem; font-weight:900; color:#38bdf8;">Bs. ${telaCost.toFixed(2)}</div>
               </div>
-              <div style="background:#0a1a12; border:1px solid #1a3a2a; border-radius:12px; padding:1.15rem 1.25rem;">
-                <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:1px; color:#34d399; font-weight:700; margin-bottom:0.5rem;">📦 Accesorios</div>
-                <div style="font-size:0.78rem; color:#64748b; margin-bottom:0.35rem;">${(p.accesoriosIntervinientes||[]).length} ítem(s) con uso &gt; 0</div>
-                <div style="margin-top:0.75rem; font-size:1.45rem; font-weight:900; color:#34d399;">Bs. ${accCost.toFixed(2)}</div>
+              <div style="background:#0a1a12; border:1px solid #1a3a2a; border-radius:12px; padding:1.15rem 1.25rem; display:flex; flex-direction:column; justify-content:space-between;">
+                <div>
+                  <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:1px; color:#34d399; font-weight:700; margin-bottom:0.5rem;">COSTO ACCESORIOS</div>
+                  <div style="font-size:0.78rem; color:#64748b; margin-bottom:0.35rem;">${(p.accesoriosIntervinientes || []).length} ítem(s) con uso &gt; 0</div>
+                </div>
+                <div style="margin-top:auto; padding-top:0.85rem; font-size:1.45rem; font-weight:900; color:#34d399;">Bs. ${accCost.toFixed(2)}</div>
               </div>
-              <div style="background:#1a1400; border:1px solid #3a2e00; border-radius:12px; padding:1.15rem 1.25rem;">
-                <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:1px; color:#fbbf24; font-weight:700; margin-bottom:0.5rem;">✂️ Mano de Obra</div>
-                <div style="font-size:0.72rem; color:#78716c;">Confección: Bs. ${moConf.toFixed(2)}</div>
-                <div style="font-size:0.72rem; color:#78716c; margin-top:0.1rem;">Talla: ${tallaActual ? tallaActual.codigo : '—'}</div>
-                <div style="margin-top:0.75rem; font-size:1.45rem; font-weight:900; color:#fbbf24;">Bs. ${moCost.toFixed(2)}</div>
+              <div style="background:#1a1400; border:1px solid #3a2e00; border-radius:12px; padding:1.15rem 1.25rem; display:flex; flex-direction:column; justify-content:space-between;">
+                <div>
+                  <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:1px; color:#fbbf24; font-weight:700; margin-bottom:0.5rem;">MANO DE OBRA DIRECTA</div>
+                  <div style="font-size:0.72rem; color:#78716c;">Confección: Bs. ${moConf.toFixed(2)}</div>
+                  <div style="font-size:0.72rem; color:#78716c; margin-top:0.1rem;">Talla: ${tallaActual ? tallaActual.codigo : '—'}</div>
+                </div>
+                <div style="margin-top:auto; padding-top:0.85rem; font-size:1.45rem; font-weight:900; color:#fbbf24;">Bs. ${moCost.toFixed(2)}</div>
               </div>
-              <div style="background:#120a1a; border:1px solid #2e1a4a; border-radius:12px; padding:1.15rem 1.25rem;">
-                <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:1px; color:#a78bfa; font-weight:700; margin-bottom:0.5rem;">🏭 Fijos & Ind.</div>
-                <div style="font-size:0.72rem; color:#6b6480;">Fijos/prenda: Bs. ${fijosXp.toFixed(3)}</div>
-                <div style="font-size:0.72rem; color:#6b6480;">Indirectos: Bs. ${indirXp.toFixed(3)}</div>
-                <div style="margin-top:0.75rem; font-size:1.45rem; font-weight:900; color:#a78bfa;">Bs. ${fijosCost.toFixed(2)}</div>
+              <div style="background:#120a1a; border:1px solid #2e1a4a; border-radius:12px; padding:1.15rem 1.25rem; display:flex; flex-direction:column; justify-content:space-between;">
+                <div>
+                  <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:1px; color:#a78bfa; font-weight:700; margin-bottom:0.5rem;">COSTOS INDIRECTOS</div>
+                  <div style="font-size:0.72rem; color:#6b6480;">Factor Complejidad: <strong style="color:#e2e8f0;">${p.fijosEIndirectos ? p.fijosEIndirectos.factorComplejidad || 1 : 1}</strong></div>
+                  <div style="font-size:0.72rem; color:#6b6480; margin-top:0.1rem;">Tarifa: <strong style="color:#94a3b8;">Bs. ${p.fijosEIndirectos ? (p.fijosEIndirectos.tarifaPuntoComplejidad || 1.1933).toFixed(4) : '1.1933'}/pto</strong></div>
+                </div>
+                <div style="margin-top:auto; padding-top:0.85rem; font-size:1.45rem; font-weight:900; color:#a78bfa;">Bs. ${fijosCost.toFixed(2)}</div>
               </div>
             </div>
 
             <!-- Detalle de Accesorios -->
             <div style="background:#1e293b; border:1px solid #334155; border-radius:12px; overflow:hidden;">
-              <div style="background:#0f172a; padding:0.7rem 1.25rem; border-bottom:1px solid #334155; font-size:0.72rem; font-weight:700; color:#34d399; text-transform:uppercase; letter-spacing:1px;">📋 Detalle de Accesorios Utilizados</div>
+              <div style="background:#0f172a; padding:0.7rem 1.25rem; border-bottom:1px solid #334155; font-size:0.72rem; font-weight:700; color:#34d399; text-transform:uppercase; letter-spacing:1px;">Detalle de Accesorios Utilizados</div>
               <table style="width:100%; border-collapse:collapse; font-size:0.82rem;">
                 <thead>
                   <tr style="background:#0a1a0f;">
@@ -1848,7 +1946,7 @@
           const tbody = document.getElementById('tb-matriz-body');
 
           container.style.display = 'block';
-          if (titulo) titulo.textContent = `Matriz de Costos por Talla: ${json.producto.descripcion} (#${json.producto.itemNumero})`;
+          if (titulo) titulo.textContent = `Matriz de costeo por prenda: ${json.producto.descripcion} (#${json.producto.itemNumero})`;
 
           const tallas = json.data;
 
@@ -1874,19 +1972,19 @@
           const sampleMerma = (tallas.find(t => t.mermaPorcentaje > 0) || {}).mermaPorcentaje || 8;
 
           let rows = [
-            { name: 'Peso Real (sin merma)', desc: 'Peso neto de la tela consumida para confeccionar esta prenda sin incluir desperdicios de corte.', key: 'pesoExacto', fmt: v => v > 0 ? Math.round(v) + ' g' : '-' },
-            { name: `Peso con Merma (${sampleMerma}%)`, desc: `Peso total de tela requerida considerando el ${sampleMerma}% de merma o desperdicio de corte.`, key: 'pesoConMerma', fmt: v => v > 0 ? Math.round(v) + ' g' : '-' },
-            { name: 'Costo Tela (Bs.)', desc: 'Costo directo de la tela por prenda calculado según su peso con merma y el precio por metro o kilo de tela.', key: 'costoTela', fmt: v => v ? 'Bs. ' + v.toFixed(2) : '-' },
-            { name: 'Costo Accesorios (Bs.)', desc: 'Suma del costo de todos los insumos (botones, cierres, hilos, elásticos, etiquetas) usados en la prenda.', key: 'costoAccesorios', fmt: v => v ? 'Bs. ' + v.toFixed(2) : '-' },
-            { name: 'Costo Mano Obra (Bs.)', desc: 'Costo directo pagado por el corte, confección y armado de la prenda según su rango de talla.', key: 'costoManoObra', fmt: v => v ? '<strong style="color:var(--warning);">Bs. ' + v.toFixed(2) + '</strong>' : '-' },
-            { name: 'Costo Bruto (Bs.)', desc: 'Suma directa de Costo Tela + Costo Accesorios + Costo Mano de Obra (sin costos fijos ni indirectos).', key: 'costoBruto', fmt: v => v ? '<strong style="color:var(--warning);">Bs. ' + v.toFixed(2) + '</strong>' : '-' },
-            { name: 'Costos Fijos Variables (Bs.)', desc: 'Gastos fijos de taller prorrateados según el factor de complejidad de la prenda (incluye costos indirectos de producción).', key: 'costoFijosVariable', fmt: v => v ? '<strong style="color:var(--warning);">Bs. ' + v.toFixed(2) + '</strong>' : '-' },
-            { name: 'Costo Antes Impuestos (Bs.)', desc: 'Subtotal del costo de producción antes de aplicar la tasa impositiva del 13% IVA para facturar.', key: 'costoAntesImpuestos', fmt: v => v ? '<strong style="color:var(--warning);">Bs. ' + v.toFixed(2) + '</strong>' : '-' },
-            { name: '13% IVA (Bs.)', desc: 'Impuesto al Valor Agregado (13%) calculado sobre el costo para la emisión de factura de producción.', key: 'iva', fmt: v => v ? '<strong style="color:var(--warning);">Bs. ' + v.toFixed(2) + '</strong>' : '-' },
-            { name: 'COSTO TOTAL PRODUCCIÓN (Bs.)', desc: 'Costo final unitario de producción terminada (Costo Antes Impuestos + 13% IVA).', key: 'costoTotal', fmt: v => v ? '<strong style="color:var(--warning); font-size:0.9rem;">Bs. ' + v.toFixed(2) + '</strong>' : '-' },
-            { name: 'Precio de Venta (Bs.)', desc: 'Precio final de venta al público fijado para esta talla en la matriz comercial.', key: 'precioVenta', fmt: v => v ? '<strong>Bs. ' + v.toFixed(2) + '</strong>' : '-' },
-            { name: 'Utilidad Neta (Bs.)', desc: 'Ganancia neta en Bolivianos obtenida por cada prenda vendida (Precio Venta - Costo Total Producción).', key: 'utilidadNeta', fmt: v => v !== null && v !== 0 ? '<strong style="color:var(--success);">Bs. ' + v.toFixed(2) + '</strong>' : '-' },
-            { name: '% Margen Ganancia', desc: 'Porcentaje de utilidad neta obtenida sobre el costo total de producción de la prenda.', key: 'margenPorcentaje', fmt: v => v !== null && v !== 0 ? `<strong style="color:${getMarginColor(v)}; font-weight:700;">` + v.toFixed(2) + '%</strong>' : '-' }
+            { name: 'Consumo Neto de Tela', desc: 'Peso neto de la tela consumida para confeccionar esta prenda sin incluir desperdicios de corte.', key: 'pesoExacto', fmt: v => v > 0 ? Math.round(v) + ' g' : '-' },
+            { name: `Consumo Tela con merma (${sampleMerma}%)`, desc: `Peso total de tela requerida considerando el ${sampleMerma}% de merma o desperdicio de corte.`, key: 'pesoConMerma', fmt: v => v > 0 ? Math.round(v) + ' g' : '-' },
+            { name: 'Costo de tela', desc: 'Costo directo de la tela por prenda calculado según su peso con merma y el precio por metro o kilo de tela.', key: 'costoTela', fmt: v => v ? v.toFixed(2) : '-' },
+            { name: 'Costo accesorios', desc: 'Suma del costo de todos los insumos (botones, cierres, hilos, elásticos, etiquetas) usados en la prenda.', key: 'costoAccesorios', fmt: v => v ? v.toFixed(2) : '-' },
+            { name: 'Mano de Obra Directa', desc: 'Costo directo pagado por el corte, confección y armado de la prenda según su rango de talla.', key: 'costoManoObra', fmt: v => v ? '<strong style="color:var(--warning);">' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'COSTO DIRECTO TOTAL', desc: 'Suma directa de Costo Tela + Costo Accesorios + Costo Mano de Obra (sin costos fijos ni indirectos).', key: 'costoBruto', fmt: v => v ? '<strong style="color:var(--warning);">' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Costos Indirectos', desc: 'Gastos fijos de taller prorrateados según el factor de complejidad de la prenda (incluye costos indirectos de producción).', key: 'costoFijosVariable', fmt: v => v ? '<strong style="color:var(--warning);">' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Subtotal antes de impuestos', desc: 'Subtotal del costo de producción antes de aplicar la tasa impositiva del 13% IVA para facturar.', key: 'costoAntesImpuestos', fmt: v => v ? '<strong style="color:var(--warning);">' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Impuestos', desc: 'Impuesto al Valor Agregado (13%) calculado sobre el costo para la emisión de factura de producción.', key: 'iva', fmt: v => v ? '<strong style="color:var(--warning);">' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Precio final con IVA', desc: 'Costo final unitario de producción terminada (Subtotal antes de impuestos + 13% IVA).', key: 'costoTotal', fmt: v => v ? '<strong style="color:var(--warning); font-size:0.9rem;">' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Precio de Venta al Público', desc: 'Precio final de venta al público fijado para esta talla en la matriz comercial.', key: 'precioVenta', fmt: v => v ? '<strong>' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Utilidad Bruta', desc: 'Ganancia obtenida por cada prenda vendida (Precio Venta - Precio Final con IVA).', key: 'utilidadNeta', fmt: v => v !== null && v !== 0 ? '<strong style="color:var(--success);">' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Margen Bruto Real (%)', desc: 'Porcentaje de utilidad bruta sobre el Precio de Venta al Público: (Utilidad Bruta / Precio de Venta al Público) × 100.', key: 'margenPorcentaje', fmt: v => v !== null && v !== 0 ? `<strong style="color:${getMarginColor(v)}; font-weight:700;">` + v.toFixed(2) + '%</strong>' : '-' }
           ];
 
           tbody.innerHTML = rows.map(r => `
@@ -1928,13 +2026,84 @@
 
     function switchAdminTab(tabName) {
       document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById('btn-atab-' + tabName).classList.add('active');
+      const activeBtn = document.getElementById('btn-atab-' + tabName);
+      if (activeBtn) activeBtn.classList.add('active');
 
-      document.getElementById('admin-sec-prendas').style.display = tabName === 'prendas' ? 'block' : 'none';
+      const secPrendas = document.getElementById('admin-sec-prendas');
+      if (secPrendas) secPrendas.style.display = tabName === 'prendas' ? 'block' : 'none';
       const secTelas = document.getElementById('admin-sec-telas');
       if (secTelas) secTelas.style.display = tabName === 'telas' ? 'block' : 'none';
-      document.getElementById('admin-sec-tallas').style.display = tabName === 'tallas' ? 'block' : 'none';
-      document.getElementById('admin-sec-colegios').style.display = tabName === 'colegios' ? 'block' : 'none';
+      const secTallas = document.getElementById('admin-sec-tallas');
+      if (secTallas) secTallas.style.display = tabName === 'tallas' ? 'block' : 'none';
+      const secColegios = document.getElementById('admin-sec-colegios');
+      if (secColegios) secColegios.style.display = tabName === 'colegios' ? 'block' : 'none';
+      const secSistema = document.getElementById('admin-sec-sistema');
+      if (secSistema) secSistema.style.display = tabName === 'sistema' ? 'block' : 'none';
+
+      if (tabName === 'sistema') cargarConfigSistemaAdmin();
+    }
+
+    async function cargarConfigSistemaAdmin() {
+      try {
+        // 1. Cargar tallas registradas en la BD
+        const resTallas = await fetch('/api/tallas');
+        const jsonTallas = await resTallas.json();
+        const listaTallas = jsonTallas.data || [];
+
+        const mapCodigos = new Map();
+        listaTallas.forEach(t => {
+          if (!mapCodigos.has(t.codigo)) mapCodigos.set(t.codigo, t);
+        });
+        const tallasUnicas = Array.from(mapCodigos.values());
+
+        const selectTallaDef = document.getElementById('cfg-talla-def');
+        if (selectTallaDef && tallasUnicas.length > 0) {
+          selectTallaDef.innerHTML = tallasUnicas.map(t =>
+            `<option value="${t.codigo}">${t.nombre} (${t.codigo})</option>`
+          ).join('');
+        }
+
+        // 2. Cargar configuración actual del sistema
+        const res = await fetch('/api/inputs/configuracion');
+        const json = await res.json();
+        if (json.success && json.data) {
+          const cfg = json.data;
+          if (document.getElementById('cfg-tasa-iva')) document.getElementById('cfg-tasa-iva').value = cfg.tasaIva;
+          if (document.getElementById('cfg-vol-prod')) document.getElementById('cfg-vol-prod').value = cfg.volumenMensualProduccion;
+          if (document.getElementById('cfg-merma-std')) document.getElementById('cfg-merma-std').value = cfg.mermaPorcentajeEstandar;
+          if (selectTallaDef && cfg.tallaDefecto) selectTallaDef.value = cfg.tallaDefecto;
+        }
+      } catch (e) {
+        console.error('Error cargando configuración del sistema:', e);
+      }
+    }
+
+    async function guardarConfigSistemaAdmin() {
+      const tasaIva = parseFloat(document.getElementById('cfg-tasa-iva')?.value) || 13;
+      const volumenMensualProduccion = parseInt(document.getElementById('cfg-vol-prod')?.value) || 1800;
+      const mermaPorcentajeEstandar = parseFloat(document.getElementById('cfg-merma-std')?.value) || 8;
+      const tallaDefecto = (document.getElementById('cfg-talla-def')?.value || '16/34').trim();
+
+      try {
+        const res = await fetch('/api/inputs/configuracion', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tasaIva, volumenMensualProduccion, mermaPorcentajeEstandar, tallaDefecto })
+        });
+        const json = await res.json();
+        if (json.success) {
+          alert('✅ Configuración general del sistema guardada exitosamente en la BD.');
+          cargarResumen();
+          cargarMatrizConsolidada();
+          generarMatrizPrenda();
+          if (currentInputConcept === 'DesgloseProducto') {
+            generarDesgloseProducto();
+          }
+        }
+      } catch (e) {
+        alert('❌ Error al guardar la configuración del sistema.');
+        console.error(e);
+      }
     }
 
     async function cargarConfigAdminColegio() {
@@ -1949,6 +2118,7 @@
           renderAdminTelas();
           renderAdminTallas();
           renderAdminPerfilColegio();
+          cargarConfigSistemaAdmin();
         }
       } catch (e) { console.error('Error al cargar config admin:', e); }
     }

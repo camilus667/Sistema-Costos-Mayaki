@@ -394,6 +394,18 @@ export async function seedData(db: any) {
     }
   }
 
+  // 13. CONFIGURACION SISTEMA GENERAL
+  const existingConfig = await db.select().from(schema.configuracionSistema);
+  if (existingConfig.length === 0) {
+    await db.insert(schema.configuracionSistema).values([
+      { clave: 'tasa_iva', valor: '13', descripcion: 'Tasa Impositiva IVA (%)' },
+      { clave: 'volumen_mensual_produccion', valor: '1800', descripcion: 'Volumen Mensual de Producción Estimado (prendas)' },
+      { clave: 'merma_porcentaje_estandar', valor: '8', descripcion: 'Porcentaje de Merma Estándar de Tela (%)' },
+      { clave: 'talla_defecto', valor: '16/34', descripcion: 'Talla Predeterminada en Desglose Inteligente' },
+    ]);
+    console.log('  ✅ Parámetros de Configuración del Sistema en DB: 4');
+  }
+
   console.log('🎉 Todos los datos fijos han sido completamente insertados y estructurados en la BD.');
 }
 

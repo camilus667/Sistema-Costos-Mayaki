@@ -240,3 +240,14 @@ export const auditoria = sqliteTable('auditoria', {
   datosNuevos: text('datos_nuevos'),
   creadoEn: text('creado_en').default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
+
+// ============================================
+// CONFIGURACION SISTEMA (Parámetros Generales)
+// ============================================
+export const configuracionSistema = sqliteTable('configuracion_sistema', {
+  id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
+  clave: text('clave').unique().notNull(),
+  valor: text('valor').notNull(),
+  descripcion: text('descripcion'),
+  actualizadoEn: text('actualizado_en').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});

@@ -197,6 +197,13 @@ CREATE TABLE IF NOT EXISTS "auditoria" (
  "datos_nuevos" text,
  "creado_en" text DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
+CREATE TABLE IF NOT EXISTS "configuracion_sistema" (
+ "id" text PRIMARY KEY NOT NULL,
+ "clave" text NOT NULL UNIQUE,
+ "valor" text NOT NULL,
+ "descripcion" text,
+ "actualizado_en" text DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
 `;
 
 export async function getDb() {

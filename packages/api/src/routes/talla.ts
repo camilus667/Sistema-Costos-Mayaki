@@ -17,7 +17,7 @@ const crearTallaSchema = z.object({
 // GET /api/tallas - Listar tallas
 api.get('/', async (c) => {
   const db = (c as any).db;
-  const allTallas = await db.select().from(tallas).orderBy(asc(tallas.nombre));
+  const allTallas = await db.select().from(tallas).orderBy(asc(tallas.orden));
   
   return c.json({
     success: true,
