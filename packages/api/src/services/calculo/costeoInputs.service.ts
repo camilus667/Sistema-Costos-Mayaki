@@ -11,6 +11,7 @@ import {
   preciosVenta,
   preciosAdquisicion,
   costosIndirectos,
+  costoSnapshots,
 } from '../../database/schema';
 import { getSystemConfig, type SystemConfig } from '../configService';
 import {
@@ -202,23 +203,44 @@ export function tasaIvaComoFraccion(sysConfig: SystemConfig, avisos?: string[]):
  */
 export async function cargarContextoCosteo(
   db: any,
-  opts: { colegioId?: string; productoId?: string } = {}
+  opts: { colegioId?: string; productoId?: string; snapshotId?: string } = {}
 ): Promise<ContextoCosteo> {
   const avisosGlobales: string[] = [];
   const sysConfig = await getSystemConfig(db);
   const tasaIvaFraccion = tasaIvaComoFraccion(sysConfig, avisosGlobales);
 
-  // --- productos ---
-  const filtrosProducto: any[] = [];
-  if (opts.productoId) filtrosProducto.push(eq(productos.id, opts.productoId));
-  if (opts.colegioId && opts.colegioId !== 'all') {
-    filtrosProducto.push(eq(productos.colegioId, opts.colegioId));
+  let snapData: any = null;
+  if (opts.snapshotId && opts.snapshotId !== 'actual') {
+    try {
+      const [snap] = await db.select().from(costoSnapshots).where(eq(costoSnapshots.id, opts.snapshotId)).limit(1);
+      if (snap && snap.datosJson) {
+        snapData = JSON.parse(snap.datosJson);
+      }
+    } catch (e) {
+      avisosGlobales.push('No se pudo cargar la instantánea especificada: ' + String(e));
+    }
   }
-  const listaProductos = filtrosProducto.length
-    ? await db.select().from(productos)
-        .where(filtrosProducto.length === 1 ? filtrosProducto[0] : and(...filtrosProducto))
-        .orderBy(asc(productos.orden), asc(productos.itemNumero))
-    : await db.select().from(productos).orderBy(asc(productos.orden), asc(productos.itemNumero));
+
+  // --- productos ---
+  let listaProductos: any[] = [];
+  if (snapData && Array.isArray(snapData.productos)) {
+    listaProductos = snapData.productos.filter((p: any) => {
+      if (opts.productoId && p.id !== opts.productoId) return false;
+      if (opts.colegioId && opts.colegioId !== 'all' && p.colegioId !== opts.colegioId) return false;
+      return true;
+    }).sort((a: any, b: any) => (num(a.orden) || 0) - (num(b.orden) || 0) || (num(a.itemNumero) || 0) - (num(b.itemNumero) || 0));
+  } else {
+    const filtrosProducto: any[] = [];
+    if (opts.productoId) filtrosProducto.push(eq(productos.id, opts.productoId));
+    if (opts.colegioId && opts.colegioId !== 'all') {
+      filtrosProducto.push(eq(productos.colegioId, opts.colegioId));
+    }
+    listaProductos = filtrosProducto.length
+      ? await db.select().from(productos)
+          .where(filtrosProducto.length === 1 ? filtrosProducto[0] : and(...filtrosProducto))
+          .orderBy(asc(productos.orden), asc(productos.itemNumero))
+      : await db.select().from(productos).orderBy(asc(productos.orden), asc(productos.itemNumero));
+  }
 
   // --- tallas ---
   // FASE 5. Las tallas pasan a ser vocabulario COMPARTIDO: colegio_id NULL. Antes
@@ -260,18 +282,16 @@ export async function cargarContextoCosteo(
   }
 
   // --- telas ---
-  const listaTelas = await db.select().from(telas);
+  const listaTelas = (snapData && Array.isArray(snapData.telas)) ? snapData.telas : await db.select().from(telas);
   const telasPorId = new Map<string, any>();
   for (const t of listaTelas) telasPorId.set(t.id, t);
 
   // --- peso materia prima ---
-  const listaPeso = await db.select().from(pesoMateriaPrima);
+  const listaPeso = (snapData && Array.isArray(snapData.pesoMateriaPrima)) ? snapData.pesoMateriaPrima : await db.select().from(pesoMateriaPrima);
   const pesoPorClave = new Map<string, any>();
   for (const p of listaPeso) {
     const k = clave(p.productoId, p.tallaId);
     if (pesoPorClave.has(k)) {
-      // No hay unique en (producto, talla): una fila duplicada duplica el costo
-      // en silencio segun el join. Se avisa en vez de elegir una al azar.
       avisosGlobales.push(`peso_mat_prima duplicado para ${k}. Se usa la primera fila.`);
       continue;
     }
@@ -279,7 +299,7 @@ export async function cargarContextoCosteo(
   }
 
   // --- mano de obra ---
-  const listaMO = await db.select().from(manoObra);
+  const listaMO = (snapData && Array.isArray(snapData.manoObra)) ? snapData.manoObra : await db.select().from(manoObra);
   const manoObraPorClave = new Map<string, any>();
   for (const m of listaMO) {
     const k = clave(m.productoId, m.tallaId);
@@ -332,9 +352,9 @@ export async function cargarContextoCosteo(
   }
 
   // --- precio de venta vigente ---
-  // Vigente = vigenteHasta IS NULL. Corregido en Fase 1: antes se comparaba con
-  // eq(campo, null), que en SQL nunca es verdadero, y devolvia 0 filas.
-  const listaPV = await db.select().from(preciosVenta).where(isNull(preciosVenta.vigenteHasta));
+  const listaPV = (snapData && Array.isArray(snapData.preciosVenta))
+    ? snapData.preciosVenta.filter((pv: any) => !pv.vigenteHasta)
+    : await db.select().from(preciosVenta).where(isNull(preciosVenta.vigenteHasta));
   const precioVentaPorClave = new Map<string, any>();
   for (const pv of listaPV) {
     const k = clave(pv.productoId, pv.tallaId);
@@ -351,10 +371,9 @@ export async function cargarContextoCosteo(
   // --- precio de adquisicion vigente (prendas semiterminadas o de reventa) ---
   const precioAdquisicionPorClave = new Map<string, any>();
   try {
-    const listaPA = await db
-      .select()
-      .from(preciosAdquisicion)
-      .where(isNull(preciosAdquisicion.vigenteHasta));
+    const listaPA = (snapData && Array.isArray(snapData.preciosAdquisicion))
+      ? snapData.preciosAdquisicion.filter((pa: any) => !pa.vigenteHasta)
+      : await db.select().from(preciosAdquisicion).where(isNull(preciosAdquisicion.vigenteHasta));
     for (const pa of listaPA) {
       const k = clave(pa.productoId, pa.tallaId);
       const previo = precioAdquisicionPorClave.get(k);
@@ -362,19 +381,17 @@ export async function cargarContextoCosteo(
       precioAdquisicionPorClave.set(k, pa);
     }
   } catch (e) {
-    // La tabla se agrego en Fase 1; en una base sin migrar todavia no existe.
     avisosGlobales.push(
       'No se pudo leer precio_adquisicion. Las prendas con modoCosteo=adquirido van a quedar sin costo de material.'
     );
   }
 
   // --- indirectos ---
-  // PRESERVADO A PROPOSITO: se suma sin filtrar por colegio, igual que los tres
-  // caminos viejos. Con un solo colegio es inocuo. Filtrarlo cambiaria los
-  // numeros y contaminaria la comparacion de paridad. Es tarea de la Fase 6.
   let totalIndirectosMensual = 0;
   try {
-    const listaCI = await db.select().from(costosIndirectos);
+    const listaCI = (snapData && Array.isArray(snapData.costosIndirectos))
+      ? snapData.costosIndirectos
+      : await db.select().from(costosIndirectos);
     totalIndirectosMensual = listaCI.reduce((s: number, r: any) => s + num(r.montoMensual), 0);
   } catch (e) {
     avisosGlobales.push('No se pudieron leer los costos indirectos. Se costea con indirectos en 0.');
@@ -746,9 +763,10 @@ export async function costearPrenda(
 /** Costea todas las tallas de una prenda. */
 export async function costearPrendaTodasLasTallas(
   db: any,
-  productoId: string
+  productoId: string,
+  snapshotId?: string
 ): Promise<{ producto: any; filas: PrendaCosteada[] } | null> {
-  const ctx = await cargarContextoCosteo(db, { productoId });
+  const ctx = await cargarContextoCosteo(db, { productoId, snapshotId });
   const producto = ctx.productos[0];
   if (!producto) return null;
 
@@ -763,7 +781,7 @@ export async function costearPrendaTodasLasTallas(
 /** Costea todas las prendas de un colegio, en todas sus tallas. */
 export async function costearLote(
   db: any,
-  opts: { colegioId?: string } = {}
+  opts: { colegioId?: string; snapshotId?: string } = {}
 ): Promise<{ ctx: ContextoCosteo; filas: PrendaCosteada[] }> {
   const ctx = await cargarContextoCosteo(db, opts);
   const filas: PrendaCosteada[] = [];

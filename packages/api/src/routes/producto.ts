@@ -45,6 +45,7 @@ import {
   historicoPrecios,
 } from '../database/schema';
 import { crearPrendaConTallas } from '../services/crearPrenda.service';
+import { saveDbToDisk } from '../database/sqljs';
 
 const api = new Hono();
 
@@ -285,6 +286,7 @@ api.put('/:id', zValidator('json', crearProductoSchema.partial()), async (c) => 
   }
 
   const [actualizado] = await db.update(productos).set(cambios).where(eq(productos.id, id)).returning();
+  saveDbToDisk();
 
   return c.json({
     success: true,

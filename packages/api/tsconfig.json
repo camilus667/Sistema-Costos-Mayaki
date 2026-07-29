@@ -14,7 +14,7 @@
     "outDir": "dist",
     "rootDir": "src",
     "baseUrl": ".",
-    "types": ["@cloudflare/workers-types", "node"],
+    "types": ["@cloudflare/workers-types"],
     "paths": {
       "@sistema-uniformes/shared": ["../shared/src"],
       "@sistema-uniformes/shared/*": ["../shared/src/*"]

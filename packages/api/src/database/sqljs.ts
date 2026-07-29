@@ -259,6 +259,15 @@ CREATE TABLE IF NOT EXISTS "auditoria" (
  "datos_nuevos" text,
  "creado_en" text DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
+CREATE TABLE IF NOT EXISTS "costo_snapshot" (
+  "id" text PRIMARY KEY NOT NULL,
+  "nombre" text NOT NULL,
+  "descripcion" text,
+  "colegio_id" text,
+  "datos_json" text NOT NULL,
+  "creado_por" text,
+  "creado_en" text DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
 CREATE TABLE IF NOT EXISTS "configuracion_sistema" (
  "id" text PRIMARY KEY NOT NULL,
  "clave" text NOT NULL UNIQUE,

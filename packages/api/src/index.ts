@@ -18,6 +18,7 @@ import inventarioRoutes from './routes/inventario';
 import precioRoutes from './routes/precio';
 import exportRoutes from './routes/export';
 import costeoRoutes from './routes/costeo';
+import snapshotRoutes from './routes/snapshots';
 import dashboardHtml from './dashboard.html';
 
 export interface Env {
@@ -138,5 +139,6 @@ app.route('/api/export', exportRoutes);
 // el deploy de Workers. Deriva preexistente entre los dos entrypoints, sin
 // resolver todavia.
 app.route('/api/costeo', costeoRoutes);
+app.route('/api/snapshots', snapshotRoutes);
 
 export default app;

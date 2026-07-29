@@ -324,9 +324,8 @@ export function calcularCostoTotal(inputs: CalculoInputs): CalculoResultado {
       inputs.descuentoSinFactura != null ? D(inputs.descuentoSinFactura) : new Decimal(0);
 
     // Con factura: el debito fiscal va POR DENTRO del precio, el 13% se calcula
-    // sobre el bruto. De 100 quedan 87, no 88,50. Con el check apagado no se
-    // descuenta nada y el ingreso es el precio de lista.
-    const netoCon = impuestos ? pv.times(new Decimal(1).minus(tasa)) : pv;
+    // sobre el bruto. De 100 quedan 87 Bs.
+    const netoCon = pv.times(new Decimal(1).minus(tasa));
 
     // Sin factura: descuento comercial y sin debito fiscal. El descuento se aplica
     // aunque el check de impuestos este apagado, porque es un descuento de precio,

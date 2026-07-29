@@ -217,8 +217,9 @@ api.get('/matriz-consolidada', async (c) => {
     const db = (c as any).db;
     const colegioIdRaw = c.req.query('colegioId');
     const colegioId = colegioIdRaw && colegioIdRaw !== 'all' ? colegioIdRaw : undefined;
+    const snapshotId = c.req.query('snapshotId');
 
-    const { ctx, filas } = await costearLote(db, { colegioId });
+    const { ctx, filas } = await costearLote(db, { colegioId, snapshotId });
 
     // El inventario no es un concepto de costeo, se consulta aparte.
     let invList: any[] = [];
@@ -529,8 +530,9 @@ api.get('/matriz-prenda/:productoId', async (c) => {
   try {
     const db = (c as any).db;
     const productoId = c.req.param('productoId');
+    const snapshotId = c.req.query('snapshotId');
 
-    const res = await costearPrendaTodasLasTallas(db, productoId);
+    const res = await costearPrendaTodasLasTallas(db, productoId, snapshotId);
     if (!res) {
       return c.json({ success: false, error: 'Producto no encontrado' }, 404);
     }

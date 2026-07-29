@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { eq, and, asc, or, isNull } from 'drizzle-orm';
-import { productos, tallas, pesoMateriaPrima, manoObra, telas, accesorios, detalleAccesorio, costosIndirectos } from '../database/schema';
+import { productos, tallas, pesoMateriaPrima, manoObra, telas, accesorios, detalleAccesorio, costosIndirectos, preciosAdquisicion } from '../database/schema';
 import * as XLSX from 'xlsx';
 import { findExcelPath } from '../scripts/seed';
 import { saveDbToDisk } from '../database/sqljs';
@@ -384,6 +384,91 @@ api.get('/peso-mat-prima', async (c) => {
     tallas: allTallas.map((t: any) => ({ id: t.id, codigo: t.codigo })),
     data
   });
+});
+
+// GET /api/inputs/precios-adquisicion - Prendas semiterminadas/adquiridas y sus precios por talla
+api.get('/precios-adquisicion', async (c) => {
+  const db = (c as any).db;
+  const colegioId = c.req.query('colegioId');
+
+  let prodQuery = db.select().from(productos).where(eq(productos.modoCosteo, 'adquirido'));
+  if (colegioId && colegioId !== 'all') {
+    prodQuery = db.select().from(productos).where(and(eq(productos.modoCosteo, 'adquirido'), eq(productos.colegioId, colegioId)));
+  }
+  const allProds = await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero));
+  let tallasQuery = db.select().from(tallas);
+  if (colegioId && colegioId !== 'all') {
+    tallasQuery = db.select().from(tallas).where(or(eq(tallas.colegioId, colegioId), isNull(tallas.colegioId)));
+  }
+  const allTallas = await tallasQuery.orderBy(asc(tallas.orden));
+
+  let precios: any[] = [];
+  try {
+    precios = await db.select().from(preciosAdquisicion).where(isNull(preciosAdquisicion.vigenteHasta));
+  } catch (e) {}
+
+  const preciosMap = new Map<string, number>();
+  precios.forEach((p: any) => preciosMap.set(`${p.productoId}_${p.tallaId}`, p.precioBs));
+
+  const data = allProds.map((prod: any) => {
+    const rowObj: any = {
+      productoId: prod.id,
+      itemNumero: prod.itemNumero,
+      descripcion: prod.descripcion,
+      colegioId: prod.colegioId,
+      tallas: {}
+    };
+
+    allTallas.forEach((t: any) => {
+      const precio = preciosMap.get(`${prod.id}_${t.id}`) ?? 0;
+      rowObj.tallas[t.codigo] = {
+        tallaId: t.id,
+        precioBs: precio
+      };
+    });
+
+    return rowObj;
+  });
+
+  return c.json({
+    success: true,
+    tallas: allTallas.map((t: any) => ({ id: t.id, codigo: t.codigo, nombre: t.nombre })),
+    data
+  });
+});
+
+// PUT /api/inputs/precios-adquisicion - Actualiza o inserta un precio de adquisición por producto y talla
+api.put('/precios-adquisicion', async (c) => {
+  const db = (c as any).db;
+  try {
+    const body = await c.req.json();
+    const { productoId, tallaId, precioBs } = body;
+
+    if (!productoId || !tallaId || precioBs === undefined) {
+      return c.json({ success: false, error: 'Faltan parámetros requeridos (productoId, tallaId, precioBs)' }, 400);
+    }
+
+    const numPrecio = parseFloat(precioBs) || 0;
+
+    // Desactivar vigencia previa
+    await db.update(preciosAdquisicion)
+      .set({ vigenteHasta: new Date().toISOString() })
+      .where(and(eq(preciosAdquisicion.productoId, productoId), eq(preciosAdquisicion.tallaId, tallaId), isNull(preciosAdquisicion.vigenteHasta)));
+
+    // Insertar nueva vigencia
+    await db.insert(preciosAdquisicion).values({
+      productoId,
+      tallaId,
+      precioBs: numPrecio,
+      conFactura: false
+    });
+
+    saveDbToDisk();
+    return c.json({ success: true, message: 'Precio de adquisición actualizado exitosamente' });
+  } catch (e) {
+    console.error('Error al actualizar precio de adquisición:', e);
+    return c.json({ success: false, error: String(e) }, 500);
+  }
 });
 
 // GET /api/inputs/accesorios-matriz - Matriz completa de los 38 accesorios por prenda
@@ -917,8 +1002,9 @@ api.get('/desglose-inteligente-producto', async (c) => {
     const colegioIdRaw = c.req.query('colegioId');
     const colegioId = colegioIdRaw && colegioIdRaw !== 'all' ? colegioIdRaw : undefined;
     const tallaIdParam = c.req.query('tallaId') || null;
+    const snapshotId = c.req.query('snapshotId');
 
-    const ctx = await cargarContextoCosteo(db, { colegioId });
+    const ctx = await cargarContextoCosteo(db, { colegioId, snapshotId });
     const sysConfig = ctx.sysConfig;
 
     const data = ctx.productos.map((p: any) => {

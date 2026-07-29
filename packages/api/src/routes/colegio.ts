@@ -200,6 +200,7 @@ api.put('/:id/config-prendas', async (c) => {
       if (p.descripcion !== undefined) updateData.descripcion = p.descripcion;
       if (p.telaId !== undefined) updateData.telaId = p.telaId;
       if (p.factorComplejidad !== undefined) updateData.factorComplejidad = p.factorComplejidad;
+      if (p.modoCosteo !== undefined) updateData.modoCosteo = p.modoCosteo;
       if (p.activo !== undefined) updateData.activo = p.activo;
 
       await db.update(productos).set(updateData).where(eq(productos.id, p.id));

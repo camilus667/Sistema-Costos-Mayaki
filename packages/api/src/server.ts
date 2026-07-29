@@ -24,6 +24,7 @@ import precioRoutes from './routes/precio';
 import exportRoutes from './routes/export';
 import inputRoutes from './routes/inputs';
 import costeoRoutes from './routes/costeo';
+import snapshotRoutes from './routes/snapshots';
 import { asc, eq } from 'drizzle-orm';
 import { costearLote } from './services/calculo/costeoInputs.service';
 
@@ -197,6 +198,9 @@ app.get('/api/dashboard-resumen', async (c) => {
   const db = await getDb();
   const colegioIdRaw = c.req.query('colegioId');
   const colegioId = colegioIdRaw && colegioIdRaw !== 'all' ? colegioIdRaw : undefined;
+  const snapshotId = c.req.query('snapshotId');
+  const modalidadF = c.req.query('modalidadF') === 'true';
+  console.log('[dashboard-resumen] modalidadF param:', c.req.query('modalidadF'), '→ modalidadF =', modalidadF);
 
   // El encabezado tiene que mostrar el colegio ELEGIDO, no el primero de la tabla.
   // Con dos colegios, `limit(1)` mostraba siempre el mismo nombre.
@@ -216,12 +220,41 @@ app.get('/api/dashboard-resumen', async (c) => {
   const accesorios = await db.select().from(schema.accesorios);
 
   // Costeo y precios: del motor, la misma fuente que las matrices.
-  const { filas } = await costearLote(db, { colegioId });
-  const costeo = new Map<string, { costo: number; precio: number }>();
+  const { filas, ctx } = await costearLote(db, { colegioId, snapshotId });
+
+  // Tasas reales de la configuración para calcular ambos canales.
+  // Se calcula aquí directamente para no depender de si el motor tenía
+  // impuestosActivos=true o false al momento de correr.
+  const tasaIvaReal = ctx.tasaIvaFraccion > 0 ? ctx.tasaIvaFraccion : 0.13;
+  const descuentoSinFact = ctx.sysConfig.descuentoSinFactura > 0 ? ctx.sysConfig.descuentoSinFactura : 0.10;
+
+  const costeo = new Map<string, { costo: number; precio: number; margenPct: number }>();
   for (const f of filas) {
+    const costoNeto = Number(f.resultado.costoUnitarioNeto) || 0;
+    const precioLista = Number(f.meta.precioVentaBs) || 0;
+
+    // Calcular ingreso efectivo directamente desde el precio lista con las tasas reales.
+    // Esto garantiza que siempre haya diferencia entre los dos modos, independientemente
+    // de si el motor tenía impuestosActivos activo o no.
+    let ingresoEfectivo: number;
+    let margenPct: number;
+    if (precioLista > 0) {
+      if (modalidadF) {
+        ingresoEfectivo = precioLista * (1 - tasaIvaReal);
+        margenPct = ingresoEfectivo > 0 ? ((ingresoEfectivo - costoNeto) / ingresoEfectivo) * 100 : 0;
+      } else {
+        ingresoEfectivo = precioLista * (1 - descuentoSinFact);
+        margenPct = ingresoEfectivo > 0 ? ((ingresoEfectivo - costoNeto) / ingresoEfectivo) * 100 : 0;
+      }
+    } else {
+      ingresoEfectivo = 0;
+      margenPct = 0;
+    }
+
     costeo.set(`${f.meta.productoId}_${f.meta.tallaId}`, {
-      costo: Number(f.resultado.costoUnitarioNeto) || 0,
-      precio: Number(f.meta.precioVentaBs) || 0,
+      costo: costoNeto,
+      precio: ingresoEfectivo,
+      margenPct,
     });
   }
 
@@ -254,6 +287,7 @@ app.get('/api/dashboard-resumen', async (c) => {
 
       const ct = c2.costo;
       const pv = c2.precio;
+      const mg = c2.margenPct;
       const inv = stockPorClave.get(clave) || 0;
 
       if (ct > 0) {
@@ -265,7 +299,7 @@ app.get('/api/dashboard-resumen', async (c) => {
         if (pv > maxPrecio) maxPrecio = pv;
         // El margen sobre venta se promedia solo donde hay precio Y costo: con costo 0
         // el margen sale 100% y ensucia el promedio sin informar nada.
-        if (ct > 0) margenes.push(((pv - ct) / pv) * 100);
+        if (ct > 0) margenes.push(mg);
       }
 
       prodStock += inv;
@@ -355,6 +389,7 @@ app.route('/api/inputs', inputRoutes);
 // Costeo unificado. Se monta AL LADO de /api/inputs y /api/calculo, sin
 // reemplazar nada, para poder comparar paridad antes de tocar esas pantallas.
 app.route('/api/costeo', costeoRoutes);
+app.route('/api/snapshots', snapshotRoutes);
 
 // Iniciar servidor si se ejecuta directamente
 async function start() {

@@ -30,19 +30,31 @@
       </div>
     </div>
 
-    <div class="header-controls">
-      <label style="font-size: 0.8rem; color: var(--text-muted);" title="Qué estás viendo: la empresa entera o un colegio">Ámbito:</label>
-      <select id="global-colegio-select" class="colegio-selector" onchange="cambiarColegioGlobal(this.value)">
+    <div class="header-controls" style="display:flex; align-items:center; gap:0.4rem; flex-wrap:nowrap;">
+      <select id="global-colegio-select" class="colegio-selector" style="font-size:0.75rem; padding:0.25rem 0.5rem; height:28px; background:#1e293b; border:1px solid #334155; border-radius:6px;" onchange="cambiarColegioGlobal(this.value)" title="Ámbito de visualización">
         <option value="all">TODA LA EMPRESA</option>
       </select>
-      <button class="btn-icon-admin" onclick="switchTab('admin-colegio')"
-        title="Configuración de la empresa y de cada colegio">⚙️ Configuración</button>
-      <div class="status-badge">
+
+      <select id="global-snapshot-select" class="colegio-selector" style="font-size:0.75rem; padding:0.25rem 0.5rem; height:28px; background:#1e293b; border:1px solid #f59e0b55; color:#fbbf24; font-weight:600; border-radius:6px; max-width:140px;" onchange="cambiarSnapshotGlobal(this.value)" title="Simulación por Instantánea">
+        <option value="actual">🔴 Actual</option>
+      </select>
+
+      <label style="font-size: 0.75rem; color: #cbd5e1; cursor: pointer; display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 600; background:#1e293b; padding:0.25rem 0.5rem; height:28px; border-radius:6px; border:1px solid #334155;" title="Activar Modalidad F (Régimen extender)">
+        <input type="checkbox" id="global-modalidad-f-select" onchange="cambiarModalidadFGlobal(this.checked)" style="cursor: pointer; accent-color: #3b82f6;">
+        <span>Modalidad F</span>
+      </label>
+
+      <button class="btn-icon-admin" onclick="switchTab('admin-colegio')" style="height:28px; padding:0 0.5rem; font-size:0.78rem;" title="Configuración de la empresa y colegio">⚙️ Config</button>
+      <div class="status-badge" style="padding:0.2rem 0.4rem; height:28px;" title="Estado DB: sql.js / D1 Activo">
         <div class="status-dot"></div>
-        <span id="env-status">sql.js / D1 Activo</span>
       </div>
     </div>
   </header>
+
+  <div id="banner-modo-simulacion" style="display:none; background:linear-gradient(90deg, #78350f, #92400e); color:#fef3c7; padding:0.6rem 1.25rem; font-size:0.85rem; font-weight:700; text-align:center; border-bottom:1px solid #f59e0b; box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+    📸 MODO SIMULACIÓN HISTÓRICA: Mostrando todo el sistema costeado con la instantánea <span id="banner-snap-nombre" style="text-decoration:underline;"></span>.
+    <button onclick="cambiarSnapshotGlobal('actual')" style="margin-left:1rem; background:#f59e0b; color:#0f172a; border:none; padding:0.25rem 0.65rem; border-radius:4px; font-weight:800; cursor:pointer; font-size:0.75rem;">Volver a Datos en Vivo (Actual)</button>
+  </div>
 
   <nav class="tabs">
     <button class="tab-btn active" onclick="switchTab('resumen')">Resumen General</button>
@@ -50,7 +62,7 @@
     <button class="tab-btn" onclick="switchTab('matriz-excel')">Matrices Consolidadas</button>
     <button class="tab-btn" onclick="switchTab('costeo-individual')">Costeo Individual</button>
     <button class="tab-btn" onclick="switchTab('matriz-tallas')">Costeo Multitalla</button>
-    <button class="tab-btn" onclick="switchTab('inventario')">Inventario por Colegio</button>
+    <button class="tab-btn" onclick="switchTab('inventario')">Inventario Real</button>
     <button class="tab-btn" onclick="switchTab('admin-colegio')">⚙️ Configuración</button>
   </nav>
 
@@ -92,7 +104,7 @@
       <!-- TABLA EJECUTIVA DE RESUMEN FINANCIERO POR PRENDA -->
       <div class="panel">
         <div class="panel-header">
-          <h2 class="panel-title">Resumen Ejecutivo de Prendas, Precios, Costos y Valorización de Inventario</h2>
+          <h2 class="panel-title" id="resumen-panel-title">Resumen Ejecutivo de Prendas, Precios, Costos y Valorización de Inventario</h2>
         </div>
         <div class="table-container">
           <table>
@@ -129,6 +141,7 @@
             <button class="excel-tab active" onclick="switchInputConcept('Tela', this)">Tela</button>
             <button class="excel-tab" onclick="switchInputConcept('PesoMatPrima', this)">PesoMatPrima</button>
             <button class="excel-tab" onclick="switchInputConcept('Acc', this)">Uso de Accesorios</button>
+            <button class="excel-tab" onclick="switchInputConcept('PreciosAdquisicion', this)">Precios Adquisición (Semiterminados)</button>
             <button class="excel-tab" onclick="switchInputConcept('ManoDeObra', this)">ManoDeObra</button>
             <button class="excel-tab" onclick="switchInputConcept('fijosXprenda', this)">fijosXprenda &
               Indirectos</button>
@@ -252,13 +265,17 @@
         <div
           style="display: flex; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1.25rem;">
           <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0; white-space: nowrap;">Costeo Multitalla</h2>
-          <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
             <label for="select-matriz-producto"
               style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); white-space: nowrap;">Prenda:</label>
             <select id="select-matriz-producto" class="colegio-selector" style="min-width: 280px;"
               onchange="generarMatrizPrenda()">
               <option value="">Cargando lista de uniformes...</option>
             </select>
+            <label style="font-size: 0.8rem; color: #94a3b8; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 500; margin-left: 0.75rem;" title="Mostrar desglose tributario (Modalidad F)">
+              <input type="checkbox" id="chk-matriz-regimen-fiscal" onchange="generarMatrizPrenda()" style="cursor: pointer; accent-color: #3b82f6;">
+              <span>Modalidad F</span>
+            </label>
           </div>
         </div>
 
@@ -306,6 +323,71 @@
       </div>
     </div>
 
+    <!-- TAB: HISTORICO E INSTANTANEAS -->
+    <div id="tab-snapshots-historico" class="tab-content">
+      <div class="panel">
+        <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #334155; padding-bottom:0.75rem; margin-bottom:1.25rem; flex-wrap:wrap; gap:1rem;">
+          <h2 style="font-size:1.35rem; font-weight:700; color:#f8fafc; margin:0;">Histórico e Instantáneas de Costos</h2>
+          <button class="btn" style="background:#059669; font-weight:700; font-size:0.82rem; padding:0.45rem 1rem;" onclick="mostrarFormNuevoSnapshot()">Guardar Nueva Instantánea</button>
+        </div>
+
+        <!-- Formulario Crear Instantánea -->
+        <div id="form-snapshot-container" style="display:none; background:#1e293b; padding:1.15rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.5rem;">
+          <h4 style="margin-top:0; margin-bottom:0.75rem; color:#34d399; font-size:0.95rem;">Capturar Instantánea Completa de Costos</h4>
+          <div style="display:grid; grid-template-columns: 1fr 1.5fr auto; gap:0.85rem; align-items:end;">
+            <div>
+              <label style="font-size:0.75rem; color:#94a3b8;">Nombre de la Instantánea *</label>
+              <input type="text" id="snap-nombre" class="cell-editable-sm" style="width:100%; font-weight:600; padding:0.4rem;" placeholder="Ej. Precios Inicio Gestión 2026">
+            </div>
+            <div>
+              <label style="font-size:0.75rem; color:#94a3b8;">Notas u Observaciones (Opcional)</label>
+              <input type="text" id="snap-desc" class="cell-editable-sm" style="width:100%; padding:0.4rem;" placeholder="Ej. Ajuste previo al incremento de insumos de febrero">
+            </div>
+            <div>
+              <button class="btn" style="padding:0.5rem 1.2rem; background:#10b981; font-weight:700;" onclick="guardarNuevoSnapshot()">Guardar Snapshot</button>
+            </div>
+          </div>
+          <div style="font-size:0.72rem; color:#64748b; margin-top:0.6rem;">
+            Respaldará el estado completo actual de telas, insumos, precios de adquisición, mano de obra, mermas, costos indirectos y precios de venta.
+          </div>
+        </div>
+
+        <!-- Fila de Controles: Comparativa -->
+        <div style="background:#0f172a; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.5rem; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem;">
+          <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+            <label style="font-size:0.8rem; font-weight:700; color:#f8fafc;">Instantánea para Comparar:</label>
+            <select id="select-snap-comparar" class="colegio-selector" style="min-width:260px;" onchange="cargarComparativaSnapshots()">
+              <option value="actual">-- Seleccionar Instantánea Guardada --</option>
+            </select>
+          </div>
+          <button class="btn" style="background:#3b82f6; font-size:0.78rem; padding:0.4rem 0.85rem;" onclick="cargarSnapshotsLista()">🔄 Actualizar Lista</button>
+        </div>
+
+        <!-- Tabla Comparativa -->
+        <div class="table-container" style="max-height:650px; overflow-y:auto; border:1px solid #1e293b; border-radius:8px;">
+          <table class="table-compact-auto" style="width:100%;">
+            <thead>
+              <tr style="background:#0d131f;">
+                <th style="width:50px; text-align:center;">ITEM</th>
+                <th style="text-align:left; padding-left:0.5rem;">DESCRIPCIÓN DE PRENDA</th>
+                <th style="width:140px; text-align:center;">COLEGIO</th>
+                <th style="width:110px; text-align:center;">TIPO COSTEO</th>
+                <th style="width:120px; text-align:right;">COSTO ANTERIOR</th>
+                <th style="width:120px; text-align:right;">COSTO NUEVO</th>
+                <th style="width:120px; text-align:right;">DIFERENCIA (Bs)</th>
+                <th style="width:110px; text-align:right;">VARIACIÓN (%)</th>
+              </tr>
+            </thead>
+            <tbody id="tb-snapshots-body">
+              <tr>
+                <td colspan="8" style="text-align:center; padding:2.5rem; color:#64748b;">Seleccioná una instantánea arriba para comparar sus costos con el estado actual.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- TAB 6: CENTRO DE CONFIGURACIÓN Y ADMINISTRACIÓN DEL COLEGIO (PÁGINA INDEPENDIENTE) -->
     <div id="tab-admin-colegio" class="tab-content">
       <div class="panel">
@@ -319,16 +401,17 @@
 
           <div class="admin-tabs-bar" style="border-bottom:none; margin:0; padding:0; display:flex; align-items:center; gap:0.35rem; flex-wrap:wrap;">
             <span style="font-size:0.62rem; font-weight:800; color:#34d399; letter-spacing:1px; padding:0 0.35rem;">DE LA EMPRESA</span>
-            <button class="admin-tab-btn active" id="btn-atab-telas" onclick="switchAdminTab('telas')">🧵 Telas</button>
-            <button class="admin-tab-btn" id="btn-atab-insumos" onclick="switchAdminTab('insumos')">🧷 Insumos</button>
-            <button class="admin-tab-btn" id="btn-atab-tallas" onclick="switchAdminTab('tallas')">📏 Tallas</button>
-            <button class="admin-tab-btn" id="btn-atab-sistema" onclick="switchAdminTab('sistema')">⚙️ Parámetros</button>
+            <button class="admin-tab-btn active" id="btn-atab-telas" onclick="switchAdminTab('telas')">Telas</button>
+            <button class="admin-tab-btn" id="btn-atab-insumos" onclick="switchAdminTab('insumos')">Insumos</button>
+            <button class="admin-tab-btn" id="btn-atab-tallas" onclick="switchAdminTab('tallas')">Tallas</button>
+            <button class="admin-tab-btn" id="btn-atab-sistema" onclick="switchAdminTab('sistema')">Parámetros</button>
 
             <span style="width:1px; height:22px; background:#334155; margin:0 0.5rem;"></span>
 
             <span style="font-size:0.62rem; font-weight:800; color:#93c5fd; letter-spacing:1px; padding:0 0.35rem;">DEL COLEGIO</span>
-            <button class="admin-tab-btn" id="btn-atab-prendas" onclick="switchAdminTab('prendas')">👔 Prendas &amp; Recetas</button>
-            <button class="admin-tab-btn" id="btn-atab-colegios" onclick="switchAdminTab('colegios')">🏛️ Perfil &amp; Colegios</button>
+            <button class="admin-tab-btn" id="btn-atab-prendas" onclick="switchAdminTab('prendas')">Prendas &amp; Recetas</button>
+            <button class="admin-tab-btn" id="btn-atab-colegios" onclick="switchAdminTab('colegios')">Perfil &amp; Colegios</button>
+            <button class="admin-tab-btn" style="background:#05966922; color:#34d399; border:1px solid #05966988; margin-left:0.35rem;" onclick="switchTab('snapshots-historico'); cargarSnapshotsLista();">Instantáneas</button>
           </div>
         </div>
 
@@ -634,9 +717,10 @@
                   <tr>
                     <th style="width:60px; text-align:center;">Orden</th>
                     <th style="width:65px; text-align:center;">Item N°</th>
-                    <th style="text-align:left; min-width:320px;">Descripción de Prenda</th>
-                    <th style="width:420px; text-align:left; padding-left:0.5rem;">Tela Asignada (Selector)</th>
+                    <th style="text-align:left; min-width:300px;">Descripción de Prenda</th>
+                    <th style="width:360px; text-align:left; padding-left:0.5rem;">Tela Asignada (Selector)</th>
                     <th style="width:90px; text-align:center;">Factor Comp.</th>
+                    <th title="Marcar si es una prenda adquirida/semiterminada (chompas, chalecos, reventas) que no usa tela por metros" style="width:115px; text-align:center; cursor:help;">Semiterminado</th>
                     <th style="width:70px; text-align:center;">Activo</th>
                     <th style="width:95px; text-align:center;">Receta</th>
                   </tr>
@@ -780,12 +864,73 @@
 
   <script>
     let colegioFiltroActual = 'all';
+    let snapshotFiltroActual = 'actual';
+    let modalidadFActual = false;
+    let snapshotsGuardadosCache = [];
     let rawConsolidadaData = null;
     let currentExcelConcept = 'costoBruto';
     let currentInputConcept = 'Tela';
     let currentAccSubView = 'aux';
     let _desgloseCache = null;
     let _desgloseCacheColegioId = null;
+
+    function getSnapshotQueryParam() {
+      return (snapshotFiltroActual && snapshotFiltroActual !== 'actual') ? ('&snapshotId=' + snapshotFiltroActual) : '';
+    }
+
+    function getModalidadFQueryParam() {
+      return modalidadFActual ? '&modalidadF=true' : '';
+    }
+
+    function cambiarModalidadFGlobal(checked) {
+      console.log('[ModalidadF] cambiar a:', checked, '| URL que se enviará:', '/api/dashboard-resumen?colegioId=' + colegioFiltroActual + (checked ? '&modalidadF=true' : ''));
+      modalidadFActual = checked;
+      _desgloseCache = null;
+
+      const chkHeader = document.getElementById('global-modalidad-f-select');
+      if (chkHeader) chkHeader.checked = checked;
+
+      const chkMultitalla = document.getElementById('chk-matriz-regimen-fiscal');
+      if (chkMultitalla) chkMultitalla.checked = checked;
+
+      cargarResumen();
+      cargarInventario();
+      cargarMatrizConsolidada();
+      cargarInputConcept(currentInputConcept);
+      generarMatrizPrenda();
+      generarDesgloseProducto();
+    }
+
+    function cambiarSnapshotGlobal(val) {
+      snapshotFiltroActual = val;
+      _desgloseCache = null;
+
+      const selectHeader = document.getElementById('global-snapshot-select');
+      if (selectHeader) selectHeader.value = val;
+
+      const selectComparar = document.getElementById('select-snap-comparar');
+      if (selectComparar) selectComparar.value = val;
+
+      const banner = document.getElementById('banner-modo-simulacion');
+      const bannerNombre = document.getElementById('banner-snap-nombre');
+
+      if (val !== 'actual') {
+        const snapObj = snapshotsGuardadosCache.find(s => String(s.id) === String(val));
+        const nombreText = snapObj ? `"${snapObj.nombre}" (${new Date(snapObj.creadoEn).toLocaleDateString('es-BO')})` : val;
+        if (bannerNombre) bannerNombre.textContent = nombreText;
+        if (banner) banner.style.display = 'block';
+      } else {
+        if (banner) banner.style.display = 'none';
+      }
+
+      cargarResumen();
+      cargarInventario();
+      cargarMatrizConsolidada();
+      cargarInputConcept(currentInputConcept);
+      generarMatrizPrenda();
+      generarDesgloseProducto();
+      if (val !== 'actual') cargarComparativaSnapshots();
+    }
 
     async function cargarColegiosHeader() {
       try {
@@ -979,6 +1124,10 @@
         generarMatrizPrenda();
       } else if (tabId === 'admin-colegio') {
         cargarConfigAdminColegio();
+      } else if (tabId === 'inventario') {
+        cargarInventario();
+      } else if (tabId === 'snapshots-historico') {
+        cargarSnapshotsLista();
       }
     }
 
@@ -1007,7 +1156,7 @@
 
     async function cargarResumen() {
       try {
-        const res = await fetch('/api/dashboard-resumen?colegioId=' + colegioFiltroActual);
+        const res = await fetch('/api/dashboard-resumen?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam());
         const data = await res.json();
 
         document.getElementById('st-prendas-kpi').textContent = data.productosCount || 0;
@@ -1019,6 +1168,11 @@
 
         const pctGananciaInversion = data.totalValorCostoBs > 0 ? ((data.gananciaTotalBs / data.totalValorCostoBs) * 100).toFixed(1) : '0.0';
         document.getElementById('st-ganancia-sub').textContent = `+${pctGananciaInversion}% de ganancia sobre la inversión`;
+
+        const titleEl = document.getElementById('resumen-panel-title');
+        if (titleEl) {
+          titleEl.innerHTML = `Resumen Ejecutivo de Prendas, Precios y Valorización <span style="background:${modalidadFActual ? '#064e3b' : '#334155'}; color:${modalidadFActual ? '#34d399' : '#fbbf24'}; padding:0.25rem 0.6rem; border-radius:6px; font-size:0.75rem; margin-left:0.5rem; font-weight:700; border:1px solid ${modalidadFActual ? '#059669' : '#475569'};">${modalidadFActual ? 'Modo: Con Factura (IVA 13%)' : 'Modo: Sin Factura (Venta Directa)'}</span>`;
+        }
 
         const tbody = document.getElementById('tb-resumen-prendas');
         if (data.prendas && data.prendas.length > 0) {
@@ -1121,7 +1275,7 @@
       const selectedItemNum = selectEl.value;
       const selectedTallaId = tallaSel ? tallaSel.value : '';
 
-      let url = '/api/inputs/desglose-inteligente-producto?colegioId=' + colegioFiltroActual;
+      let url = '/api/inputs/desglose-inteligente-producto?colegioId=' + colegioFiltroActual + getSnapshotQueryParam();
       if (selectedItemNum) url += '&itemNumero=' + selectedItemNum;
       if (selectedTallaId) url += '&tallaId=' + selectedTallaId;
 
@@ -1333,6 +1487,19 @@
         console.error(err);
         container.innerHTML = '<div style="text-align:center; padding:2.5rem; color:var(--danger);">❌ Error al cargar los datos de producción.</div>';
       }
+    }
+
+    function switchInputConcept(concept, btnElem) {
+      currentInputConcept = concept;
+      document.querySelectorAll('#tab-inputs-excel .excel-tab').forEach(b => b.classList.remove('active'));
+      if (btnElem) btnElem.classList.add('active');
+
+      const accSelector = document.getElementById('acc-view-selector');
+      if (accSelector) {
+        accSelector.style.display = concept === 'Acc' ? 'flex' : 'none';
+      }
+
+      cargarInputConcept(concept);
     }
 
     async function cargarInputConcept(concept) {
@@ -1631,6 +1798,39 @@
                   </div>
                 </td>`;
           }).join('')}
+            </tr>
+          `).join('');
+        }
+      } else if (concept === 'PreciosAdquisicion') {
+        const res = await fetch('/api/inputs/precios-adquisicion?colegioId=' + colegioFiltroActual);
+        const json = await res.json();
+        const tallasHeader = json.tallas || [];
+
+        tableElem.style.minWidth = '';
+        thead.innerHTML = `
+          <tr style="background:#0d131f;">
+            <th style="width:36px; text-align:center; padding:0.35rem 0.15rem; font-size:0.68rem;">ITEM</th>
+            <th style="text-align:left; padding:0.35rem 0.35rem; font-size:0.7rem;">DESCRIPCIÓN DE PRENDA (SEMITERMINADA / ADQUIRIDA)</th>
+            ${tallasHeader.map(t => `<th style="width:70px; text-align:center; padding:0.35rem 0.15rem; font-size:0.68rem;">${t.codigo}</th>`).join('')}
+          </tr>
+        `;
+
+        if (!json.data || json.data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="' + (2 + tallasHeader.length) + '" style="text-align:center; padding:2rem; color:#64748b;">No hay prendas marcadas como Semiterminadas/Adquiridas. Marcalas con el Checkbox "Semiterminado" en Configuración > Prendas & Recetas.</td></tr>';
+        } else {
+          tbody.innerHTML = json.data.map(p => `
+            <tr>
+              <td style="text-align:center; padding:0.25rem 0.15rem;"><span class="col-item">${p.itemNumero}</span></td>
+              <td style="text-align:left; padding:0.25rem 0.35rem; font-size:0.75rem;"><strong>${p.descripcion}</strong></td>
+              ${tallasHeader.map(t => {
+                const tInfo = (p.tallas && p.tallas[t.codigo]) || {};
+                const precio = tInfo.precioBs || 0;
+                return `<td style="text-align:center; padding:0.2rem 0.15rem;">
+                  <input type="number" class="cell-editable-sm" style="width:100%; text-align:right; font-size:0.75rem; font-weight:600;"
+                    value="${precio > 0 ? precio : ''}" placeholder="0.00" step="0.5" min="0"
+                    onchange="guardarPrecioAdquisicionLive('${p.productoId}', '${tInfo.tallaId}', this.value)">
+                </td>`;
+              }).join('')}
             </tr>
           `).join('');
         }
@@ -1953,7 +2153,7 @@
 
     async function cargarMatrizConsolidada() {
       try {
-        const res = await fetch('/api/calculo/matriz-consolidada?colegioId=' + colegioFiltroActual);
+        const res = await fetch('/api/calculo/matriz-consolidada?colegioId=' + colegioFiltroActual + getSnapshotQueryParam());
         const json = await res.json();
         if (json.success) {
           rawConsolidadaData = json;
@@ -2220,7 +2420,7 @@
       if (!productoId) return;
 
       try {
-        const res = await fetch('/api/calculo/matriz-prenda/' + productoId);
+        const res = await fetch('/api/calculo/matriz-prenda/' + productoId + '?colegioId=' + colegioFiltroActual + getSnapshotQueryParam());
         const json = await res.json();
         if (json.success && json.data) {
           const container = document.getElementById('matriz-container');
@@ -2251,29 +2451,81 @@
           let htmlHead = `<tr><th>Concepto / Talla</th>${tallas.map(t => `<th style="text-align:center;">${t.tallaCodigo}</th>`).join('')}</tr>`;
           document.querySelector('#matriz-container table thead').innerHTML = htmlHead;
 
-          let rows = [
-            { name: 'Costo de tela', desc: 'Costo directo de la tela por prenda calculado según su peso con merma y el precio por metro o kilo de tela.', key: 'costoTela', fmt: v => v ? v.toFixed(2) : '-' },
-            { name: 'Costo accesorios', desc: 'Suma del costo de todos los insumos (botones, cierres, hilos, elásticos, etiquetas) usados en la prenda.', key: 'costoAccesorios', fmt: v => v ? v.toFixed(2) : '-' },
-            { name: 'Mano de Obra Directa', desc: 'Costo directo pagado por el corte, confección y armado de la prenda según su rango de talla.', key: 'costoManoObra', fmt: v => v ? '<span style="color:white;">' + v.toFixed(2) + '</span>' : '-' },
-            { name: 'Costos Indirectos', desc: 'Pool de gastos indirectos de taller prorrateado sobre el volumen ANUAL y proporcional al factor de complejidad, normalizado para que la suma absorbida iguale el pool. Antes se prorrateaba sobre la producción del mes, así que la misma prenda costaba distinto según cuándo se produjo.', key: 'costoIndirecto', fmt: v => v ? '<span style="color:white;">' + v.toFixed(2) + '</span>' : '-' },
-            { name: 'Costo unitario neto', desc: 'El costo completo de producir la prenda. NO incluye IVA: el IVA de compras es crédito fiscal recuperable, no un costo. Antes este número se mostraba inflado un 13%.', key: 'costoUnitarioNeto', fmt: v => v ? '<strong style="color:#f97316;">' + v.toFixed(2) + '</strong>' : '-' },
-            { name: 'Precio de Venta al Público', desc: 'Precio de lista CON factura fijado para esta talla. La venta sin factura aplica el descuento configurado.', key: 'precioVenta', fmt: v => v ? '<strong>' + v.toFixed(2) + '</strong>' : '-' },
-            { name: 'Ingreso neto con factura', desc: 'Lo que queda del precio de lista después del débito fiscal. El IVA boliviano va por dentro: de 100 Bs quedan 87.', key: 'ingresoNetoConFactura', fmt: v => v ? v.toFixed(2) : '-' },
-            { name: 'Ingreso neto sin factura', desc: 'Precio de lista menos el descuento por no facturar. No se debe débito fiscal, pero el crédito fiscal de las compras queda sin usar.', key: 'ingresoNetoSinFactura', fmt: v => v ? v.toFixed(2) : '-' },
-            { name: 'Utilidad con factura', desc: 'Ingreso neto con factura menos el costo unitario neto.', key: 'utilidadConFactura', fmt: v => v !== null && v !== 0 ? '<strong style="color:var(--success);">' + v.toFixed(2) + '</strong>' : '-' },
-            { name: 'Utilidad sin factura', desc: 'Ingreso neto sin factura menos el costo unitario neto.', key: 'utilidadSinFactura', fmt: v => v !== null && v !== 0 ? '<strong style="color:var(--success);">' + v.toFixed(2) + '</strong>' : '-' },
-            { name: 'Margen con factura (%)', desc: 'Utilidad sobre el ingreso efectivamente cobrado, no sobre el precio de lista. Medir contra plata que nunca entra sobreestima la rentabilidad.', key: 'margenConFactura', fmt: v => v !== null && v !== 0 ? `<strong style="color:${getMarginColor(v)}; font-weight:700;">` + v.toFixed(2) + '%</strong>' : '-' },
-            { name: 'Margen sin factura (%)', desc: 'El mismo margen para el canal sin factura. Comparar los dos dice qué canal conviene a este precio.', key: 'margenSinFactura', fmt: v => v !== null && v !== 0 ? `<strong style="color:${getMarginColor(v)}; font-weight:700;">` + v.toFixed(2) + '%</strong>' : '-' }
+          const totalCols = tallas.length + 1;
+          const showFacturaSection = modalidadFActual;
+
+          const sections = [
+            {
+              title: 'Estructura del Costo Unitario de Producción (Neto)',
+              color: '#94a3b8',
+              bg: 'linear-gradient(90deg, #1e293b, #0f172a)',
+              rows: [
+                { name: 'Costo de tela', desc: 'Costo directo de la tela por prenda calculado según su peso con merma y el precio por metro o kilo de tela.', key: 'costoTela', fmt: v => v ? v.toFixed(2) : '-' },
+                { name: 'Costo accesorios', desc: 'Suma del costo de todos los insumos (botones, cierres, hilos, elásticos, etiquetas) usados en la prenda.', key: 'costoAccesorios', fmt: v => v ? v.toFixed(2) : '-' },
+                { name: 'Mano de Obra Directa', desc: 'Costo directo pagado por el corte, confección y armado de la prenda según su rango de talla.', key: 'costoManoObra', fmt: v => v ? v.toFixed(2) : '-' },
+                { name: 'Costos Indirectos Prorrateados', desc: 'Pool de gastos indirectos de taller prorrateado sobre el volumen ANUAL y proporcional al factor de complejidad.', key: 'costoIndirecto', fmt: v => v ? v.toFixed(2) : '-' },
+                { name: 'Costo Unitario Neto', desc: 'El costo completo de producir la prenda. NO incluye IVA (crédito fiscal recuperable).', key: 'costoUnitarioNeto', isTotal: true, fmt: v => v ? `<strong style="color:#f97316; font-size:0.92rem;">${v.toFixed(2)}</strong>` : '-' }
+              ]
+            },
+            {
+              title: 'Precio al Público',
+              color: '#38bdf8',
+              bg: 'linear-gradient(90deg, #0369a133, #0f172a)',
+              rows: [
+                { name: 'Precio de Venta al Público (Bs.)', desc: 'Precio de lista de venta al público fijado para esta talla.', key: 'precioVenta', isPrice: true, fmt: v => v ? `<strong style="color:#38bdf8; font-size:0.92rem;">${v.toFixed(2)}</strong>` : '-' }
+              ]
+            },
+            ...(showFacturaSection ? [{
+              title: 'Canal Con Factura (Venta Oficial - Con Débito Fiscal IVA 13%)',
+              color: '#34d399',
+              bg: 'linear-gradient(90deg, #064e3b44, #0f172a)',
+              rows: [
+                { name: 'Ingreso Neto Con Factura', desc: 'Lo que queda del precio de lista después del débito fiscal IVA (13%). De 100 Bs quedan 87 Bs.', key: 'ingresoNetoConFactura', fmt: v => v ? v.toFixed(2) : '-' },
+                { name: 'Utilidad Con Factura (Bs.)', desc: 'Ingreso neto con factura menos el costo unitario neto.', key: 'utilidadConFactura', fmt: v => v !== null && v !== 0 ? `<strong style="color:#34d399; font-weight:700;">${v.toFixed(2)}</strong>` : '-' },
+                { name: 'Margen Con Factura (%)', desc: 'Utilidad sobre el ingreso efectivamente cobrado (con factura).', key: 'margenConFactura', fmt: v => v !== null && v !== 0 ? `<strong style="color:${getMarginColor(v)}; font-weight:800; font-size:0.9rem;">${v.toFixed(2)}%</strong>` : '-' }
+              ]
+            }] : []),
+            {
+              title: showFacturaSection ? 'Canal Sin Factura (Venta Directa - Con Descuento Configurado)' : 'Resultados de Venta Directa / Margen Efectivo',
+              color: '#fbbf24',
+              bg: 'linear-gradient(90deg, #78350f44, #0f172a)',
+              rows: [
+                { name: 'Ingreso Neto Efectivo', desc: 'Precio de lista menos el descuento por venta directa sin factura.', key: 'ingresoNetoSinFactura', fmt: v => v ? v.toFixed(2) : '-' },
+                { name: 'Utilidad Neta (Bs.)', desc: 'Ingreso neto sin factura menos el costo unitario neto.', key: 'utilidadSinFactura', fmt: v => v !== null && v !== 0 ? `<strong style="color:#fbbf24; font-weight:700;">${v.toFixed(2)}</strong>` : '-' },
+                { name: 'Margen de Ganancia (%)', desc: 'Margen de ganancia efectivo para la venta directa sin factura.', key: 'margenSinFactura', fmt: v => v !== null && v !== 0 ? `<strong style="color:${getMarginColor(v)}; font-weight:800; font-size:0.9rem;">${v.toFixed(2)}%</strong>` : '-' }
+              ]
+            }
           ];
 
-          tbody.innerHTML = rows.map(r => `
-            <tr>
-              <td title="${r.desc}" style="cursor:help; border-right:1px solid var(--border); padding-left:0.5rem;">
-                <span style="border-bottom:1px dotted #818cf8;"><strong>${r.name}</strong></span>
-              </td>
-              ${tallas.map(t => `<td style="text-align:center;">${r.fmt(t[r.key])}</td>`).join('')}
-            </tr>
-          `).join('');
+          let tbodyHtml = '';
+          for (const sec of sections) {
+            tbodyHtml += `
+              <tr style="background:${sec.bg}; border-top:2px solid #334155; border-bottom:1px solid #334155;">
+                <td colspan="${totalCols}" style="padding:0.5rem 0.75rem; color:${sec.color}; font-size:0.73rem; font-weight:800; text-transform:uppercase; letter-spacing:0.06em;">
+                  ${sec.title}
+                </td>
+              </tr>
+            `;
+
+            for (const r of sec.rows) {
+              let rowStyle = '';
+              if (r.isTotal) {
+                rowStyle = 'background:rgba(245, 158, 11, 0.08); border-top:2px solid #f59e0b66; border-bottom:2px solid #f59e0b66;';
+              } else if (r.isPrice) {
+                rowStyle = 'background:rgba(56, 189, 248, 0.06); border-top:1px solid #38bdf844; border-bottom:1px solid #38bdf844;';
+              }
+
+              tbodyHtml += `
+                <tr style="${rowStyle}">
+                  <td title="${r.desc}" style="cursor:help; border-right:1px solid var(--border); padding:0.45rem 0.5rem 0.45rem 0.75rem; font-size:0.82rem;">
+                    ${r.isTotal ? `<strong style="color:#fbbf24; font-weight:800; font-size:0.88rem;">${r.name}</strong>` : (r.isPrice ? `<strong style="color:#38bdf8; font-weight:800; font-size:0.88rem;">${r.name}</strong>` : `<span style="border-bottom:1px dotted #818cf8;"><strong>${r.name}</strong></span>`)}
+                  </td>
+                  ${tallas.map(t => `<td style="text-align:center; padding:0.45rem 0.35rem; font-size:0.83rem;">${r.fmt(t[r.key])}</td>`).join('')}
+                </tr>
+              `;
+            }
+          }
+          tbody.innerHTML = tbodyHtml;
         }
       } catch (e) { console.error(e); }
     }
@@ -2616,6 +2868,9 @@
             <input type="number" id="ap-factor-${p.id}" class="cell-editable-sm" style="width:55px; text-align:center;" value="${p.factorComplejidad || 1}" step="0.1" min="0.5">
           </td>
           <td style="text-align:center;">
+            <input type="checkbox" id="ap-semiterminado-${p.id}" ${p.modoCosteo === 'adquirido' ? 'checked' : ''} onchange="toggleModoCosteoPrenda('${p.id}', this.checked)" title="Marcar si es prenda adquirida/semiterminada (chompas, chalecos, reventas)">
+          </td>
+          <td style="text-align:center;">
             <input type="checkbox" id="ap-act-${p.id}" ${p.activo ? 'checked' : ''}>
           </td>
           <td style="text-align:center;">
@@ -2956,6 +3211,7 @@
         descripcion: document.getElementById('ap-desc-' + p.id).value.trim(),
         telaId: document.getElementById('ap-tela-' + p.id).value || null,
         factorComplejidad: parseFloat(document.getElementById('ap-factor-' + p.id).value) || 1,
+        modoCosteo: document.getElementById('ap-semiterminado-' + p.id)?.checked ? 'adquirido' : 'confeccion',
         activo: document.getElementById('ap-act-' + p.id).checked
       }));
 
@@ -3625,8 +3881,145 @@
       } catch (e) { alert('Error al crear colegio: ' + e); }
     }
 
+    async function guardarPrecioAdquisicionLive(productoId, tallaId, precioBs) {
+      try {
+        const res = await fetch('/api/inputs/precios-adquisicion', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productoId, tallaId, precioBs: parseFloat(precioBs) || 0 })
+        });
+        const json = await res.json();
+        if (json.success) {
+          await refrescarCosteoTrasReceta();
+        }
+      } catch (e) { alert('Error al guardar precio de adquisición: ' + e); }
+    }
+
+    async function toggleModoCosteoPrenda(productoId, isAdquirido) {
+      try {
+        const modoCosteo = isAdquirido ? 'adquirido' : 'confeccion';
+        const res = await fetch('/api/productos/' + productoId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ modoCosteo })
+        });
+        const json = await res.json();
+        if (json.success) {
+          await cargarResumen();
+          await cargarMatrizConsolidada();
+          cargarInputConcept(currentInputConcept);
+          await cargarConfigAdminColegio();
+        } else {
+          alert('Error al cambiar modo de costeo: ' + (json.error || 'error'));
+        }
+      } catch (e) { alert('Error al cambiar modo de costeo: ' + e); }
+    }
+
+    function mostrarFormNuevoSnapshot() {
+      const container = document.getElementById('form-snapshot-container');
+      if (container) container.style.display = container.style.display === 'none' ? 'block' : 'none';
+    }
+
+    async function cargarSnapshotsLista() {
+      try {
+        const res = await fetch('/api/snapshots');
+        const json = await res.json();
+
+        if (json.success && json.data) {
+          snapshotsGuardadosCache = json.data;
+
+          const optsHeader = '<option value="actual">🔴 Datos Actuales (En Vivo)</option>' +
+            json.data.map(s => `<option value="${s.id}">📸 ${s.nombre} (${new Date(s.creadoEn).toLocaleDateString('es-BO')})</option>`).join('');
+
+          const selectHeader = document.getElementById('global-snapshot-select');
+          if (selectHeader) selectHeader.innerHTML = optsHeader;
+
+          const selectComparar = document.getElementById('select-snap-comparar');
+          if (selectComparar) {
+            selectComparar.innerHTML = '<option value="actual">-- Seleccionar Instantánea Guardada --</option>' +
+              json.data.map(s => `<option value="${s.id}">📸 ${s.nombre} (${new Date(s.creadoEn).toLocaleDateString('es-BO')})</option>`).join('');
+          }
+
+          if (selectHeader) selectHeader.value = snapshotFiltroActual;
+          if (selectComparar && snapshotFiltroActual !== 'actual') selectComparar.value = snapshotFiltroActual;
+        }
+      } catch (e) { console.error('Error al cargar lista de snapshots:', e); }
+    }
+
+    async function guardarNuevoSnapshot() {
+      const nombre = document.getElementById('snap-nombre').value.trim();
+      const descripcion = document.getElementById('snap-desc').value.trim();
+
+      if (!nombre) return alert('Por favor ingresa un nombre para la instantánea.');
+
+      try {
+        const res = await fetch('/api/snapshots', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre, descripcion, colegioId: colegioFiltroActual })
+        });
+        const json = await res.json();
+        if (json.success) {
+          alert('🎉 Instantánea de costos respaldada exitosamente.');
+          document.getElementById('snap-nombre').value = '';
+          document.getElementById('snap-desc').value = '';
+          document.getElementById('form-snapshot-container').style.display = 'none';
+          await cargarSnapshotsLista();
+        } else {
+          alert('Error al guardar la instantánea: ' + (json.error || 'error'));
+        }
+      } catch (e) { alert('Error al guardar instantánea: ' + e); }
+    }
+
+    async function cargarComparativaSnapshots() {
+      const snapshotId = document.getElementById('select-snap-comparar').value;
+      const tbody = document.getElementById('tb-snapshots-body');
+      if (!tbody) return;
+
+      if (snapshotId === 'actual') {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:2.5rem; color:#64748b;">Seleccioná una instantánea arriba para comparar sus costos con el estado actual.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:2rem; color:#94a3b8;">Calculando comparativa de costos...</td></tr>';
+
+      try {
+        const res = await fetch('/api/snapshots/comparar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ snapshotId, colegioId: colegioFiltroActual })
+        });
+        const json = await res.json();
+
+        if (!json.success || !json.comparativa || json.comparativa.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:2rem; color:#64748b;">No hay datos para comparar.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = json.comparativa.map(p => {
+          const colorVar = p.diferenciaBs > 0 ? '#f87171' : (p.diferenciaBs < 0 ? '#34d399' : '#94a3b8');
+          const signo = p.diferenciaBs > 0 ? '+' : '';
+          return `
+            <tr>
+              <td style="text-align:center;"><span class="col-item">${p.itemNumero}</span></td>
+              <td style="text-align:left; padding-left:0.5rem;"><strong>${p.descripcion}</strong></td>
+              <td style="text-align:center; font-size:0.75rem; color:#94a3b8;">${p.colegioNombre}</td>
+              <td style="text-align:center;"><span class="badge-tag" style="font-size:0.68rem; background:${p.modoCosteo === 'adquirido' ? '#f59e0b22' : '#10b98122'}; color:${p.modoCosteo === 'adquirido' ? '#fbbf24' : '#34d399'};">${p.modoCosteo === 'adquirido' ? 'adquirido' : 'confeccion'}</span></td>
+              <td style="text-align:right; font-weight:600; color:#94a3b8;">Bs. ${p.costoAnteriorBs.toFixed(2)}</td>
+              <td style="text-align:right; font-weight:700; color:#f8fafc;">Bs. ${p.costoNuevoBs.toFixed(2)}</td>
+              <td style="text-align:right; font-weight:700; color:${colorVar};">${signo}Bs. ${p.diferenciaBs.toFixed(2)}</td>
+              <td style="text-align:right; font-weight:800; color:${colorVar};">${signo}${p.variacionPct.toFixed(1)}%</td>
+            </tr>
+          `;
+        }).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:2rem; color:#f87171;">Error al calcular comparativa: ' + e + '</td></tr>';
+      }
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
       await cargarColegiosHeader();
+      await cargarSnapshotsLista();
       cargarResumen();
       cargarInventario();
       initCrosshairHighlighting();

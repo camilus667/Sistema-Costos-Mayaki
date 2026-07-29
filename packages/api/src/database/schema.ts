@@ -302,6 +302,19 @@ export const auditoria = sqliteTable('auditoria', {
 });
 
 // ============================================
+// INSTANTANEAS / SNAPSHOTS DE COSTOS
+// ============================================
+export const costoSnapshots = sqliteTable('costo_snapshot', {
+  id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
+  nombre: text('nombre').notNull(),
+  descripcion: text('descripcion'),
+  colegioId: text('colegio_id').references(() => colegios.id),
+  datosJson: text('datos_json').notNull(),
+  creadoPor: text('creado_por'),
+  creadoEn: text('creado_en').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+// ============================================
 // CONFIGURACION SISTEMA (Parámetros Generales)
 // ============================================
 export const configuracionSistema = sqliteTable('configuracion_sistema', {
