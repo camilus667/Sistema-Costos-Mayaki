@@ -190,6 +190,7 @@ api.get('/tabla-auxiliar-accesorios', async (c) => {
 
     return {
       id: a.id,
+      colegioId: a.colegioId,
       codigo: codeNum,
       descripcion: a.descripcion,
       unidadCompra: aux.unidadCompra,
@@ -204,6 +205,17 @@ api.get('/tabla-auxiliar-accesorios', async (c) => {
     };
   });
 
+  data.sort((a: any, b: any) => {
+    const numA = typeof a.codigo === 'number' ? a.codigo : parseInt(String(a.codigo || ''), 10);
+    const numB = typeof b.codigo === 'number' ? b.codigo : parseInt(String(b.codigo || ''), 10);
+    const validA = !isNaN(numA);
+    const validB = !isNaN(numB);
+    if (validA && validB) return numA - numB;
+    if (validA) return -1;
+    if (validB) return 1;
+    return String(a.descripcion || '').localeCompare(String(b.descripcion || ''));
+  });
+
   return c.json({ success: true, data });
 });
 
@@ -214,6 +226,7 @@ api.put('/tabla-auxiliar-accesorios/:id', async (c) => {
   const body = await c.req.json();
 
   const {
+    descripcion,
     unidadCompra,
     cantidadXUd,
     costoUdCompra,
@@ -226,13 +239,18 @@ api.put('/tabla-auxiliar-accesorios/:id', async (c) => {
   } = body;
 
   try {
+    const setPayload: any = {
+      unidadCompra: unidadCompra || 'unidad',
+      cantidadXUd: Number(cantidadXUd) || 1,
+      costoUdCompra: Number(costoUdCompra) || 0,
+      costoUnitario: Number(costoUnitario) || 0,
+    };
+    if (descripcion && typeof descripcion === 'string') {
+      setPayload.descripcion = descripcion.trim();
+    }
+
     await db.update(accesorios)
-      .set({
-        unidadCompra: unidadCompra || 'unidad',
-        cantidadXUd: Number(cantidadXUd) || 1,
-        costoUdCompra: Number(costoUdCompra) || 0,
-        costoUnitario: Number(costoUnitario) || 0,
-      })
+      .set(setPayload)
       .where(eq(accesorios.id, id));
 
     const inputs = loadExcelInputs();
@@ -400,7 +418,17 @@ api.get('/accesorios-matriz', async (c) => {
   if (filtrar) {
     accQuery = accQuery.where(or(eq(accesorios.colegioId, colegioId), isNull(accesorios.colegioId)));
   }
-  const dbAccs = await accQuery.orderBy(asc(accesorios.descripcion));
+  const dbAccs = await accQuery;
+  dbAccs.sort((a: any, b: any) => {
+    const numA = parseInt(String(a.codigo || ''), 10);
+    const numB = parseInt(String(b.codigo || ''), 10);
+    const validA = !isNaN(numA);
+    const validB = !isNaN(numB);
+    if (validA && validB) return numA - numB;
+    if (validA) return -1;
+    if (validB) return 1;
+    return String(a.descripcion || '').localeCompare(String(b.descripcion || ''));
+  });
 
   const headerList: string[] = dbAccs.map((a: any) => String(a.descripcion).trim());
 

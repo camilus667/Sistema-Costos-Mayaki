@@ -49,7 +49,17 @@ api.get('/', async (c) => {
     query = query.where(or(eq(accesorios.colegioId, colegioId), isNull(accesorios.colegioId)));
   }
 
-  const allAccesorios = await query.orderBy(asc(accesorios.descripcion));
+  const allAccesorios = await query;
+  allAccesorios.sort((a: any, b: any) => {
+    const numA = parseInt(String(a.codigo || ''), 10);
+    const numB = parseInt(String(b.codigo || ''), 10);
+    const validA = !isNaN(numA);
+    const validB = !isNaN(numB);
+    if (validA && validB) return numA - numB;
+    if (validA) return -1;
+    if (validB) return 1;
+    return String(a.descripcion || '').localeCompare(String(b.descripcion || ''));
+  });
 
   return c.json({
     success: true,
@@ -88,10 +98,22 @@ api.post('/', zValidator('json', crearAccesorioSchema), async (c) => {
   const cantidadXUd = body.cantidadXUd;
   const costoUnitario = body.costoUnitario ?? (cantidadXUd > 0 ? body.costoUdCompra / cantidadXUd : 0);
 
+  let codigo = body.codigo;
+  if (!codigo) {
+    const all = await db.select({ codigo: accesorios.codigo }).from(accesorios);
+    let maxCode = 0;
+    for (const item of all) {
+      const num = parseInt(String(item.codigo || ''), 10);
+      if (!isNaN(num) && num > maxCode) maxCode = num;
+    }
+    codigo = String(maxCode + 1);
+  }
+
   const [newAccesorio] = await db
     .insert(accesorios)
     .values({
       ...body,
+      codigo,
       colegioId: body.colegioId || null,
       costoUnitario: Math.round(costoUnitario * 10000) / 10000,
     })
