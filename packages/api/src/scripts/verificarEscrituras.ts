@@ -127,8 +127,51 @@ async function main() {
     console.log(`\nAviso: hay ${restos} fila(s) de una corrida anterior. Se limpian al final.`);
   }
 
-  const colegioId = String(await unoDesdeDisco('SELECT id FROM colegio LIMIT 1;'));
-  console.log(`Colegio:  ${colegioId}`);
+  // ---------------------------------------------------------------- colegio
+  //
+  // Elegir el colegio CON PRENDAS, y no el primero que devuelva la base.
+  //
+  // La primera version hacia `SELECT id FROM colegio LIMIT 1`, que asumia que hay un
+  // solo colegio. En cuanto aparecio el segundo, el script agarro el nuevo —sin
+  // prendas— y reporto cinco fallas que no eran bugs: las telas del colegio eran 11 y
+  // no 12 porque el tartan es del otro, y el item 16 no existia. Escribi un verificador
+  // con el mismo supuesto de un solo colegio que veniamos sacando del sistema.
+  const colegios = await filasDesdeDisco(`
+    SELECT c.id, c.nombre, COUNT(p.id) AS prendas
+    FROM colegio c
+    LEFT JOIN producto p ON p.colegio_id = c.id
+    GROUP BY c.id, c.nombre
+    ORDER BY prendas DESC, c.nombre;
+  `);
+
+  if (colegios.length === 0) {
+    console.log('\nABORTA: no hay ningun colegio en la base.');
+    process.exit(1);
+  }
+
+  console.log(`Colegios:  ${colegios.length}`);
+  for (const [cid, nombre, prendas] of colegios) {
+    console.log(`  ${String(nombre).padEnd(24)} ${String(prendas).padStart(3)} prenda(s)  ${cid}`);
+  }
+
+  const colegioId = String(colegios[0][0]);
+  const prendasDelColegio = Number(colegios[0][2]);
+  console.log(`Se usa:    ${colegios[0][1]} (el que tiene mas prendas)`);
+
+  if (prendasDelColegio === 0) {
+    console.log('\nABORTA: ningun colegio tiene prendas, no hay nada que sondear.');
+    process.exit(1);
+  }
+
+  // Las telas que ESE colegio tiene que ver: las compartidas mas las propias. Con un
+  // solo colegio eso es el total de la tabla; con dos, no.
+  const telasCompartidas = Number(await unoDesdeDisco('SELECT COUNT(*) FROM tela WHERE colegio_id IS NULL;'));
+  const telasPropias = Number(await unoDesdeDisco(
+    `SELECT COUNT(*) FROM tela WHERE colegio_id = '${esc(colegioId)}';`
+  ));
+  const telasVisibles = telasCompartidas + telasPropias;
+  const telasTotales = Number(await unoDesdeDisco('SELECT COUNT(*) FROM tela;'));
+  console.log(`Telas:     ${telasVisibles} visibles para este colegio (${telasCompartidas} compartidas + ${telasPropias} propias) de ${telasTotales} en la base`);
   console.log('');
 
   // ==========================================================================
@@ -236,18 +279,16 @@ async function main() {
   console.log('  3. CATALOGO COMPARTIDO  —  el filtro que escondia las telas genericas');
   console.log(SEP);
 
-  const telasEnBase = Number(await unoDesdeDisco('SELECT COUNT(*) FROM tela;'));
-  const compartidas = Number(await unoDesdeDisco('SELECT COUNT(*) FROM tela WHERE colegio_id IS NULL;'));
-
   const conColegio = await http('GET', `/api/telas?colegioId=${encodeURIComponent(colegioId)}`);
   const nCon = Array.isArray(conColegio.json?.data) ? conColegio.json.data.length : -1;
   anotar(
     'GET /api/telas?colegioId= devuelve las compartidas mas las del colegio',
-    nCon === telasEnBase,
-    `devolvio ${nCon}, en la base hay ${telasEnBase} (${compartidas} compartidas). ` +
-      (nCon === telasEnBase - compartidas
+    nCon === telasVisibles,
+    `devolvio ${nCon}, visibles para este colegio ${telasVisibles} ` +
+      `(${telasCompartidas} compartidas + ${telasPropias} propias). ` +
+      (nCon === telasPropias && telasCompartidas > 0
         ? 'Devolvio SOLO las del colegio: el filtro sigue sin el IS NULL.'
-        : nCon === telasEnBase
+        : nCon === telasVisibles
           ? 'Correcto.'
           : 'Conteo inesperado, mirar a mano.')
   );
@@ -256,8 +297,8 @@ async function main() {
   const nSin = Array.isArray(sinColegio.json?.data) ? sinColegio.json.data.length : -1;
   anotar(
     'GET /api/telas sin filtro devuelve todas',
-    nSin === telasEnBase,
-    `devolvio ${nSin}, esperado ${telasEnBase}.`
+    nSin === telasTotales,
+    `devolvio ${nSin}, en la base hay ${telasTotales}.`
   );
 
   // ==========================================================================
@@ -270,16 +311,21 @@ async function main() {
   console.log('  3b. PANTALLA DE CONFIGURACION  —  el endpoint que la alimenta');
   console.log(SEP);
 
-  const tallasEnBase = Number(await unoDesdeDisco('SELECT COUNT(*) FROM talla;'));
+  const tallasEnBase = Number(await unoDesdeDisco(
+    `SELECT COUNT(*) FROM talla WHERE colegio_id IS NULL OR colegio_id = '${esc(colegioId)}';`
+  ));
   const cfg = await http('GET', `/api/colegios/${encodeURIComponent(colegioId)}/config`);
   const nCfgTelas = Array.isArray(cfg.json?.telas) ? cfg.json.telas.length : -1;
   const nCfgTallas = Array.isArray(cfg.json?.tallas) ? cfg.json.tallas.length : -1;
 
   anotar(
     'GET /api/colegios/:id/config trae TODAS las telas visibles',
-    nCfgTelas === telasEnBase,
-    `devolvio ${nCfgTelas} telas, en la base hay ${telasEnBase}. ` +
-      (nCfgTelas === 1 ? 'Devolvio solo el tartan: el filtro sigue sin el IS NULL.' : 'Correcto.')
+    nCfgTelas === telasVisibles,
+    `devolvio ${nCfgTelas} telas, visibles ${telasVisibles} ` +
+      `(${telasCompartidas} compartidas + ${telasPropias} propias). ` +
+      (nCfgTelas === telasPropias && telasCompartidas > 0
+        ? 'Devolvio solo las propias: el filtro sigue sin el IS NULL.'
+        : 'Correcto.')
   );
 
   anotar(
@@ -363,21 +409,42 @@ async function main() {
   // pantalla mostraba 0,00, porque la columna del Excel se llama "Ojal Grande" y el
   // accesorio de la base "Ojal grande". Con las columnas saliendo del catalogo, esa
   // discrepancia de grafias no puede existir.
-  const fila16 = (matriz.json?.data || []).find((f: any) => Number(f.itemNumero) === 16);
-  const colOjal = fila16
-    ? Object.keys(fila16.accesorios || {}).find((k) => k.toLowerCase() === 'ojal grande')
-    : undefined;
-  const costoOjal = colOjal ? Number(fila16.accesorios[colOjal]) : -1;
-  anotar(
-    'el Ojal grande de la Falda plisada muestra 1,60 y no 0,00',
-    Math.abs(costoOjal - 1.6) < 0.005,
-    `columna "${colOjal}" = ${costoOjal} Bs. ` +
-      (costoOjal === 0
-        ? 'Sigue en cero: la union por nombre no se elimino.'
-        : costoOjal < 0
-          ? 'No hay ninguna columna llamada "Ojal grande" en la respuesta.'
+  // Se busca la prenda que EFECTIVAMENTE lleva el Ojal, en vez de hardcodear el item
+  // 16. Hardcodearlo asumia que existe la Falda plisada de Cambridge, y ese supuesto se
+  // rompio en cuanto hubo un segundo colegio.
+  const filasMatriz: any[] = matriz.json?.data || [];
+  const colOjal = (matriz.json?.accesorios || []).find((k: string) => k.toLowerCase() === 'ojal grande');
+  const conOjal = colOjal
+    ? filasMatriz.filter((f: any) => Number(f.accesorios?.[colOjal] || 0) > 0)
+    : [];
+
+  if (!colOjal) {
+    anotar(
+      'el Ojal grande aparece como columna del catalogo',
+      false,
+      'No hay ninguna columna "Ojal grande" en la respuesta. Antes la columna venia del ' +
+        'Excel y decia "Ojal Grande" con mayuscula; si desaparecio, revisar el catalogo.'
+    );
+  } else if (conOjal.length === 0) {
+    anotar(
+      'alguna prenda de este colegio lleva Ojal grande',
+      false,
+      `la columna "${colOjal}" existe pero ninguna de las ${filasMatriz.length} prendas de ` +
+        'este colegio la usa. Con Cambridge cargado deberian ser la Falda plisada, el ' +
+        'Jamper y el Vestido. Si este colegio es nuevo, es esperable y el chequeo no aplica.'
+    );
+  } else {
+    const costoOjal = Number(conOjal[0].accesorios[colOjal]);
+    anotar(
+      'el Ojal grande cuesta 1,60 en la matriz, no 0,00',
+      Math.abs(costoOjal - 1.6) < 0.005,
+      `item ${conOjal[0].itemNumero} ${conOjal[0].descripcion}: columna "${colOjal}" = ${costoOjal} Bs ` +
+        `(${conOjal.length} prenda(s) la usan). ` +
+        (costoOjal === 0
+          ? 'En cero: la union por nombre no se elimino.'
           : 'Correcto: la pantalla muestra lo que el motor cobra.')
-  );
+    );
+  }
 
   // Escritura. Antes esto escribia en un Map de modulo y se perdia al reiniciar.
   const sondaAcc = await filasDesdeDisco(`
@@ -463,6 +530,11 @@ async function main() {
     insumoNuevo.status === 201 && colInsumo === null && Math.abs(costoInsumo - 2.5) < 0.0005,
     `status ${insumoNuevo.status}; en disco colegio_id = ${JSON.stringify(colInsumo)}, ` +
       `costo unitario = ${costoInsumo} (10 / 4 = 2.5). ` +
+      (insumoNuevo.status === 400
+        ? 'Un 400 casi siempre significa que el server esta corriendo codigo viejo, de ' +
+          'antes de que costoUnitario pasara a opcional: reinicialo. Mensaje: ' +
+          JSON.stringify(insumoNuevo.json) + '. '
+        : '') +
       (colInsumo !== null && colInsumo !== 'sin fila'
         ? 'Quedo con colegio: el insumo no seria del catalogo compartido.'
         : Math.abs(costoInsumo - 2.5) >= 0.0005
@@ -500,6 +572,101 @@ async function main() {
             ? 'Correcto.'
             : 'Valor inesperado.')
     );
+  }
+
+  // ==========================================================================
+  // 6) AISLAMIENTO ENTRE COLEGIOS  —  solo se puede medir con dos cargados
+  //
+  // Toda la Fase 6 se hizo a ciegas: con un solo colegio, una fuga de datos entre
+  // colegios no se puede observar ni con la mejor reja. El inventario del barrido
+  // señala DONDE podria haber fuga leyendo el codigo, pero no prueba que la haya.
+  //
+  // Con dos colegios en la base eso cambia: ahora se puede pedir los datos de uno y
+  // exigir que no aparezcan los del otro. Estos chequeos no corren si hay uno solo.
+  if (colegios.length < 2) {
+    console.log('');
+    console.log(SEP);
+    console.log('  6. AISLAMIENTO ENTRE COLEGIOS  —  no aplica, hay un solo colegio');
+    console.log(SEP);
+    console.log('  Con un colegio cargado una fuga entre colegios es inobservable. Estos');
+    console.log('  chequeos empiezan a correr solos cuando exista el segundo.');
+  } else {
+    console.log('');
+    console.log(SEP);
+    console.log('  6. AISLAMIENTO ENTRE COLEGIOS  —  hay ' + colegios.length + ', ahora se puede medir');
+    console.log(SEP);
+
+    // El || colegios[1] es para el tipo, no para la logica: dentro de este else hay al
+    // menos dos colegios, asi que find() siempre encuentra uno. TypeScript no lo sabe.
+    const otro: any[] = colegios.find((c: any[]) => String(c[0]) !== colegioId) || colegios[1];
+    const otroId = String(otro[0]);
+    const otroNombre = String(otro[1]);
+    const prendasOtro = Number(otro[2]);
+    console.log(`  Se compara contra: ${otroNombre} (${prendasOtro} prenda(s))`);
+
+    // Cuantas prendas tiene cada uno segun el DISCO, que es la verdad.
+    const enDiscoDelColegio = Number(await unoDesdeDisco(
+      `SELECT COUNT(*) FROM producto WHERE colegio_id = '${esc(colegioId)}';`
+    ));
+
+    const prodFiltrados = await http('GET', `/api/productos?colegioId=${encodeURIComponent(colegioId)}`);
+    const nProd = Array.isArray(prodFiltrados.json?.data) ? prodFiltrados.json.data.length : -1;
+    anotar(
+      'GET /api/productos?colegioId= devuelve SOLO las prendas de ese colegio',
+      nProd === enDiscoDelColegio,
+      `devolvio ${nProd}, en disco ese colegio tiene ${enDiscoDelColegio}. ` +
+        (nProd > enDiscoDelColegio
+          ? 'Devolvio mas: se estan filtrando prendas de otro colegio.'
+          : 'Correcto.')
+    );
+
+    // La matriz de accesorios, que es la que se acaba de repuntar a detalle_acc.
+    const matrizFiltrada = await http('GET', `/api/inputs/accesorios-matriz?colegioId=${encodeURIComponent(colegioId)}`);
+    const nMatriz = Array.isArray(matrizFiltrada.json?.data) ? matrizFiltrada.json.data.length : -1;
+    anotar(
+      'la matriz de accesorios se acota al colegio pedido',
+      nMatriz === enDiscoDelColegio,
+      `devolvio ${nMatriz} prenda(s), ese colegio tiene ${enDiscoDelColegio}. ` +
+        (nMatriz > enDiscoDelColegio ? 'Incluye prendas de otro colegio.' : 'Correcto.')
+    );
+
+    // Y la que mas importa: que un insumo exclusivo de un colegio NO se le pueda
+    // asignar a una prenda del otro. Esto es una ESCRITURA cruzada, la clase de falla
+    // mas grave que aparecio hoy.
+    const exclusivoDelOtro = await filasDesdeDisco(
+      `SELECT id, descripcion FROM accesorio WHERE colegio_id = '${esc(otroId)}' LIMIT 1;`
+    );
+    const prendaPropia = await filasDesdeDisco(
+      `SELECT id, item_numero FROM producto WHERE colegio_id = '${esc(colegioId)}' LIMIT 1;`
+    );
+
+    if (exclusivoDelOtro.length === 0 || prendaPropia.length === 0) {
+      console.log('  (sin insumo exclusivo del otro colegio o sin prenda propia, no se puede probar');
+      console.log('   la asignacion cruzada)');
+    } else {
+      const [accAjenoId, accAjenoNombre] = exclusivoDelOtro[0];
+      const [prendaId] = prendaPropia[0];
+      const cruzado = await http('POST', `/api/productos/${prendaId}/accesorios`, {
+        accesorioId: String(accAjenoId),
+        cantidadUso: 1,
+      });
+      anotar(
+        'un insumo exclusivo de otro colegio NO se puede asignar a esta prenda',
+        cruzado.status === 409 && cruzado.json?.success === false,
+        `se intento asignar "${accAjenoNombre}" (de ${otroNombre}) y el server devolvio ` +
+          `${cruzado.status}. ` +
+          (cruzado.status === 201
+            ? 'LO ACEPTO: se asigno un insumo de otro colegio y hay que revisar ' +
+              'accesorioUsablePorProducto.'
+            : 'Correcto: rechazado con 409.')
+      );
+
+      // Si por algun motivo lo acepto, se deshace para no dejar basura.
+      if (cruzado.status === 201 && cruzado.json?.data?.id) {
+        await http('DELETE', `/api/productos/${prendaId}/accesorios/${cruzado.json.data.id}`);
+        console.log('  (se deshizo la asignacion cruzada que el server acepto)');
+      }
+    }
   }
 
   // ---------------------------------------------------------------- limpieza
