@@ -31,9 +31,9 @@
     </div>
 
     <div class="header-controls">
-      <label style="font-size: 0.8rem; color: var(--text-muted);">Colegio Activo:</label>
+      <label style="font-size: 0.8rem; color: var(--text-muted);" title="Qué estás viendo: la empresa entera o un colegio">Ámbito:</label>
       <select id="global-colegio-select" class="colegio-selector" onchange="cambiarColegioGlobal(this.value)">
-        <option value="all">TODOS LOS COLEGIOS</option>
+        <option value="all">TODA LA EMPRESA</option>
       </select>
       <button class="btn-icon-admin" onclick="switchTab('admin-colegio')"
         title="Configuración de la empresa y de cada colegio">⚙️ Configuración</button>
@@ -626,7 +626,7 @@
           <div id="admin-sec-colegios" style="display:none;">
             <div
               style="background:#1e293b; padding:1.25rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.5rem;">
-              <h4 style="margin-top:0; color:#f8fafc;">🏛️ Datos del Colegio Activo</h4>
+              <h4 style="margin-top:0; color:#f8fafc;">🏛️ Datos del Colegio</h4>
               <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
                 <div>
                   <label style="font-size:0.78rem; color:#94a3b8;">Nombre del Colegio</label>
@@ -752,10 +752,7 @@
         const select = document.getElementById('global-colegio-select');
         if (json.data && json.data.length > 0) {
           const currentId = String(colegioFiltroActual);
-          select.innerHTML = `
-            <option value="all">TODOS LOS COLEGIOS</option>
-            ${json.data.map(c => `<option value="${c.id}">Colegio ${c.nombre}</option>`).join('')}
-          `;
+          construirSelectorAmbito(json.data);
 
           const hasCurrentOption = Array.from(select.options).some(opt => opt.value === currentId);
           if (hasCurrentOption && currentId !== 'all') {
@@ -780,17 +777,14 @@
 
       const tabAdmin = document.getElementById('tab-admin-colegio');
       if (tabAdmin && tabAdmin.classList.contains('active')) {
-        if (val === 'all') {
-          alert('⚠️ "TODOS LOS COLEGIOS" es una vista agrupada global. Se seleccionará automáticamente un Colegio específico para la configuración.');
-          const select = document.getElementById('global-colegio-select');
-          for (let opt of select.options) {
-            if (opt.value && opt.value !== 'all') {
-              colegioFiltroActual = opt.value;
-              select.value = opt.value;
-              break;
-            }
-          }
-        }
+        // Aca habia un alert y un cambio FORZADO de seleccion: si elegias el ambito de
+        // empresa estando en Configuracion, la pantalla te devolvia a un colegio y te
+        // avisaba que lo habia hecho. Tenia sentido cuando las cuatro pestañas de empresa
+        // se cargaban por /api/colegios/:id/config y sin colegio no habia nada que mostrar.
+        //
+        // Ya no: Telas, Insumos, Tallas y Parametros cargan sin colegio, asi que el ambito
+        // de empresa es un estado valido y util en esta pantalla. Sacarle al usuario la
+        // opcion que acaba de elegir es peor que no ofrecerla.
         cargarConfigAdminColegio();
       }
     }
@@ -939,12 +933,11 @@
         const json = await res.json();
         const select = document.getElementById('global-colegio-select');
         if (json.data && json.data.length > 0) {
-          select.innerHTML = `
-            <option value="all">TODOS LOS COLEGIOS</option>
-            ${json.data.map(c => `<option value="${c.id}" ${c.nombre === 'CAMBRIDGE' ? 'selected' : ''}>Colegio ${c.nombre}</option>`).join('')}
-          `;
-          const selectedOpt = select.options[select.selectedIndex];
-          colegioFiltroActual = selectedOpt ? selectedOpt.value : 'all';
+          // El literal 'CAMBRIDGE' que preseleccionaba aca estaba MUERTO: el nombre real
+          // es "Col. Cambridge" y la comparacion nunca daba true, asi que el selector
+          // caia en la primera opcion. construirSelectorAmbito conserva la eleccion del
+          // usuario y deja el ambito de empresa cuando no hay nada valido que conservar.
+          construirSelectorAmbito(json.data);
         }
       } catch (e) { console.error(e); }
     }
@@ -2330,8 +2323,8 @@
             Elegí un colegio para ver sus prendas
           </div>
           <div style="font-size:0.8rem;">
-            Las prendas son de cada colegio. Arriba a la derecha, en "Colegio Activo",
-            está el selector: hoy dice TODOS LOS COLEGIOS.
+            Las prendas son de cada colegio. Arriba a la derecha, en "Ámbito", está el
+            selector: hoy dice TODA LA EMPRESA.
           </div>
         </td></tr>`;
       const tbody = document.getElementById('tb-admin-prendas-body');
@@ -3047,6 +3040,48 @@
       } else {
         await cargarInsumosAdmin();
       }
+    }
+
+    /**
+     * Construye el selector de ambito global, en UN solo lugar.
+     *
+     * Habia DOS bloques que escribian este mismo <select>, con reglas distintas, y el
+     * segundo tenia esto:
+     *
+     *   ${c.nombre === 'CAMBRIDGE' ? 'selected' : ''}
+     *
+     * El nombre real del colegio es "Col. Cambridge", asi que esa comparacion era FALSA
+     * para todas las filas. Ninguna opcion quedaba seleccionada, el navegador tomaba la
+     * primera —value="all"— y la linea siguiente hacia colegioFiltroActual = 'all'.
+     *
+     * Ese literal muerto es la razon por la que la pantalla caia siempre en el ambito de
+     * empresa, y por lo tanto la razon por la que la Configuracion se quedaba cargando
+     * antes de que las pestañas de empresa dejaran de depender de un colegio.
+     *
+     * VOCABULARIO. La opcion sin colegio se llama TODA LA EMPRESA, no "todos los
+     * colegios" ni "general". Es el mismo concepto que ya nombramos en dos lugares hoy:
+     * el badge de Configuracion dice TODA LA EMPRESA y las columnas Ámbito de Telas e
+     * Insumos dicen "empresa". Una tercera palabra para la misma cosa obliga al usuario a
+     * aprender que son sinonimos, y ese es el trabajo del programa, no del usuario.
+     *
+     * Y los colegios van con su nombre pelado. El prefijo "Colegio " producia
+     * "Colegio Col. Cambridge", porque el nombre ya lo traia.
+     */
+    function construirSelectorAmbito(lista) {
+      const select = document.getElementById('global-colegio-select');
+      if (!select) return;
+
+      const previo = String(colegioFiltroActual || 'all');
+      select.innerHTML =
+        '<option value="all">TODA LA EMPRESA</option>' +
+        lista.map(c => `<option value="${escAttr(c.id)}">${escAttr(c.nombre)}</option>`).join('');
+
+      // Se conserva lo que el usuario tenia elegido si todavia existe. Si no, queda en
+      // TODA LA EMPRESA: es un estado valido y completo —la Configuracion general
+      // funciona y las matrices muestran todo— y es preferible a adivinar un colegio.
+      const sigueValido = Array.from(select.options).some(o => o.value === previo);
+      select.value = sigueValido ? previo : 'all';
+      colegioFiltroActual = select.value;
     }
 
     function moverTelaUp(idx) {
