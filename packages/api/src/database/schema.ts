@@ -60,6 +60,24 @@ export const productos = sqliteTable('producto', {
   orden: integer('orden').default(0),
   descripcion: text('descripcion').notNull(),
   telaId: text('tela_id'),
+  /**
+   * Como se costea la prenda.
+   *   'confeccion' -> se produce: costo de material = tela (peso x precio/g)
+   *   'adquirido'  -> se compra semiterminada o para revender: el costo de
+   *                   material es el precio de adquisicion por talla, de la
+   *                   tabla precio_adquisicion.
+   *
+   * Es un enum y no un booleano `esSemiterminado` a proposito: semiterminado y
+   * reventa comparten exactamente la misma formula, y la unica diferencia es si
+   * la receta de accesorios tiene lineas o esta vacia. Un solo modo cubre los
+   * dos casos. Con booleanos separados serian dos campos que pueden estar ambos
+   * en true, que es un estado invalido que la base permitiria guardar.
+   *
+   * Ademas convierte un cero ambiguo en intencion declarada: sin este campo,
+   * "no hay peso de tela" no se distingue de "falta cargar el peso".
+   */
+  modoCosteo: text('modo_costeo', { enum: ['confeccion', 'adquirido'] })
+    .default('confeccion').notNull(),
   factorComplejidad: integer('factor_complejidad').default(1),
   costoFijo: real('costo_fijo').default(0),
   planchadoExtra: real('planchado_extra').default(0),
@@ -166,6 +184,43 @@ export const costosIndirectos = sqliteTable('costo_indirecto', {
   concepto: text('concepto').notNull(),
   montoMensual: real('monto_mensual').notNull(),
 });
+
+// ============================================
+// PRECIOS DE ADQUISICION (prendas compradas)
+// ============================================
+/**
+ * Precio al que se compra una prenda que no se confecciona: semiterminada
+ * (una chompa de punto que llega casi lista y solo se le agrega bordado y
+ * etiquetas) o terminada para revender.
+ *
+ * POR TALLA, obligatoriamente. En los datos de Cambridge la chompa va de 50 Bs
+ * en talla 2 a 140 Bs en 48/3XL, un factor de 2.8. Promediar eso sobrecostearia
+ * las tallas chicas unos 40 Bs y subcostearia las grandes unos 45, que en tallas
+ * grandes es la diferencia entre ganar y perder. Distinto del caso de los
+ * accesorios, donde el promedio se acepto porque la diferencia entre tallas era
+ * de centimos.
+ *
+ * CON VIGENCIA TEMPORAL, porque el Excel ya trae dos filas de "Costos
+ * anteriores": el historial de precios se estaba llevando a mano. Aca se
+ * formaliza, y ademas permite recostear un pedido viejo al precio de su momento.
+ *
+ * `conFactura` importa para el IVA: la compra sin factura no genera credito
+ * fiscal, asi que su precio completo es costo.
+ */
+export const preciosAdquisicion = sqliteTable('precio_adquisicion', {
+  id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
+  productoId: text('producto_id').notNull().references(() => productos.id),
+  tallaId: text('talla_id').notNull().references(() => tallas.id),
+  precioBs: real('precio_bs').notNull(),
+  proveedor: text('proveedor'),
+  conFactura: integer('con_factura', { mode: 'boolean' }).default(false).notNull(),
+  vigenteDesde: text('vigente_desde').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  vigenteHasta: text('vigente_hasta'),
+}, (t) => ({
+  vigenteUnico: uniqueIndex('idx_precio_adq_prod_talla_desde')
+    .on(t.productoId, t.tallaId, t.vigenteDesde),
+  porProducto: index('idx_precio_adq_producto').on(t.productoId),
+}));
 
 // ============================================
 // PRECIOS DE VENTA
