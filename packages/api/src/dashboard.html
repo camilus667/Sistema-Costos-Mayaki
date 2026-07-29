@@ -48,7 +48,8 @@
     <button class="tab-btn active" onclick="switchTab('resumen')">Resumen General</button>
     <button class="tab-btn" onclick="switchTab('inputs-excel')">Costos de Producción</button>
     <button class="tab-btn" onclick="switchTab('matriz-excel')">Matrices Consolidadas</button>
-    <button class="tab-btn" onclick="switchTab('matriz-tallas')">Matriz de costeo por prenda</button>
+    <button class="tab-btn" onclick="switchTab('costeo-individual')">Costeo Individual</button>
+    <button class="tab-btn" onclick="switchTab('matriz-tallas')">Costeo Multitalla</button>
     <button class="tab-btn" onclick="switchTab('inventario')">Inventario por Colegio</button>
     <button class="tab-btn" onclick="switchTab('admin-colegio')">⚙️ Configuración del Colegio</button>
   </nav>
@@ -131,26 +132,7 @@
             <button class="excel-tab" onclick="switchInputConcept('ManoDeObra', this)">ManoDeObra</button>
             <button class="excel-tab" onclick="switchInputConcept('fijosXprenda', this)">fijosXprenda &
               Indirectos</button>
-            <button class="excel-tab" style="background:#059669; color:#ffffff; font-weight:700;"
-              onclick="switchInputConcept('DesgloseProducto', this)">Desglose Inteligente por Producto</button>
           </div>
-        </div>
-
-        <!-- Selector de prenda para vista Desglose Inteligente -->
-        <div id="desglose-prenda-selector"
-          style="display:none; align-items:center; gap:0.75rem; margin-bottom:1.1rem; flex-wrap:wrap; padding:0.85rem 1rem; background:#1e293b; border-radius:10px; border:1px solid #334155;">
-          <span style="font-size:0.78rem; font-weight:700; color:#94a3b8; white-space:nowrap;">Prenda:</span>
-          <select id="select-desglose-producto" class="colegio-selector" style="min-width:280px; max-width:480px;"
-            onchange="onDesglosePrendaChange()">
-            <option value="">Cargando prendas...</option>
-          </select>
-          <span style="color:#334155; font-size:1rem;">|</span>
-          <span style="font-size:0.78rem; font-weight:700; color:#94a3b8; white-space:nowrap;">Talla:</span>
-          <select id="select-desglose-talla" class="colegio-selector" style="min-width:120px; max-width:200px;"
-            onchange="generarDesgloseProducto()">
-            <option value="">— seleccione —</option>
-          </select>
-          <span id="desglose-total-badge" style="margin-left:auto; font-size:0.82rem; color:#64748b;"></span>
         </div>
 
         <div id="acc-view-selector"
@@ -161,9 +143,6 @@
           <button class="subview-btn" id="btn-acc-matriz" onclick="toggleAccSubView('matriz')">2. Matriz por Prenda
             (Uso)</button>
         </div>
-
-        <!-- Contenedor especial para vista DesgloseProducto (no usa la tabla compartida) -->
-        <div id="desglose-producto-container" style="display:none;"></div>
 
         <div class="table-container" id="inputs-table-container">
           <table id="tb-inputs-table">
@@ -229,13 +208,47 @@
       </div>
     </div>
 
-    <!-- TAB 4: MATRIZ POR PRENDA INDIVIDUAL -->
+    <!-- TAB 4: COSTEO INDIVIDUAL -->
+    <div id="tab-costeo-individual" class="tab-content">
+      <div class="panel">
+        <div style="display: flex; gap: 1.25rem; align-items: flex-start; flex-wrap: wrap;">
+          
+          <!-- Columna Izquierda Independiente: Selector de Prenda y Talla -->
+          <div style="width: 280px; flex-shrink: 0; background: #1e293b; border-radius: 12px; border: 1px solid #334155; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
+            <h3 style="font-size: 1.05rem; font-weight: 700; color: #f8fafc; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+              <span>📌</span> Costeo Individual
+            </h3>
+            
+            <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+              <label for="select-desglose-producto" style="font-size: 0.78rem; font-weight: 700; color: #94a3b8;">Seleccionar Prenda:</label>
+              <select id="select-desglose-producto" class="colegio-selector" style="width: 100%;" onchange="onDesglosePrendaChange()">
+                <option value="">Cargando prendas...</option>
+              </select>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+              <label for="select-desglose-talla" style="font-size: 0.78rem; font-weight: 700; color: #94a3b8;">Seleccionar Talla:</label>
+              <select id="select-desglose-talla" class="colegio-selector" style="width: 100%;" onchange="generarDesgloseProducto()">
+                <option value="">— seleccione —</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Columna Derecha: Contenedor Principal de Desglose -->
+          <div style="flex: 1; min-width: 320px;">
+            <div id="desglose-producto-container"></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: COSTEO MULTITALLA -->
     <div id="tab-matriz-tallas" class="tab-content">
       <div class="panel">
         <div
           style="display: flex; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1.25rem;">
-          <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0; white-space: nowrap;">Matriz de
-            costeo por prenda</h2>
+          <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0; white-space: nowrap;">Costeo Multitalla</h2>
           <div style="display: flex; align-items: center; gap: 0.75rem;">
             <label for="select-matriz-producto"
               style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); white-space: nowrap;">Prenda:</label>
@@ -593,12 +606,9 @@
       cargarResumen();
       cargarInventario();
       cargarMatrizConsolidada();
-      if (currentInputConcept === 'DesgloseProducto') {
-        generarDesgloseProducto();
-      } else {
-        cargarInputConcept(currentInputConcept);
-      }
+      cargarInputConcept(currentInputConcept);
       generarMatrizPrenda();
+      generarDesgloseProducto();
 
       const tabAdmin = document.getElementById('tab-admin-colegio');
       if (tabAdmin && tabAdmin.classList.contains('active')) {
@@ -764,6 +774,8 @@
         cargarMatrizConsolidada();
       } else if (tabId === 'inputs-excel') {
         cargarInputConcept(currentInputConcept);
+      } else if (tabId === 'costeo-individual') {
+        generarDesgloseProducto();
       } else if (tabId === 'resumen') {
         cargarResumen();
       } else if (tabId === 'matriz-tallas') {
@@ -854,21 +866,9 @@
         accSelector.style.display = 'none';
       }
 
-      const desgloseSelector = document.getElementById('desglose-prenda-selector');
-      const desgloseContainer = document.getElementById('desglose-producto-container');
       const tableContainer = document.getElementById('inputs-table-container');
-
-      if (concept === 'DesgloseProducto') {
-        desgloseSelector.style.display = 'flex';
-        desgloseContainer.style.display = '';
-        tableContainer.style.display = 'none';
-        generarDesgloseProducto();
-      } else {
-        desgloseSelector.style.display = 'none';
-        desgloseContainer.style.display = 'none';
-        tableContainer.style.display = '';
-        cargarInputConcept(concept);
-      }
+      tableContainer.style.display = '';
+      cargarInputConcept(concept);
     }
 
     function toggleAccSubView(subView) {
@@ -990,7 +990,7 @@
         const pctMo = subtotalAntesImp > 0 ? (moCost / subtotalAntesImp * 100) : 0;
         const pctFij = subtotalAntesImp > 0 ? (fijosCost / subtotalAntesImp * 100) : 0;
 
-        badge.innerHTML = `<strong style="color:#fbbf24;">Subtotal:</strong> <span style="color:#f8fafc; font-weight:700;">Bs. ${subtotalAntesImp.toFixed(2)}</span>`;
+        if (badge) badge.innerHTML = `<strong style="color:#fbbf24;">Subtotal:</strong> <span style="color:#f8fafc; font-weight:700;">Bs. ${subtotalAntesImp.toFixed(2)}</span>`;
 
         const accRows = (p.accesoriosIntervinientes && p.accesoriosIntervinientes.length > 0)
           ? p.accesoriosIntervinientes.map(a => `
@@ -1007,7 +1007,7 @@
           : `<span style="background:#3a1f00; color:#fbbf24; border-radius:6px; padding:0.2rem 0.55rem; font-size:0.78rem; font-weight:600; margin-left:0.5rem;">Sin datos de talla</span>`;
 
         container.innerHTML = `
-          <div style="max-width:820px; margin:0 auto; display:flex; flex-direction:column; gap:1.25rem;">
+          <div style="max-width:100%; display:flex; flex-direction:column; gap:1.25rem;">
 
             <!-- Header -->
             <div style="background: linear-gradient(135deg, #1e293b 60%, #0f172a); border:1px solid #334155; border-radius:14px; padding:1.5rem 1.75rem; display:flex; align-items:center; gap:1.25rem; flex-wrap:wrap;">
