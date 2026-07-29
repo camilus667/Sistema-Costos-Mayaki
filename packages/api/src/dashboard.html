@@ -970,27 +970,57 @@
           }
         }
 
-        // Extraer valores con fallbacks
-        const moCost = (p.manoDeObra && typeof p.manoDeObra.totalManoObraBs === 'number') ? p.manoDeObra.totalManoObraBs : 15.0;
-        const moConf = (p.manoDeObra && typeof p.manoDeObra.costoConfeccion === 'number') ? p.manoDeObra.costoConfeccion : moCost;
-        const fijosCost = (p.fijosEIndirectos && typeof p.fijosEIndirectos.totalFijosBs === 'number') ? p.fijosEIndirectos.totalFijosBs : 1.5;
-        const fijosXp = (p.fijosEIndirectos && typeof p.fijosEIndirectos.fijosXprenda === 'number') ? p.fijosEIndirectos.fijosXprenda : 1.0;
-        const indirXp = (p.fijosEIndirectos && typeof p.fijosEIndirectos.indirectosXprenda === 'number') ? p.fijosEIndirectos.indirectosXprenda : 0.5;
-        const telaCost = (p.tela && typeof p.tela.costoTelaBs === 'number') ? p.tela.costoTelaBs : 0.0;
-        const pesoG = (p.tela && p.tela.pesoGramos != null) ? p.tela.pesoGramos : 0;
-        const accCost = typeof p.subtotalAccesoriosBs === 'number' ? p.subtotalAccesoriosBs : 0.0;
+        // Valores del API. El navegador NO calcula: si un campo falta se muestra 0
+        // y se avisa, nunca un numero inventado.
+        //
+        // Antes aca vivia una CUARTA copia de la formula de costeo, ademas de las
+        // tres del backend. Era una copia defensiva: usaba el valor del API si
+        // venia, y si no lo recalculaba como tela + accesorios + mano de obra +
+        // fijos, con el 13% de IVA hardcodeado en 1.13. Y peor: cuando faltaba un
+        // campo inventaba constantes plausibles a la vista — mano de obra 15.0,
+        // fijos 1.5, fijosXprenda 1.0, indirectos 0.5. Es la misma patologia que
+        // los 15,00 Bs hardcodeados que se sacaron del backend, replicada en el
+        // cliente, y no era codigo muerto: se activaba con cualquier respuesta
+        // incompleta, sin dejar rastro.
+        const faltantesUI = [];
+        const dato = (v, nombre) => {
+          if (typeof v === 'number' && !isNaN(v)) return v;
+          faltantesUI.push(nombre);
+          return 0;
+        };
 
-        const subtotalAntesImp = (typeof p.costoAntesImpuestosBs === 'number' && !isNaN(p.costoAntesImpuestosBs))
-          ? p.costoAntesImpuestosBs : (telaCost + accCost + moCost + fijosCost);
-        const precioFinalIva = (typeof p.precioFinalConIvaBs === 'number' && !isNaN(p.precioFinalConIvaBs))
-          ? p.precioFinalConIvaBs : (subtotalAntesImp * 1.13);
+        const moCost = dato(p.manoDeObra && p.manoDeObra.totalManoObraBs, 'mano de obra');
+        const moConf = (p.manoDeObra && typeof p.manoDeObra.costoConfeccion === 'number') ? p.manoDeObra.costoConfeccion : moCost;
+        const fijosCost = dato(p.fijosEIndirectos && p.fijosEIndirectos.totalFijosBs, 'fijos e indirectos');
+        const fijosXp = dato(p.fijosEIndirectos && p.fijosEIndirectos.fijosXprenda, 'fijos por prenda');
+        const indirXp = (p.fijosEIndirectos && typeof p.fijosEIndirectos.indirectosXprenda === 'number') ? p.fijosEIndirectos.indirectosXprenda : 0;
+        const telaCost = dato(p.tela && p.tela.costoTelaBs, 'costo de tela');
+        const pesoG = (p.tela && p.tela.pesoGramos != null) ? p.tela.pesoGramos : 0;
+        const accCost = dato(p.subtotalAccesoriosBs, 'accesorios');
+
+        // Sin recalculo de respaldo. Estos dos vienen del motor o no vienen.
+        const subtotalAntesImp = dato(p.costoAntesImpuestosBs, 'costo antes de impuestos');
+        const precioFinalIva = dato(p.precioFinalConIvaBs, 'costo total con impuestos');
+
+        // El backend ahora devuelve un diagnostico: prenda sin peso de tela, sin
+        // tela vinculada, sin receta de accesorios, o talla que no se ofrece. Se
+        // muestra en vez de taparlo con un numero que parece correcto.
+        const avisosBackend = p.diagnostico
+          ? [].concat(p.diagnostico.faltantes || [], p.diagnostico.inconsistencias || [], p.diagnostico.advertencias || [])
+          : [];
 
         const pctTela = subtotalAntesImp > 0 ? (telaCost / subtotalAntesImp * 100) : 0;
         const pctAcc = subtotalAntesImp > 0 ? (accCost / subtotalAntesImp * 100) : 0;
         const pctMo = subtotalAntesImp > 0 ? (moCost / subtotalAntesImp * 100) : 0;
         const pctFij = subtotalAntesImp > 0 ? (fijosCost / subtotalAntesImp * 100) : 0;
 
-        if (badge) badge.innerHTML = `<strong style="color:#fbbf24;">Subtotal:</strong> <span style="color:#f8fafc; font-weight:700;">Bs. ${subtotalAntesImp.toFixed(2)}</span>`;
+        if (badge) {
+          const problemas = [].concat(faltantesUI.map(f => "El API no devolvio: " + f), avisosBackend);
+          const aviso = problemas.length > 0
+            ? ` <span style="color:#f87171; font-weight:700; cursor:help;" title="${problemas.join(" | ").replace(/"/g, "&quot;")}">&#9888; ${problemas.length} aviso(s)</span>`
+            : "";
+          badge.innerHTML = `<strong style="color:#fbbf24;">Subtotal:</strong> <span style="color:#f8fafc; font-weight:700;">Bs. ${subtotalAntesImp.toFixed(2)}</span>${aviso}`;
+        }
 
         const accRows = (p.accesoriosIntervinientes && p.accesoriosIntervinientes.length > 0)
           ? p.accesoriosIntervinientes.map(a => `
