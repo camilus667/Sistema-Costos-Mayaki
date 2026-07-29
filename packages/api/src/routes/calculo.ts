@@ -318,6 +318,69 @@ api.get('/matriz-consolidada', async (c) => {
   }
 });
 
+/**
+ * Resuelve prenda y talla para los dos PUT de la matriz.
+ *
+ * PREFIERE LAS CLAVES PRIMARIAS. La pantalla ya tiene productoId y tallaId en cada
+ * celda de la grilla —los devuelve matriz-consolidada— y sin embargo mandaba
+ * itemNumero y tallaCodigo, que son claves de NEGOCIO. itemNumero se numera por
+ * colegio, asi que con dos colegios puede identificar dos prendas y el lookup tiene
+ * que rechazar por ambiguo.
+ *
+ * Resolver por clave de negocio cuando el llamador tiene la clave primaria es pedirle
+ * al servidor que adivine algo que el cliente ya sabe. Con productoId no hay ambiguedad
+ * posible y la clase entera de error 409 desaparece.
+ *
+ * Se mantiene el camino por itemNumero para no romper a quien ya lo usa —la
+ * verificacion automatica, entre otros— pero el preferido es el directo.
+ */
+async function resolverCelda(
+  db: any,
+  body: any
+): Promise<{ prenda: any; talla: any; estado: number; error: string | null }> {
+  const { productoId, tallaId, itemNumero, tallaCodigo, colegioId } = body;
+
+  // Camino directo: las dos claves primarias.
+  if (productoId && tallaId) {
+    const [prenda] = await db.select().from(productos).where(eq(productos.id, productoId)).limit(1);
+    if (!prenda) {
+      return { prenda: null, talla: null, estado: 404, error: `No existe la prenda ${productoId}.` };
+    }
+    const [talla] = await db.select().from(tallas).where(eq(tallas.id, tallaId)).limit(1);
+    if (!talla) {
+      return { prenda: null, talla: null, estado: 404, error: `No existe la talla ${tallaId}.` };
+    }
+    return { prenda, talla, estado: 200, error: null };
+  }
+
+  // Camino por clave de negocio, con la guarda de ambiguedad.
+  if (!itemNumero || Number(itemNumero) <= 0 || !tallaCodigo) {
+    return {
+      prenda: null,
+      talla: null,
+      estado: 400,
+      error: 'Hacen falta productoId y tallaId, o bien itemNumero y tallaCodigo.',
+    };
+  }
+
+  const r = await resolverPrendaPorItem(db, Number(itemNumero), colegioId);
+  if (!r.prenda) {
+    return { prenda: null, talla: null, estado: r.estado, error: r.error };
+  }
+
+  const talla = await resolverTallaPorCodigo(db, String(tallaCodigo), r.prenda.colegioId);
+  if (!talla) {
+    return {
+      prenda: null,
+      talla: null,
+      estado: 404,
+      error: `No existe la talla ${tallaCodigo} para esa prenda.`,
+    };
+  }
+
+  return { prenda: r.prenda, talla, estado: 200, error: null };
+}
+
 /** Busca la talla por codigo dentro del vocabulario visible para esa prenda. */
 async function resolverTallaPorCodigo(db: any, tallaCodigo: string, colegioIdPrenda: string) {
   const [talla] = await db
@@ -341,18 +404,13 @@ api.put('/precio-venta', async (c) => {
   const db = (c as any).db;
   const body = await c.req.json(); // { itemNumero, tallaCodigo, precioBs, colegioId? }
 
-  const { itemNumero, tallaCodigo, precioBs, colegioId } = body;
+  const { itemNumero, tallaCodigo, precioBs } = body;
 
   // La base manda: primero se resuelve contra la base, y solo despues se toca el
   // cache del Excel. Al reves —como estaba— un fallo dejaba la matriz mostrando un
   // precio que nunca se guardo: el cache decia una cosa y la base otra.
-  const { prenda, estado, error } = await resolverPrendaPorItem(db, itemNumero, colegioId);
-  if (!prenda) return c.json({ success: false, error }, estado as any);
-
-  const talla = await resolverTallaPorCodigo(db, tallaCodigo, prenda.colegioId);
-  if (!talla) {
-    return c.json({ success: false, error: `No existe la talla ${tallaCodigo} para esa prenda.` }, 404);
-  }
+  const { prenda, talla, estado, error } = await resolverCelda(db, body);
+  if (!prenda || !talla) return c.json({ success: false, error }, estado as any);
 
   const nuevoPv = Number(precioBs) || 0;
 
@@ -396,15 +454,10 @@ api.put('/inventario-unidades', async (c) => {
   const db = (c as any).db;
   const body = await c.req.json(); // { itemNumero, tallaCodigo, cantidad, colegioId? }
 
-  const { itemNumero, tallaCodigo, cantidad, colegioId } = body;
+  const { itemNumero, tallaCodigo, cantidad } = body;
 
-  const { prenda, estado, error } = await resolverPrendaPorItem(db, itemNumero, colegioId);
-  if (!prenda) return c.json({ success: false, error }, estado as any);
-
-  const talla = await resolverTallaPorCodigo(db, tallaCodigo, prenda.colegioId);
-  if (!talla) {
-    return c.json({ success: false, error: `No existe la talla ${tallaCodigo} para esa prenda.` }, 404);
-  }
+  const { prenda, talla, estado, error } = await resolverCelda(db, body);
+  if (!prenda || !talla) return c.json({ success: false, error }, estado as any);
 
   const cantNum = Number(cantidad) || 0;
 

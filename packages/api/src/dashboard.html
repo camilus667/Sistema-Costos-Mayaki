@@ -1907,33 +1907,114 @@
       renderMatrizConsolidada();
     }
 
-    async function guardarPrecioVentaMatriz(itemNum, tallaCode, inputElem) {
-      const precioBs = parseFloat(inputElem.value) || 0;
-      try {
-        await fetch('/api/calculo/precio-venta', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ itemNumero: itemNum, tallaCodigo: tallaCode, precioBs })
-        });
-        await cargarMatrizConsolidada();
-        cargarInventario();
-        cargarResumen();
-      } catch (e) { console.error(e); }
+    /**
+     * Marca visualmente el resultado de guardar una celda, SIN re-renderizar la grilla.
+     *
+     * Por que importa no re-renderizar: guardarPrecioVentaMatriz llamaba a
+     * cargarMatrizConsolidada() despues de cada edicion, y eso reescribia el tbody
+     * entero. Dos consecuencias, y el usuario reporto las dos:
+     *
+     *   1. El input que tenia el foco se destruia, asi que Tab no iba a la celda de al
+     *      lado: no iba a ninguna parte.
+     *   2. Si el guardado habia fallado, el re-render traia el valor VIEJO del servidor
+     *      y borraba lo que acababas de escribir. Y como la respuesta ni se miraba, el
+     *      fallo era invisible: parecia que el sistema "no acepta valores".
+     *
+     * Ahora la celda se marca sola y la grilla no se toca. Tab funciona nativo: en una
+     * tabla, el orden de tabulacion del navegador ya es a la derecha y despues abajo.
+     */
+    function marcarCeldaOk(inputElem) {
+      inputElem.style.transition = 'background 0.15s, border-color 0.15s';
+      inputElem.style.background = '#064e3b';
+      inputElem.style.borderColor = '#34d399';
+      setTimeout(() => {
+        inputElem.style.background = '';
+        inputElem.style.borderColor = '';
+      }, 600);
     }
 
-    async function guardarInventarioMatriz(itemNum, tallaCode, inputElem) {
-      const cantidad = parseInt(inputElem.value) || 0;
+    function marcarCeldaError(inputElem, mensaje) {
+      inputElem.style.background = '#7f1d1d';
+      inputElem.style.borderColor = '#f87171';
+      inputElem.title = mensaje || 'No se pudo guardar';
+      // El valor tecleado SE QUEDA: es lo que el usuario quiso poner y lo necesita a la
+      // vista para corregirlo. Borrarselo y no decir nada era el bug.
+      alert('No se pudo guardar la celda:\n\n' + (mensaje || 'error desconocido') +
+        '\n\nEl valor queda en pantalla en rojo para que lo puedas corregir. No se guardo.');
+    }
+
+    /** Refresca las pantallas que dependen del dato, sin tocar esta grilla. */
+    function refrescarDependientesDeMatriz() {
       try {
-        await fetch('/api/calculo/inventario-unidades', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ itemNumero: itemNum, tallaCodigo: tallaCode, cantidad })
-        });
-        await cargarMatrizConsolidada();
         cargarInventario();
         cargarResumen();
-      } catch (e) { console.error(e); }
+      } catch (e) { /* cortesia: no debe romper la edicion */ }
     }
+
+    /** Actualiza el dato en memoria para que la grilla y rawConsolidadaData no divergan. */
+    function actualizarCeldaEnMemoria(productoId, tallaCodigo, concepto, valor) {
+      if (!rawConsolidadaData || !Array.isArray(rawConsolidadaData.data)) return;
+      const fila = rawConsolidadaData.data.find(p => p.productoId === productoId);
+      if (fila && fila.tallas && fila.tallas[tallaCodigo]) {
+        fila.tallas[tallaCodigo][concepto] = valor;
+      }
+    }
+
+    async function guardarPrecioVentaMatriz(itemNum, tallaCode, inputElem, productoId, tallaId) {
+      const precioBs = parseFloat(inputElem.value) || 0;
+      try {
+        const res = await fetch('/api/calculo/precio-venta', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          // Se mandan las CLAVES PRIMARIAS, que la grilla ya tiene. itemNumero y
+          // tallaCodigo van tambien por compatibilidad, pero el servidor prefiere las
+          // primeras: itemNumero se numera por colegio y con dos colegios puede ser
+          // ambiguo.
+          body: JSON.stringify({
+            productoId, tallaId,
+            itemNumero: itemNum, tallaCodigo: tallaCode,
+            precioBs,
+          })
+        });
+        const json = await res.json();
+        if (!json.success) {
+          marcarCeldaError(inputElem, json.error);
+          return;
+        }
+        marcarCeldaOk(inputElem);
+        actualizarCeldaEnMemoria(productoId, tallaCode, 'precioVenta', precioBs);
+        refrescarDependientesDeMatriz();
+      } catch (e) {
+        marcarCeldaError(inputElem, String(e));
+      }
+    }
+
+    async function guardarInventarioMatriz(itemNum, tallaCode, inputElem, productoId, tallaId) {
+      const cantidad = parseInt(inputElem.value) || 0;
+      try {
+        const res = await fetch('/api/calculo/inventario-unidades', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            productoId, tallaId,
+            itemNumero: itemNum, tallaCodigo: tallaCode,
+            cantidad,
+          })
+        });
+        const json = await res.json();
+        if (!json.success) {
+          marcarCeldaError(inputElem, json.error);
+          return;
+        }
+        marcarCeldaOk(inputElem);
+        actualizarCeldaEnMemoria(productoId, tallaCode, 'inventarioUnidades', cantidad);
+        refrescarDependientesDeMatriz();
+      } catch (e) {
+        marcarCeldaError(inputElem, String(e));
+      }
+    }
+
+
 
     function renderMatrizConsolidada() {
       if (!rawConsolidadaData) return;
@@ -1969,9 +2050,9 @@
           colTotals[t.codigo] += val;
 
           if (currentExcelConcept === 'precioVenta') {
-            return `<td style="text-align:center;">${getInputHtml(val, '1', `onchange="guardarPrecioVentaMatriz(${p.itemNumero}, '${t.codigo}', this)"`)}</td>`;
+            return `<td style="text-align:center;">${getInputHtml(val, '1', `onchange="guardarPrecioVentaMatriz(${p.itemNumero}, '${t.codigo}', this, '${p.productoId}', '${t.id}')"`)}</td>`;
           } else if (currentExcelConcept === 'inventarioUnidades') {
-            return `<td style="text-align:center;">${getInputHtml(val, '1', `onchange="guardarInventarioMatriz(${p.itemNumero}, '${t.codigo}', this)"`)}</td>`;
+            return `<td style="text-align:center;">${getInputHtml(val, '1', `onchange="guardarInventarioMatriz(${p.itemNumero}, '${t.codigo}', this, '${p.productoId}', '${t.id}')"`)}</td>`;
           } else {
             if (val === null || val === undefined || val === 0) return '<td style="text-align:center; color: var(--text-muted);">-</td>';
             let formattedVal = '-';
