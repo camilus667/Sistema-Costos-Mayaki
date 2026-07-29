@@ -407,7 +407,7 @@
                 <div>
                   <label style="font-size:0.72rem; color:#94a3b8;">Tela Asignada</label>
                   <select id="np-tela" class="cell-editable-sm" style="width:100%; padding:0.4rem; font-weight:600;">
-                    <option value="">-- Sin tela / Promedio --</option>
+                    <option value="">-- Sin tela asignada --</option>
                   </select>
                 </div>
                 <div>
@@ -2194,8 +2194,11 @@
       document.getElementById('modal-colegio-name-badge').textContent = col.nombre || 'CAMBRIDGE';
 
       const selectNpTela = document.getElementById('np-tela');
-      selectNpTela.innerHTML = `<option value="">-- Sin tela / Promedio --</option>` +
-        telas.map(t => `<option value="${t.id}">${t.descripcion} (Bs. ${(t.precioBsG || 0.1475).toFixed(3)}/g)</option>`).join('');
+      // Sin promedios inventados: si la prenda no lleva tela, se costea con tela en 0
+      // y el motor lo reporta como sinPrecioDeTela. Decir "Promedio" prometia un
+      // calculo que no existe en ninguna parte del sistema.
+      selectNpTela.innerHTML = `<option value="">-- Sin tela asignada (se costea con tela en 0) --</option>` +
+        telas.map(t => `<option value="${t.id}">${t.descripcion} ${t.precioBsG ? '(Bs. ' + t.precioBsG.toFixed(3) + '/g)' : '(SIN PRECIO CARGADO)'}</option>`).join('');
 
       const tbody = document.getElementById('tb-admin-prendas-body');
       tbody.innerHTML = prods.map((p, idx) => `
@@ -2218,8 +2221,8 @@
           </td>
           <td style="padding:0.35rem 0.5rem;">
             <select id="ap-tela-${p.id}" class="cell-editable-sm" style="width:100%; font-weight:600; font-size:0.88rem; padding:0.4rem 0.6rem;">
-              <option value="" ${!p.telaId ? 'selected' : ''}>-- Tasa Promedio Catálogo (0.148 Bs/g) --</option>
-              ${telas.map(t => `<option value="${t.id}" ${p.telaId === t.id ? 'selected' : ''}>${t.descripcion} (Bs. ${(t.precioBsG || 0.1475).toFixed(3)}/g)</option>`).join('')}
+              <option value="" ${!p.telaId ? 'selected' : ''}>-- SIN TELA ASIGNADA: se costea con tela en 0 --</option>
+              ${telas.map(t => `<option value="${t.id}" ${p.telaId === t.id ? 'selected' : ''}>${t.descripcion} ${t.precioBsG ? '(Bs. ' + t.precioBsG.toFixed(3) + '/g)' : '(SIN PRECIO CARGADO)'}</option>`).join('')}
             </select>
           </td>
           <td style="text-align:center;">
