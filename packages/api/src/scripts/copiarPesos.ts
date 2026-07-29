@@ -75,13 +75,21 @@ async function main() {
     process.exit(1);
   }
 
+  // Los guards de arriba ya garantizaron que no son null. Se copian a locales
+  // tipados porque TypeScript no estrecha el tipo despues de process.exit():
+  // sin @types/node instalado, `process` no resuelve y exit() no se reconoce
+  // como `never`, asi que ITEM_ORIGEN sigue siendo number | null para el
+  // compilador y eq() rechaza el null.
+  const itemOrigen: number = ITEM_ORIGEN;
+  const itemDestino: number = ITEM_DESTINO;
+
   const db: any = await getDb();
 
-  const [origen] = await db.select().from(productos).where(eq(productos.itemNumero, ITEM_ORIGEN)).limit(1);
-  const [destino] = await db.select().from(productos).where(eq(productos.itemNumero, ITEM_DESTINO)).limit(1);
+  const [origen] = await db.select().from(productos).where(eq(productos.itemNumero, itemOrigen)).limit(1);
+  const [destino] = await db.select().from(productos).where(eq(productos.itemNumero, itemDestino)).limit(1);
 
-  if (!origen) { console.error(`No existe la prenda con itemNumero ${ITEM_ORIGEN}.`); process.exit(1); }
-  if (!destino) { console.error(`No existe la prenda con itemNumero ${ITEM_DESTINO}.`); process.exit(1); }
+  if (!origen) { console.error(`No existe la prenda con itemNumero ${itemOrigen}.`); process.exit(1); }
+  if (!destino) { console.error(`No existe la prenda con itemNumero ${itemDestino}.`); process.exit(1); }
 
   console.log('');
   console.log(SEP);
