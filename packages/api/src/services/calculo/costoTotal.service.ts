@@ -165,8 +165,22 @@ export function calcularCostoTotal(inputs: CalculoInputs): CalculoResultado {
     inputs.precioTelaUnitario != null && inputs.precioTelaUnitario > 0 &&
     inputs.rendimientoTela != null && inputs.rendimientoTela > 0
   ) {
+    // Conversion correcta: gramos -> kilos -> metros -> Bs.
+    //   peso_g / 1000            = kg
+    //   kg x rendimiento (m/kg)  = metros de tela
+    //   metros x precio por metro = Bs
+    //
+    // La version anterior hacia `peso / (rendimiento * 1000)`, o sea DIVIDIA por
+    // el rendimiento en vez de multiplicar, y subcosteaba la tela por un factor
+    // de rendimiento al cuadrado. Comprobado con el Saco talla 2 y Casimir
+    // Italiano (rendimiento 1.7362 m/kg, 70 Bs/metro):
+    //   correcto: 378/1000 x 1.7362 x 70 = 45.94  <- coincide con el Excel
+    //   anterior: 378 / (1.7362 x 1000) x 70 = 15.24
+    // El Excel implica 45.94 (CostoBruto 169.464 - accesorios 23.52 - mano de
+    // obra 100), y el camino de precioBsG da 45.93. Los tres coinciden ahora.
     costoTela = pesoConMerma
-      .div(D(inputs.rendimientoTela).times(1000))
+      .div(1000)
+      .times(D(inputs.rendimientoTela))
       .times(D(inputs.precioTelaUnitario));
     origenCostoTela = 'rendimiento';
   } else {
