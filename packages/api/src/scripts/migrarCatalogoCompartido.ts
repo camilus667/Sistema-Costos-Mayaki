@@ -92,16 +92,70 @@ function main() {
       return;
     }
 
-    // Ya migrada? Se mira el flag notnull de PRAGMA table_info.
-    const infoAcc = filas("PRAGMA table_info('accesorio');");
-    const colColegio = infoAcc.find((f) => String(f[1]) === 'colegio_id');
-    if (!colColegio) {
-      console.log('ABORTA: accesorio no tiene columna colegio_id. Estado inesperado.');
-      return;
-    }
-    if (Number(colColegio[3]) === 0) {
+    // ---------- Estado real, medido en dimensiones INDEPENDIENTES ----------
+    //
+    // La primera version de esto miraba solo el flag notnull de PRAGMA table_info y
+    // salia con "YA MIGRADA" si la columna era nullable. Eso conflacionaba dos cosas
+    // distintas: que la columna ACEPTE NULL y que la clasificacion se haya APLICADO.
+    // Si la columna se volvia nullable por cualquier otra via — un DDL de arranque
+    // actualizado, una tabla recreada a mano — el script salia temprano y dejaba los
+    // 38 accesorios apuntando al colegio, ninguno compartido: trabajo a medias
+    // reportado como exito. Paso exactamente eso.
+    //
+    // Ahora se mide cada cosa por separado y se hace solo lo que falta.
+    const infoDe = (tabla: string) => filas("PRAGMA table_info('" + tabla + "');");
+    const tieneColumna = (tabla: string) =>
+      infoDe(tabla).some((f) => String(f[1]) === 'colegio_id');
+    const esNullable = (tabla: string) => {
+      const col = infoDe(tabla).find((f) => String(f[1]) === 'colegio_id');
+      return col ? Number(col[3]) === 0 : null;
+    };
+    const nulls = (tabla: string) =>
+      Number(uno('SELECT COUNT(*) FROM ' + tabla + ' WHERE colegio_id IS NULL;')) || 0;
+
+    const estado = {
+      accNullable: esNullable('accesorio'),
+      telaNullable: esNullable('tela'),
+      tallaNullable: esNullable('talla'),
+      ciTieneColumna: tieneColumna('costo_indirecto'),
+      psTieneColumna: tieneColumna('per_soles'),
+      accNulls: tieneColumna('accesorio') ? nulls('accesorio') : 0,
+      telaNulls: tieneColumna('tela') ? nulls('tela') : 0,
+      tallaNulls: tieneColumna('talla') ? nulls('talla') : 0,
+    };
+
+    console.log('');
+    console.log(SEP);
+    console.log('  ESTADO ACTUAL DE LA BASE');
+    console.log(SEP);
+    console.log('  accesorio.colegio_id nullable:    ' + estado.accNullable);
+    console.log('  tela.colegio_id nullable:         ' + estado.telaNullable);
+    console.log('  talla.colegio_id nullable:        ' + estado.tallaNullable);
+    console.log('  costo_indirecto tiene colegio_id: ' + estado.ciTieneColumna);
+    console.log('  per_soles tiene colegio_id:       ' + estado.psTieneColumna);
+    console.log('  accesorios ya compartidos (NULL): ' + estado.accNulls);
+    console.log('  telas ya compartidas (NULL):      ' + estado.telaNulls);
+    console.log('  tallas ya compartidas (NULL):     ' + estado.tallaNulls);
+
+    // Que falta hacer, en dos frentes separados.
+    const faltaDDL =
+      estado.accNullable === false ||
+      estado.telaNullable === false ||
+      estado.tallaNullable === false ||
+      estado.ciTieneColumna ||
+      estado.psTieneColumna;
+
+    const faltaClasificacion =
+      estado.accNulls === 0 || estado.telaNulls === 0 || estado.tallaNulls === 0;
+
+    console.log('');
+    console.log('  Falta recrear tablas (DDL): ' + (faltaDDL ? 'SI' : 'no'));
+    console.log('  Falta clasificar:           ' + (faltaClasificacion ? 'SI' : 'no'));
+
+    if (!faltaDDL && !faltaClasificacion) {
       console.log('');
-      console.log('YA MIGRADA: accesorio.colegio_id ya es nullable. No se hace nada.');
+      console.log('YA MIGRADA por completo: las tres columnas son nullables, las dos sobrantes');
+      console.log('desaparecieron, y la clasificacion esta aplicada. No se hace nada.');
       return;
     }
 
@@ -253,7 +307,9 @@ function main() {
       raw.run('PRAGMA foreign_keys=OFF;');
       raw.run('BEGIN TRANSACTION;');
 
-      for (const p of pasos) {
+      // Solo se recrea si hace falta. Si el DDL ya esta bien y lo unico que falta es
+      // la clasificacion, recrear seria trabajo inutil con riesgo gratis.
+      for (const p of (faltaDDL ? pasos : [])) {
         const cols = p.columnas.map((c) => `"${c}"`).join(', ');
         raw.run(p.ddl);
         raw.run(`INSERT INTO "${p.tabla}_nueva" (${cols}) SELECT ${cols} FROM "${p.tabla}";`);
