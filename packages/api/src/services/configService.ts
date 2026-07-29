@@ -39,6 +39,27 @@ export interface SystemConfig {
    * que se adopta el metodo anual. Reemplazar por el conteo real cuando se tenga.
    */
   volumenAnualProduccion: number;
+
+  /**
+   * FASE 4. Que porcentaje del pool de indirectos se carga al costo de las
+   * prendas. Default 100.
+   *
+   * Existe para separar el HECHO de la POLITICA. El volumen anual y el monto de
+   * los indirectos son hechos; cuanto de ese pool se decide volcar al costo
+   * unitario es una decision, y merece un nombre propio en vez de estar
+   * escondida en un numero magico.
+   *
+   * Porque esto es exactamente lo que era el `* 10` del modelo viejo. Aquella
+   * tarifa hacia `indirectosMes / (volumenMes * 10)` y multiplicaba por el
+   * factor, lo que equivale a absorber `factorPromedio / 10` del pool. Con el
+   * factor promedio 5,58 del catalogo de Cambridge, eso es el 55,8%. No era una
+   * escala de complejidad de 1 a 10: era un porcentaje de absorcion sin nombre.
+   *
+   * Poner 55.8 reproduce los costos del modelo viejo al centavo. La diferencia
+   * con el modelo viejo no es el numero, es que ahora la eleccion esta declarada
+   * y el sistema reporta cuantos Bs quedan afuera.
+   */
+  porcentajeAbsorcionIndirectos: number;
 }
 
 export async function getSystemConfig(db: any): Promise<SystemConfig> {
@@ -76,6 +97,12 @@ export async function getSystemConfig(db: any): Promise<SystemConfig> {
     ? (Number(map.get('volumen_anual_produccion')) || 0)
     : volumenMensualProduccion * 12;
 
+  // Default 100: el pool completo va al costo. Bajarlo es una decision legitima
+  // pero deja plata afuera, y por eso el servicio de costeo reporta cuanta.
+  const porcentajeAbsorcionIndirectos = map.has('porcentaje_absorcion_indirectos')
+    ? (Number(map.get('porcentaje_absorcion_indirectos')) || 0)
+    : 100;
+
   return {
     tasaIva,
     factorIva: 1 + (tasaIva / 100),
@@ -85,6 +112,7 @@ export async function getSystemConfig(db: any): Promise<SystemConfig> {
     impuestosActivos,
     descuentoSinFactura,
     volumenAnualProduccion,
+    porcentajeAbsorcionIndirectos,
   };
 }
 

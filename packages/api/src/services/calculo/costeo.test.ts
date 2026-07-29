@@ -343,6 +343,7 @@ function ctxDePrueba(over: Partial<ContextoCosteo> = {}): ContextoCosteo {
       impuestosActivos: false,
       descuentoSinFactura: 0.1,
       volumenAnualProduccion: 21600,
+      porcentajeAbsorcionIndirectos: 100,
     },
     tasaIvaFraccion: 0.13,
     totalIndirectosMensual: 21480,
@@ -413,6 +414,33 @@ describe('ensamblarInputs', () => {
     const f1 = ensamblarInputs(ctx, { ...PROD, factorComplejidad: 1 }, TALLA);
     const f3 = ensamblarInputs(ctx, { ...PROD, factorComplejidad: 3 }, TALLA);
     expect(f3.inputs.costoIndirectoUnitario! / f1.inputs.costoIndirectoUnitario!).toBeCloseTo(3, 5);
+  });
+
+  it('FASE 4: el porcentaje de absorcion reproduce el modelo viejo', () => {
+    // El usuario pidio mantener el costo por prenda del modelo viejo. No se puede
+    // con el factor: los factores son invariantes de escala, multiplicarlos todos
+    // por k deja el producto igual, asi que deciden el REPARTO y nunca el total.
+    // La palanca legitima es el porcentaje de absorcion, que es exactamente lo que
+    // era el \`* 10\`: absorber factorPromedio/10 del pool.
+    const completo = ctxDePrueba();
+    const parcial = ctxDePrueba({
+      // 50% de absorcion sobre el mismo pool y volumen
+      tasaPorPuntoFactor: ((21480 * 12) * 0.5) / (21600 * 2),
+    });
+    const a = ensamblarInputs(completo, PROD, TALLA);
+    const b = ensamblarInputs(parcial, PROD, TALLA);
+    expect(b.inputs.costoIndirectoUnitario).toBeCloseTo(a.inputs.costoIndirectoUnitario! / 2, 4);
+  });
+
+  it('FASE 4: escalar TODOS los factores no cambia lo absorbido', () => {
+    // La propiedad que hace imposible replicar el modelo viejo tocando factores.
+    // Se fija porque es contraintuitiva: parece que subir el factor deberia subir
+    // el indirecto, y no lo hace si sube en todo el catalogo.
+    const base = ctxDePrueba({ factorPromedio: 2, tasaPorPuntoFactor: (21480 * 12) / (21600 * 2) });
+    const escalado = ctxDePrueba({ factorPromedio: 20, tasaPorPuntoFactor: (21480 * 12) / (21600 * 20) });
+    const a = ensamblarInputs(base, { ...PROD, factorComplejidad: 3 }, TALLA);
+    const b = ensamblarInputs(escalado, { ...PROD, factorComplejidad: 30 }, TALLA);
+    expect(b.inputs.costoIndirectoUnitario).toBeCloseTo(a.inputs.costoIndirectoUnitario!, 4);
   });
 
   it('FASE 4: la tasa NO depende del alcance de la consulta', () => {

@@ -44,6 +44,13 @@ api.put('/configuracion', async (c) => {
   if (body.volumenAnualProduccion !== undefined) {
     await setSystemConfig(db, 'volumen_anual_produccion', String(body.volumenAnualProduccion));
   }
+  if (body.porcentajeAbsorcionIndirectos !== undefined) {
+    await setSystemConfig(
+      db,
+      'porcentaje_absorcion_indirectos',
+      String(body.porcentajeAbsorcionIndirectos)
+    );
+  }
 
   return c.json({ success: true, message: 'Configuración general del sistema actualizada exitosamente' });
 });

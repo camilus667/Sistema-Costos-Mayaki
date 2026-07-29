@@ -420,20 +420,40 @@ export async function cargarContextoCosteo(
     ? factores.reduce((a: number, b: number) => a + b, 0) / factores.length
     : 1;
 
+  // El porcentaje de absorcion separa el HECHO de la POLITICA: el pool y el
+  // volumen son hechos, cuanto de ese pool se vuelca al costo unitario es una
+  // decision. Default 100. Ver la nota en configService sobre por que esto es
+  // exactamente lo que era el `* 10` del modelo viejo.
+  const pctAbsorcion = num(sysConfig.porcentajeAbsorcionIndirectos);
+  const absorcion = pctAbsorcion > 0 ? pctAbsorcion / 100 : 0;
+  const poolAbsorbido = poolIndirectoAnual * absorcion;
+
   const tasaPorPuntoFactor = volumenAnual > 0 && factorPromedio > 0
-    ? poolIndirectoAnual / (volumenAnual * factorPromedio)
+    ? poolAbsorbido / (volumenAnual * factorPromedio)
     : 0;
 
   // Solo para poder medir el cambio. No se usa para costear.
   const tarifaPuntoComplejidad = volumenMes > 0 ? totalIndirectosMensual / (volumenMes * 10) : 0;
 
-  if (tasaPorPuntoFactor > 0 && tarifaPuntoComplejidad > 0) {
-    const absorbidoAntes = tarifaPuntoComplejidad * factorPromedio;
-    const absorbidoAhora = tasaPorPuntoFactor * factorPromedio;
+  if (tasaPorPuntoFactor > 0) {
+    const porPrenda = tasaPorPuntoFactor * factorPromedio;
     avisosGlobales.push(
-      `Indirectos: antes se absorbia ${absorbidoAntes.toFixed(2)} Bs por prenda promedio ` +
-      `(${((absorbidoAntes / absorbidoAhora) * 100).toFixed(0)}% del pool); ahora se absorbe ` +
-      `${absorbidoAhora.toFixed(2)} Bs, que es el 100%. Factor promedio ${factorPromedio.toFixed(2)}.`
+      `Indirectos: ${porPrenda.toFixed(2)} Bs por prenda promedio, absorbiendo el ` +
+      `${pctAbsorcion.toFixed(1)}% del pool. Factor promedio ${factorPromedio.toFixed(2)}, ` +
+      `volumen anual ${volumenAnual}, pool ${poolIndirectoAnual.toFixed(0)} Bs/año.`
+    );
+  }
+
+  // Si se absorbe menos del 100%, la plata que queda afuera se dice en voz alta.
+  // Es una decision legitima, pero no puede ser invisible: son gastos que se pagan
+  // igual y que ningun costo unitario carga, asi que cualquier decision de precio
+  // tomada sobre esos costos esta tomada sobre un costo incompleto.
+  if (absorcion < 0.9999 && poolIndirectoAnual > 0) {
+    const afuera = poolIndirectoAnual - poolAbsorbido;
+    avisosGlobales.push(
+      `ATENCION: con absorcion al ${pctAbsorcion.toFixed(1)}% quedan ${afuera.toFixed(0)} Bs al año ` +
+      `(${(afuera / 12).toFixed(0)} Bs al mes) de gastos indirectos FUERA del costo de las ` +
+      `prendas. Se pagan igual; no los carga ningun costo unitario.`
     );
   }
 
