@@ -2,8 +2,9 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { eq, asc, or, isNull } from 'drizzle-orm';
-import { colegios, productos, telas, tallas, pesoMateriaPrima, inventario } from '../database/schema';
+import { colegios, productos, telas, tallas } from '../database/schema';
 import { saveDbToDisk } from '../database/sqljs';
+import { crearPrendaConTallas } from '../services/crearPrenda.service';
 
 const api = new Hono();
 
@@ -210,78 +211,47 @@ api.put('/:id/config-prendas', async (c) => {
 });
 
 // POST /api/colegios/:id/prendas - Dar de alta nueva prenda
+//
+// LA LOGICA ESTA EN crearPrenda.service.ts, por la misma razon que el resto de este
+// refactor: habia DOS endpoints que crean prendas —este y POST /api/productos— y hacian
+// cosas distintas. Este validaba que el colegio existiera y creaba las filas por talla; el
+// otro no hacia ninguna de las dos, asi que podia crear una prenda huerfana y sin tallas.
+// Arreglar uno dejaba el otro atras, y asi es como el agujero de la huerfana sobrevivio a
+// su propia correccion en eb7293d.
+//
+// Lo que hacia este bloque a mano vive ahora en el servicio, con dos mejoras: el item sale
+// del MAXIMO + 1 y no de contar filas —contar repite un item si hubo borrados, y un item
+// repetido dentro del colegio hace que el lookup por item devuelva 409— y la merma sale de
+// configuracion_sistema en vez del 8 escrito a mano, que era el cuarto lugar con ese
+// literal.
 api.post('/:id/prendas', async (c) => {
   const db = (c as any).db;
   const colegioId = c.req.param('id');
   const body = await c.req.json();
 
-  // SE VALIDA QUE EL COLEGIO EXISTA, y no es una formalidad: sin esto la prenda queda
-  // HUERFANA y es invisible.
-  //
-  // El dashboard llama a /api/colegios/<ambitoActual>/prendas. Con el ambito en 'all'
-  // —que era el estado por defecto mientras el literal 'CAMBRIDGE' roto dejaba caer el
-  // selector ahi— eso pegaba a /api/colegios/all/prendas y la prenda nacia con
-  // colegio_id = 'all'. Ningun filtro por colegio la encuentra, pero el conteo sin filtro
-  // la cuenta: de ahi que 27 + 1 diera 29.
-  //
-  // SQLite no lo impide solo: las foreign keys estan APAGADAS por defecto y este proyecto
-  // solo las prende para el DDL de la migracion. Una FK que apunta a la nada se inserta
-  // sin protestar, asi que la validacion tiene que estar aca.
-  const [colegio] = await db.select().from(colegios).where(eq(colegios.id, colegioId)).limit(1);
-  if (!colegio) {
-    return c.json({
-      success: false,
-      error:
-        `No existe el colegio "${colegioId}". Una prenda tiene que pertenecer a un colegio ` +
-        `real: si se creara con este id quedaria huerfana, invisible en toda pantalla que ` +
-        `filtre por colegio y contada en los totales sin filtro.`,
-    }, 404);
-  }
-
-  const existingProds = await db.select().from(productos).where(eq(productos.colegioId, colegioId));
-  const nextItemNum = body.itemNumero || (existingProds.length + 1);
-  const nextOrden = body.orden || nextItemNum;
-
-  const [newProd] = await db.insert(productos).values({
+  const r = await crearPrendaConTallas(db, {
     colegioId,
-    itemNumero: nextItemNum,
-    orden: nextOrden,
-    descripcion: body.descripcion || 'Nueva Prenda',
-    telaId: body.telaId || null,
-    factorComplejidad: body.factorComplejidad || 1,
-    activo: true,
-  }).returning();
+    itemNumero: body.itemNumero,
+    orden: body.orden,
+    descripcion: body.descripcion,
+    telaId: body.telaId ?? null,
+    factorComplejidad: body.factorComplejidad,
+    modoCosteo: body.modoCosteo,
+  });
 
-  // Este era el peor de los tres filtros: no rompia una pantalla, rompia los DATOS.
-  // Con las tallas compartidas devolvia cero filas, asi que toda prenda creada desde
-  // la pantalla de Configuracion nacia SIN NINGUNA TALLA —sin filas de peso ni de
-  // inventario— y no habia forma de costearla ni de venderla. Con status 200.
-  const allTallas = await db.select().from(tallas).where(or(eq(tallas.colegioId, colegioId), isNull(tallas.colegioId)));
-  for (const t of allTallas) {
-    await db.insert(pesoMateriaPrima).values({
-      productoId: newProd.id,
-      tallaId: t.id,
-      pesoExactoGramos: 0,
-      pesoGramos: 0,
-      // PENDIENTE: el 8 esta hardcodeado aca, y es el cuarto lugar con ese numero
-      // escrito a mano. La Fase 3 lo saco del motor a proposito, para que el default
-      // viva solo en el schema de la base y en configuracion_sistema. Deberia leerse
-      // de getSystemConfig.
-      mermaPorcentaje: 8,
-      pesoConMerma: 0,
-    });
-    await db.insert(inventario).values({
-      productoId: newProd.id,
-      tallaId: t.id,
-      cantidad: 0,
-      costoUnitario: 0,
-      costoTotal: 0,
-    });
+  if (!r.ok) {
+    return c.json({ success: false, error: r.error }, r.estado as any);
   }
 
   saveDbToDisk();
 
-  return c.json({ success: true, data: newProd, message: 'Prenda creada exitosamente' });
+  return c.json({
+    success: true,
+    data: r.prenda,
+    tallas: r.tallas,
+    avisos: r.avisos,
+    message: 'Prenda creada exitosamente',
+  });
 });
 
 // PUT /api/colegios/:id/tallas-config - Activar/desactivar tallas del colegio

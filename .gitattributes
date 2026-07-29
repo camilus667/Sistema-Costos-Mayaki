@@ -1,0 +1,23 @@
+# La base de datos es un BINARIO y hay que decirselo a git explicitamente.
+#
+# POR QUE. Git decide si un archivo es texto o binario olfateando el contenido: busca bytes
+# NUL en los primeros 8000. Un archivo SQLite normalmente los tiene y se detecta bien, pero
+# la deteccion es heuristica, no una garantia. Si alguna vez fallara en Windows —donde
+# core.autocrlf convierte finales de linea— git reescribiria bytes 0x0A como 0x0D0A DENTRO
+# del archivo y la base quedaria CORRUPTA en el checkout, sin que nada avise.
+#
+# El costo de descartar esa posibilidad es una linea. Y ademas evita que git intente un
+# merge de texto sobre el archivo: con `binary` un conflicto se plantea como "elegi una
+# version", que es la unica resolucion posible para una base de datos, en vez de intentar
+# entremezclar lineas y producir un archivo que no abre.
+#
+# Contexto: este .db esta rastreado a proposito. Es el unico respaldo de los datos reales
+# —dos colegios, 28 prendas, 297 precios— y hoy vive nada mas que en la maquina del usuario
+# y en este repo. Ver el commit 235845a.
+packages/api/sistema_inventario.db binary
+
+# El wasm de sql.js, por lo mismo.
+*.wasm binary
+
+# El Excel de origen. Sigue siendo la fuente del sembrado inicial.
+*.xlsx binary

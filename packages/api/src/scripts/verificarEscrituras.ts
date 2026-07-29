@@ -696,8 +696,22 @@ async function main() {
     );
 
     if (exclusivoDelOtro.length === 0 || prendaPropia.length === 0) {
-      console.log('  (sin insumo exclusivo del otro colegio o sin prenda propia, no se puede probar');
-      console.log('   la asignacion cruzada)');
+      // ESTO ERA UN console.log, y por eso no contaba para nada. El chequeo mas importante de
+      // la seccion —una ESCRITURA de un colegio sobre datos del otro— se salteaba con dos
+      // lineas en consola que nadie mira, y el resumen decia "todo verde".
+      //
+      // Es la misma falla que ya corregi una vez en esta seccion: un chequeo que no puede
+      // medir tiene que DECIRLO en el resumen, porque un verde vacio es peor que no tener
+      // chequeo. Sin chequeo uno sabe que no sabe. Saltearlo en silencio es peor todavia que
+      // un verde vacuo: no queda ni el rastro.
+      noConcluye(
+        'asignar un insumo exclusivo de otro colegio se rechaza',
+        `El colegio de comparacion no tiene ningun insumo exclusivo (medido: 0), asi que no hay ` +
+          `con que intentar la asignacion cruzada. Para que este chequeo mida, ese colegio ` +
+          `necesita al menos un insumo propio: se crea en Configuracion > Insumos poniendole ` +
+          `Ambito = ese colegio. Es justo lo que le falta a su Camisa Formal, que hoy no lleva ` +
+          `escudo porque el de Cambridge no puede viajar.`
+      );
     } else {
       const [accAjenoId, accAjenoNombre] = exclusivoDelOtro[0];
       const [prendaId] = prendaPropia[0];
@@ -792,91 +806,356 @@ async function main() {
   // ==========================================================================
   // 8) COPIAR DE UNA PRENDA DE REFERENCIA
   //
-  // El chequeo importante es el segundo, y se puede hacer SIN mutar datos: copiar sobre
-  // una prenda que ya tiene todo cargado, sin marcar "reemplazar", NO debe tocar nada.
-  // Esa es la propiedad central de la operacion —copiar no destruye trabajo humano— y si
-  // fallara, la prueba misma dejaria el dato pisado. Aca ese riesgo trabaja a favor: si
-  // el peso cambia, el chequeo lo dice Y el bug ya ocurrio, asi que se detecta a la
-  // primera en vez de en produccion.
+  // LA VERSION ANTERIOR DE ESTA SECCION ESTABA MAL, de las dos formas que este proyecto ya
+  // conoce, y lo digo aca porque el error es mas instructivo que el chequeo.
+  //
+  // Decia: "copiar sobre una prenda que ya tiene todo cargado, sin marcar reemplazar, no
+  // debe tocar nada", y para medirlo tomaba las DOS PRIMERAS prendas del colegio y leia el
+  // peso de la primera talla del destino. En la base real ese peso vale CERO —el item 1 no
+  // se hace en la talla mas chica— y cero es EXACTAMENTE el criterio de vacio. O sea que la
+  // copia hizo lo correcto llenandolo, y el chequeo lo reporto como falla.
+  //
+  //   1. NO DISCRIMINABA. Muestreaba una posicion donde la propiedad no existe, igual que
+  //      los chequeos de aislamiento que pasaban en verde con el segundo colegio vacio.
+  //      Ahi el defecto daba un verde falso; aca un rojo falso. La causa es la misma:
+  //      medir una propiedad sobre datos que no la ejercen.
+  //
+  //   2. Y PEOR: MUTABA DATOS REALES. Al escribir sobre el item 1 de un colegio de verdad y
+  //      no restaurar nada, dejaba pesos, mano de obra y lineas de receta cambiadas para
+  //      siempre. Escribi en su propio comentario que "se puede hacer SIN mutar datos" y
+  //      despues escribi lo contrario. Una verificacion que corrompe lo que verifica es
+  //      peor que no tenerla.
+  //
+  // ESTA VERSION CREA SU PROPIA PRENDA, le carga un peso conocido, y la borra al final. Con
+  // eso las dos cosas se arreglan solas: el peso cargado es distinto de cero, asi que la
+  // propiedad se puede medir, y nada real se toca.
+  //
+  // Y mide las DOS direcciones, porque "no pisa" sin "si pisa cuando se lo piden" es medio
+  // chequeo: una copia que no hiciera nada en absoluto pasaria la primera mitad.
   console.log('');
   console.log(SEP);
   console.log('  8. COPIAR DE UNA PRENDA DE REFERENCIA');
   console.log(SEP);
 
-  const dosPrendas = await filasDesdeDisco(`
-    SELECT id, item_numero, descripcion FROM producto
-    WHERE colegio_id = '${esc(colegioId)}'
-    ORDER BY item_numero
-    LIMIT 2;
+  // Origen: una prenda del colegio que tenga receta. Copiar de una receta vacia da 400.
+  const origen = await filasDesdeDisco(`
+    SELECT p.id, p.item_numero, p.descripcion, p.tela_id, COUNT(d.id) AS lineas
+    FROM producto p
+    LEFT JOIN detalle_acc d ON d.producto_id = p.id
+    WHERE p.colegio_id = '${esc(colegioId)}'
+    GROUP BY p.id
+    HAVING lineas > 0
+    ORDER BY lineas DESC
+    LIMIT 1;
   `);
 
-  if (dosPrendas.length < 2) {
-    noConcluye('copiar de referencia respeta lo ya cargado', 'Hacen falta dos prendas en el colegio.');
+  if (origen.length === 0) {
+    noConcluye(
+      'copiar de referencia respeta lo ya cargado',
+      'Ninguna prenda del colegio tiene receta, asi que no hay de donde copiar.'
+    );
   } else {
-    const [destinoId, destinoItem] = dosPrendas[0];
-    const [origenId, origenItem] = dosPrendas[1];
+    const [origenId, origenItem, origenDesc, origenTela] = origen[0];
+    const FACTOR_SONDA = 3.25;
+    const PESO_SONDA = 137.5;
 
-    const pedidoVacio = await http('POST', `/api/productos/${destinoId}/copiar-de/${origenId}`, {
-      receta: false, pesos: false, manoObra: false, factor: false, tela: false,
+    // --------------------------------------------------------- prenda de prueba
+    const alta = await http('POST', `/api/colegios/${colegioId}/prendas`, {
+      descripcion: `${MARCA} copia`,
+      telaId: origenTela,
+      factorComplejidad: FACTOR_SONDA,
     });
+    const destinoId = alta.json?.data?.id;
+
     anotar(
-      'un pedido de copia sin nada marcado devuelve 400',
-      pedidoVacio.status === 400 && pedidoVacio.json?.success === false,
-      `status ${pedidoVacio.status}. Un pedido vacio no es un error del sistema, es un pedido ` +
-        'vacio: se dice, en vez de responder success sobre cero trabajo.'
+      'el alta crea la prenda CON sus filas por talla',
+      alta.json?.success === true && !!destinoId && (alta.json?.tallas?.creadas || 0) > 0,
+      `status ${alta.status}, ${alta.json?.tallas?.creadas} talla(s). Con el filtro de la Fase 5 ` +
+        'mal escrito esto daba CERO tallas y la prenda nacia imposible de costear, con status 200.'
     );
 
-    // El peso y el factor ANTES, leidos del disco.
-    const pesoAntes = Number(await unoDesdeDisco(`
-      SELECT p.peso_con_merma FROM peso_mat_prima p
-      JOIN talla t ON t.id = p.talla_id
-      WHERE p.producto_id = '${esc(String(destinoId))}'
-      ORDER BY t.orden LIMIT 1;
+    if (!destinoId) {
+      noConcluye('copiar de referencia respeta lo ya cargado', 'No se pudo crear la prenda de prueba.');
+    } else {
+      const pedidoVacio = await http('POST', `/api/productos/${destinoId}/copiar-de/${origenId}`, {
+        receta: false, pesos: false, manoObra: false, factor: false, tela: false,
+      });
+      anotar(
+        'un pedido de copia sin nada marcado devuelve 400',
+        pedidoVacio.status === 400 && pedidoVacio.json?.success === false,
+        `status ${pedidoVacio.status}. Un pedido vacio no es un error del sistema, es un pedido ` +
+          'vacio: se dice, en vez de responder success sobre cero trabajo.'
+      );
+
+      // ------------------------------------- se carga UN peso, para que haya que respetar
+      const primeraTalla = await filasDesdeDisco(`
+        SELECT t.id, t.codigo FROM peso_mat_prima p
+        JOIN talla t ON t.id = p.talla_id
+        WHERE p.producto_id = '${esc(String(destinoId))}'
+        ORDER BY t.orden LIMIT 1;
+      `);
+      const tallaCodigo = primeraTalla.length ? String(primeraTalla[0][1]) : null;
+
+      await http('PUT', '/api/inputs/peso-mat-prima', {
+        productoId: destinoId,
+        tallaCodigo,
+        pesoExacto: PESO_SONDA,
+      });
+
+      const pesoCargado = Number(await unoDesdeDisco(`
+        SELECT p.peso_con_merma FROM peso_mat_prima p
+        JOIN talla t ON t.id = p.talla_id
+        WHERE p.producto_id = '${esc(String(destinoId))}' AND t.codigo = '${esc(String(tallaCodigo))}';
+      `));
+
+      anotar(
+        'la sonda de peso quedo cargada EN DISCO',
+        pesoCargado > 0,
+        `talla ${tallaCodigo}: peso con merma ${pesoCargado} g a partir de ${PESO_SONDA} g exactos. ` +
+          'Sin un peso distinto de cero, el chequeo siguiente no puede distinguir "respeto el dato" ' +
+          'de "no habia dato".'
+      );
+
+      const cerosAntes = Number(await unoDesdeDisco(`
+        SELECT COUNT(*) FROM peso_mat_prima
+        WHERE producto_id = '${esc(String(destinoId))}' AND peso_con_merma = 0;
+      `));
+
+      // ------------------------------------------------------- SIN reemplazar
+      const sinReemplazar = await http('POST', `/api/productos/${destinoId}/copiar-de/${origenId}`, {
+        receta: true, pesos: true, manoObra: true, factor: true, tela: false, reemplazar: false,
+      });
+
+      const pesoTrasCopia = Number(await unoDesdeDisco(`
+        SELECT p.peso_con_merma FROM peso_mat_prima p
+        JOIN talla t ON t.id = p.talla_id
+        WHERE p.producto_id = '${esc(String(destinoId))}' AND t.codigo = '${esc(String(tallaCodigo))}';
+      `));
+      const factorTrasCopia = Number(await unoDesdeDisco(
+        `SELECT factor_complejidad FROM producto WHERE id = '${esc(String(destinoId))}';`
+      ));
+      const cerosDespues = Number(await unoDesdeDisco(`
+        SELECT COUNT(*) FROM peso_mat_prima
+        WHERE producto_id = '${esc(String(destinoId))}' AND peso_con_merma = 0;
+      `));
+
+      anotar(
+        'copiar SIN reemplazar no pisa el peso que ya estaba cargado',
+        sinReemplazar.status === 201 && Math.abs(pesoTrasCopia - pesoCargado) < 0.0005,
+        `desde item ${origenItem} (${origenDesc}): la talla ${tallaCodigo} valia ${pesoCargado} y ` +
+          `quedo en ${pesoTrasCopia}. ` +
+          (Math.abs(pesoTrasCopia - pesoCargado) >= 0.0005
+            ? 'CAMBIO: la copia piso un dato cargado sin que se lo pidieran.'
+            : `Correcto, y el server lo reporta: ${sinReemplazar.json?.pesos?.saltados} peso(s) sin tocar.`)
+      );
+
+      // GUARDA CONTRA LA VACUIDAD. Sin esto, una copia que no hiciera absolutamente nada
+      // pasaria el chequeo de arriba. Que los ceros hayan bajado prueba que SI escribio.
+      anotar(
+        'y aun asi llena los pesos que estaban en cero',
+        cerosDespues < cerosAntes,
+        `pesos en cero: ${cerosAntes} antes, ${cerosDespues} despues, y el server dice ` +
+          `${sinReemplazar.json?.pesos?.actualizados} actualizado(s). Si este numero no bajara, ` +
+          'el chequeo anterior estaria pasando porque la copia no hace nada, no porque respete.'
+      );
+
+      anotar(
+        'copiar SIN reemplazar no pisa un factor distinto del default',
+        Math.abs(factorTrasCopia - FACTOR_SONDA) < 0.0005,
+        `el factor era ${FACTOR_SONDA} —puesto a proposito distinto de 1— y quedo en ${factorTrasCopia}. ` +
+          'Un factor distinto de 1 es una decision de alguien: copiar no debe deshacerla.'
+      );
+
+      // ------------------------------------------------------- CON reemplazar
+      const conReemplazar = await http('POST', `/api/productos/${destinoId}/copiar-de/${origenId}`, {
+        pesos: true, factor: true, receta: false, manoObra: false, tela: false, reemplazar: true,
+      });
+
+      const pesoTrasReemplazo = Number(await unoDesdeDisco(`
+        SELECT p.peso_con_merma FROM peso_mat_prima p
+        JOIN talla t ON t.id = p.talla_id
+        WHERE p.producto_id = '${esc(String(destinoId))}' AND t.codigo = '${esc(String(tallaCodigo))}';
+      `));
+
+      anotar(
+        'copiar CON reemplazar SI pisa el peso cargado',
+        conReemplazar.status === 201 && Math.abs(pesoTrasReemplazo - pesoCargado) >= 0.0005,
+        `la talla ${tallaCodigo} paso de ${pesoTrasCopia} a ${pesoTrasReemplazo}. ` +
+          'Es la otra mitad de la propiedad: sin este chequeo, una copia que nunca escribiera ' +
+          'nada pasaria por prudente.'
+      );
+
+      const origenFantasma = await http('POST', `/api/productos/${destinoId}/copiar-de/${MARCA}`, {
+        receta: true,
+      });
+      anotar(
+        'copiar de una prenda inexistente devuelve 404',
+        origenFantasma.status === 404 && origenFantasma.json?.success === false,
+        `status ${origenFantasma.status}, success ${JSON.stringify(origenFantasma.json?.success)}.`
+      );
+
+      // ------------------------------------------- borrado: se niega, y despues cumple
+      //
+      // La prenda de prueba ya tiene receta, pesos y mano de obra, o sea trabajo humano a
+      // los ojos del endpoint. Eso la vuelve el sujeto ideal para probar las dos ramas del
+      // DELETE nuevo sin arriesgar nada.
+      const borradoSinForzar = await http('DELETE', `/api/productos/${destinoId}`);
+      anotar(
+        'DELETE se niega a borrar una prenda con datos cargados',
+        borradoSinForzar.status === 409 && borradoSinForzar.json?.success === false,
+        `status ${borradoSinForzar.status}. Antes este endpoint borraba la prenda y dejaba VIVAS ` +
+          'sus filas hijas: con las foreign keys apagadas, una fabrica de huerfanas.'
+      );
+
+      const borrado = await http('DELETE', `/api/productos/${destinoId}?forzar=true`);
+      const quedaPrenda = Number(await unoDesdeDisco(
+        `SELECT COUNT(*) FROM producto WHERE id = '${esc(String(destinoId))}';`
+      ));
+      let hijasVivas = 0;
+      for (const t of ['detalle_acc', 'precio_venta', 'peso_mat_prima', 'mano_obra', 'inventario']) {
+        hijasVivas += Number(await unoDesdeDisco(
+          `SELECT COUNT(*) FROM ${t} WHERE producto_id = '${esc(String(destinoId))}';`
+        ));
+      }
+
+      anotar(
+        'DELETE con forzar borra la prenda Y todas sus hijas, en disco',
+        borrado.status === 200 && quedaPrenda === 0 && hijasVivas === 0,
+        `status ${borrado.status}, ${borrado.json?.totalFilasHijas} fila(s) hija(s) borradas. ` +
+          `En disco quedan ${quedaPrenda} prenda(s) y ${hijasVivas} fila(s) hija(s), y las dos ` +
+          'tienen que ser cero: una hija sin padre es invisible para toda pantalla y contada ' +
+          'en los totales sin filtro.'
+      );
+    }
+  }
+
+  // ==========================================================================
+  // 9) FASE 6 EN precio.ts Y producto.ts
+  //
+  // precio_venta e historico_precio NO tienen colegio_id: son tablas derivadas y la unica
+  // forma de acotarlas es pasando por producto. Ninguno de los siete endpoints de precio.ts
+  // lo hacia, asi que GET /api/precios devolvia los precios de TODOS los colegios y
+  // /exportar/costos hacia un volcado completo —el peor lugar para una fuga, porque el
+  // resultado SALE del sistema.
+  //
+  // Y producto.ts tenia el agujero de la huerfana en DOS endpoints mas: POST / no validaba
+  // el colegio, y PUT /:id aceptaba colegioId sin validarlo, asi que podia mover una prenda
+  // a un colegio inexistente.
+  // ==========================================================================
+  console.log('');
+  console.log(SEP);
+  console.log('  9. FASE 6  —  precios y prendas acotados por colegio');
+  console.log(SEP);
+
+  const dosColegios = await filasDesdeDisco('SELECT id, nombre FROM colegio ORDER BY nombre;');
+  const totalPrecios = Number(await unoDesdeDisco('SELECT COUNT(*) FROM precio_venta;'));
+
+  if (dosColegios.length < 2) {
+    noConcluye(
+      'los precios se acotan por colegio',
+      'Hace falta un segundo colegio: con uno solo, filtrar y no filtrar dan lo mismo.'
+    );
+  } else {
+    const colA = String(dosColegios[0][0]);
+    const nomA = String(dosColegios[0][1]);
+    const colB = String(dosColegios[1][0]);
+    const nomB = String(dosColegios[1][1]);
+
+    const enDiscoB = Number(await unoDesdeDisco(`
+      SELECT COUNT(*) FROM precio_venta pv
+      JOIN producto p ON p.id = pv.producto_id
+      WHERE p.colegio_id = '${esc(colB)}';
     `));
-    const factorAntes = Number(await unoDesdeDisco(
-      `SELECT factor_complejidad FROM producto WHERE id = '${esc(String(destinoId))}';`
+
+    const preciosB = await http('GET', `/api/precios?colegioId=${colB}`);
+    const devueltos = (preciosB.json?.data || []).length;
+    const ajenos = (preciosB.json?.data || []).filter((r: any) => r.colegioId && r.colegioId !== colB).length;
+
+    anotar(
+      'GET /api/precios?colegioId= devuelve SOLO los precios de ese colegio',
+      preciosB.json?.success === true && devueltos === enDiscoB && ajenos === 0 && enDiscoB < totalPrecios,
+      `${nomB}: devolvio ${devueltos}, en disco tiene ${enDiscoB}, y en toda la empresa hay ` +
+        `${totalPrecios}. ${ajenos} fila(s) de otro colegio. Discrimina: ${enDiscoB} es MENOR que ` +
+        `${totalPrecios}, asi que un filtro roto se veria.`
+    );
+
+    const sinFiltro = await http('GET', '/api/precios');
+    anotar(
+      'GET /api/precios sin filtro declara que es TODA LA EMPRESA',
+      sinFiltro.json?.alcance?.tipo === 'empresa' && (sinFiltro.json?.data || []).length === totalPrecios,
+      `alcance "${sinFiltro.json?.alcance?.descripcion}" sobre ${(sinFiltro.json?.data || []).length} ` +
+        `fila(s) de ${totalPrecios}. Sin el alcance declarado, el volcado de la empresa y el de un ` +
+        'colegio se ven iguales desde afuera.'
+    );
+
+    const expo = await http('GET', `/api/precios/exportar/costos?colegioId=${colB}`);
+    const expoFilas = expo.json?.data || [];
+    anotar(
+      'la exportacion de precios se acota y trae el numero de item',
+      expo.json?.success === true &&
+        expoFilas.length === enDiscoB &&
+        expoFilas.every((r: any) => r.colegioId === colB && r.itemNumero !== undefined),
+      `${expoFilas.length} fila(s), todas de ${nomB} y con itemNumero. Una exportacion sin el ` +
+        'numero de item obliga a cruzarla a mano contra otra planilla.'
+    );
+
+    // --------------------------------------------- huerfanos por falta de validacion
+    const unaTalla = String(await unoDesdeDisco('SELECT id FROM talla LIMIT 1;'));
+    const precioHuerfano = await http('POST', '/api/precios', {
+      productoId: MARCA, tallaId: unaTalla, precioBs: 99.99,
+    });
+    anotar(
+      'POST /api/precios con una prenda inexistente devuelve 404',
+      precioHuerfano.status === 404 && precioHuerfano.json?.success === false,
+      `status ${precioHuerfano.status}. Antes la fila entraba: un precio huerfano es invisible en ` +
+        'toda pantalla que pase por producto y se suma en los totales sin filtro.'
+    );
+
+    const borradoFantasma = await http('DELETE', `/api/precios/${MARCA}`);
+    anotar(
+      'DELETE /api/precios de un id inexistente devuelve 404, no success',
+      borradoFantasma.status === 404 && borradoFantasma.json?.success === false,
+      `status ${borradoFantasma.status}. Antes respondia "Precio eliminado exitosamente" habiendo ` +
+        'borrado cero filas. Es la familia de defecto que aparecio cinco veces en esta sesion.'
+    );
+
+    // ------------------------------------------------- prendas: dueño y colegio destino
+    const prendaDeA = String(await unoDesdeDisco(
+      `SELECT id FROM producto WHERE colegio_id = '${esc(colA)}' LIMIT 1;`
     ));
 
-    const sinReemplazar = await http('POST', `/api/productos/${destinoId}/copiar-de/${origenId}`, {
-      receta: true, pesos: true, manoObra: true, factor: true, tela: false, reemplazar: false,
-    });
+    const ajena = await http('GET', `/api/productos/${prendaDeA}?colegioId=${colB}`);
+    anotar(
+      'GET /api/productos/:id no entrega una prenda de otro colegio',
+      ajena.status === 404 && ajena.json?.success === false,
+      `pidiendo una prenda de ${nomA} como si fuera de ${nomB}: status ${ajena.status}. Es 404 y no ` +
+        '403 a proposito: un 403 confirmaria que la prenda existe en otro colegio.'
+    );
 
-    const pesoDespues = Number(await unoDesdeDisco(`
-      SELECT p.peso_con_merma FROM peso_mat_prima p
-      JOIN talla t ON t.id = p.talla_id
-      WHERE p.producto_id = '${esc(String(destinoId))}'
-      ORDER BY t.orden LIMIT 1;
-    `));
-    const factorDespues = Number(await unoDesdeDisco(
-      `SELECT factor_complejidad FROM producto WHERE id = '${esc(String(destinoId))}';`
+    const mudanzaImposible = await http('PUT', `/api/productos/${prendaDeA}`, { colegioId: MARCA });
+    const siguePerteneciendo = String(await unoDesdeDisco(
+      `SELECT colegio_id FROM producto WHERE id = '${esc(prendaDeA)}';`
     ));
-
     anotar(
-      'copiar SIN reemplazar no pisa un peso ya cargado',
-      sinReemplazar.status === 201 && Math.abs(pesoDespues - pesoAntes) < 0.0005,
-      `item ${destinoItem} desde item ${origenItem}: el peso de la primera talla era ${pesoAntes} ` +
-        `y quedo en ${pesoDespues}. ` +
-        (Math.abs(pesoDespues - pesoAntes) >= 0.0005
-          ? 'CAMBIO: la copia piso un dato cargado sin que se lo pidieran.'
-          : `Correcto, y el server lo reporta: ${sinReemplazar.json?.pesos?.saltados} peso(s) sin tocar.`)
+      'PUT /api/productos/:id no mueve una prenda a un colegio inexistente',
+      mudanzaImposible.status === 404 && siguePerteneciendo === colA,
+      `status ${mudanzaImposible.status}, y en disco la prenda sigue en ${nomA}. Antes este PUT ` +
+        'aceptaba cualquier colegioId: un solo pedido creaba una huerfana, que es el mismo estado ' +
+        'que hubo que limpiar a mano esta mañana.'
     );
 
-    anotar(
-      'copiar SIN reemplazar no pisa un factor distinto del default',
-      Math.abs(factorDespues - factorAntes) < 0.0005 || factorAntes === 1,
-      `el factor era ${factorAntes} y quedo en ${factorDespues}. ` +
-        (factorAntes === 1
-          ? 'El destino tenia el default 1, asi que copiarlo es correcto y este chequeo no discrimina.'
-          : 'Un factor distinto de 1 es una decision de alguien: copiar no debe deshacerla.')
-    );
-
-    const origenFantasma = await http('POST', `/api/productos/${destinoId}/copiar-de/${MARCA}`, {
-      receta: true,
+    const altaImposible = await http('POST', '/api/productos', {
+      colegioId: MARCA, descripcion: `${MARCA} huerfana`,
     });
+    const cuantasConEseColegio = Number(await unoDesdeDisco(
+      `SELECT COUNT(*) FROM producto WHERE colegio_id = '${esc(MARCA)}';`
+    ));
     anotar(
-      'copiar de una prenda inexistente devuelve 404',
-      origenFantasma.status === 404 && origenFantasma.json?.success === false,
-      `status ${origenFantasma.status}, success ${JSON.stringify(origenFantasma.json?.success)}.`
+      'POST /api/productos con un colegio inexistente devuelve 404 y no crea nada',
+      altaImposible.status === 404 && cuantasConEseColegio === 0,
+      `status ${altaImposible.status}, y en disco hay ${cuantasConEseColegio} prenda(s) con ese ` +
+        'colegio fantasma. Este era el SEGUNDO camino de creacion, el que quedo abierto cuando ' +
+        'tape el de colegio.ts y di el problema por cerrado.'
     );
   }
 

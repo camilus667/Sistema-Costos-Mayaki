@@ -272,21 +272,35 @@ export interface OpcionesGetDb {
   /**
    * Abre la base SIN sembrar y SIN escribir el archivo.
    *
-   * Por que hace falta. Hasta ahora, abrir la base era una operacion de
-   * escritura: las DOS ramas del if de mas abajo llamaban a `seedData` y despues
-   * a `saveDbToDisk`, tanto con la base vacia como con la base ya cargada. El
-   * comentario decia "guarded internally", pero el sembrado no tiene esa guarda
-   * para todas las tablas. En particular `mano_obra` se borra completa y se
-   * vuelve a insertar desde el Excel en CADA arranque, sin ninguna condicion.
-   *
-   * Consecuencia: cualquier script que dijera "simulacion, no escribe nada"
-   * escribia igual, porque el archivo se reescribia antes de que corriera su
-   * primera linea. Y cualquier correccion a mano de un costo de mano de obra
-   * hecha desde la UI sobrevivia solo hasta el siguiente arranque.
+   * Por que hace falta. Abrir la base era una operacion de ESCRITURA: las DOS
+   * ramas del if de mas abajo llaman a `seedData` y despues a `saveDbToDisk`,
+   * tanto con la base vacia como con la base ya cargada. Asi que cualquier script
+   * que dijera "simulacion, no escribe nada" escribia igual, porque el archivo se
+   * reescribia antes de que corriera su primera linea.
    *
    * Las migraciones NO se saltean: los CREATE TABLE IF NOT EXISTS, los ALTER
    * TABLE y los indices van antes de este punto y son idempotentes. Lo unico que
    * se saltea es el sembrado de datos y la escritura del archivo.
+   *
+   * NOTA DE 2026-07-29, y la dejo escrita porque el comentario que estaba aca me
+   * hizo perder cuatro verificaciones y casi le doy un susto al usuario.
+   *
+   * Decia, en PRESENTE, que `mano_obra` se borra completa y se reinserta desde el
+   * Excel en cada arranque, y lo marcaba "pendiente de decision del usuario". Eso
+   * ERA cierto y ya NO lo es: seed.ts tiene guarda de tabla vacia desde el mismo
+   * dia, y la decision esta tomada y escrita ahi —la base manda, el Excel siembra
+   * una sola vez—. Verificado en vivo: el arranque del servidor imprime
+   * "Mano de Obra: 448 tarifas ya en la base, no se re-siembra".
+   *
+   * Si el texto viejo hubiera seguido siendo cierto, la mano de obra que copia
+   * copiarPrenda.service.ts se habria borrado en el reinicio siguiente. Fui a
+   * medirlo antes de avisar y no era asi.
+   *
+   * Es la misma clase de error que este refactor viene persiguiendo —una
+   * afirmacion verdadera cuando se escribio y falsa ahora— pero en la
+   * DOCUMENTACION en vez del codigo. Y es peor de lo que parece: un comentario
+   * viejo no falla nunca, no rompe ningun test, y se lee con la misma confianza
+   * que el codigo de al lado.
    */
   skipSeed?: boolean;
 }
