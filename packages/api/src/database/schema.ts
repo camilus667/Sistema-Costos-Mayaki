@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 // ============================================
@@ -137,7 +137,14 @@ export const detalleAccesorio = sqliteTable('detalle_acc', {
   productoId: text('producto_id').notNull().references(() => productos.id),
   accesorioId: text('accesorio_id').notNull().references(() => accesorios.id),
   cantidadUso: real('cantidad_uso').notNull(),
-});
+}, (t) => ({
+  // Una prenda no puede llevar dos veces el mismo accesorio. Sin esta
+  // restriccion una linea duplicada duplica el costo en silencio segun como
+  // resuelva el join, y en una tabla de costeo eso es un error invisible.
+  prodAccUnico: uniqueIndex('idx_detalle_acc_prod_acc').on(t.productoId, t.accesorioId),
+  porProducto: index('idx_detalle_acc_producto').on(t.productoId),
+  porAccesorio: index('idx_detalle_acc_accesorio').on(t.accesorioId),
+}));
 
 // ============================================
 // MANO DE OBRA
