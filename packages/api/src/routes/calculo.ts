@@ -7,6 +7,7 @@ import { costearLote, costearPrendaTodasLasTallas } from '../services/calculo/co
 import { productos, tallas, preciosVenta, inventario } from '../database/schema';
 import XLSX from 'xlsx';
 import { findExcelPath } from '../scripts/seed';
+import { resolverPrendaPorItem } from '../services/resolucion.service';
 
 /** Redondeo de presentacion. El motor ya redondea; esto es para los pesos crudos. */
 const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
@@ -316,59 +317,6 @@ api.get('/matriz-consolidada', async (c) => {
     return c.json({ success: false, error: e?.message || String(e) }, 500);
   }
 });
-
-/**
- * Resuelve la prenda a partir de su numero de item, exigiendo colegio si hace falta.
- *
- * itemNumero se numera POR COLEGIO: viene de la fila del Excel de cada colegio, no
- * es un id global. Con dos colegios cargados, el item 5 identifica DOS prendas
- * distintas.
- *
- * La version anterior hacia `where(eq(itemNumero)).limit(1)` sin ORDER BY, asi que
- * devolvia la fila que la base quisiera —en la practica la del colegio cargado
- * primero— y los dos handlers que la usan ESCRIBEN. Editar el precio de una prenda
- * del colegio B le habria cambiado el precio a la prenda del colegio A, en silencio,
- * devolviendo success. Es la falla mas grave que encontro la auditoria de la Fase 6:
- * no una fuga de lectura, una escritura sobre los datos de otro cliente.
- *
- * Detalle que vale registrar: el lookup de talla que va justo debajo de estas dos
- * llamadas SI fue endurecido en la Fase 5, con `= colegio OR IS NULL`. Toque esas
- * tres lineas y no vi que la de arriba no tenia scoping de colegio en absoluto.
- *
- * Comportamiento:
- *  - con colegioId, filtra por el;
- *  - sin colegioId, si el numero identifica UNA sola prenda usa esa, que es
- *    exactamente lo que pasa hoy con un colegio, byte por byte;
- *  - sin colegioId y con varias candidatas, RECHAZA con 409. Ambiguo es ambiguo:
- *    mejor un error que escribirle el precio al cliente equivocado.
- *
- * El limit(2) es deliberado: solo hace falta distinguir "una" de "mas de una".
- */
-async function resolverPrendaPorItem(db: any, itemNumero: number, colegioId?: string) {
-  const cond = colegioId
-    ? and(eq(productos.itemNumero, itemNumero), eq(productos.colegioId, colegioId))
-    : eq(productos.itemNumero, itemNumero);
-
-  const candidatas = await db.select().from(productos).where(cond).limit(2);
-
-  if (candidatas.length === 0) {
-    return {
-      prenda: null,
-      estado: 404,
-      error: colegioId
-        ? `No existe la prenda con item ${itemNumero} en el colegio ${colegioId}.`
-        : `No existe la prenda con item ${itemNumero}.`,
-    };
-  }
-  if (candidatas.length > 1) {
-    return {
-      prenda: null,
-      estado: 409,
-      error: `El item ${itemNumero} existe en mas de un colegio. Manda colegioId para indicar cual.`,
-    };
-  }
-  return { prenda: candidatas[0], estado: 200, error: null };
-}
 
 /** Busca la talla por codigo dentro del vocabulario visible para esa prenda. */
 async function resolverTallaPorCodigo(db: any, tallaCodigo: string, colegioIdPrenda: string) {

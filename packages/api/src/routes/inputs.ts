@@ -7,6 +7,7 @@ import { saveDbToDisk } from '../database/sqljs';
 import { getSystemConfig, setSystemConfig } from '../services/configService';
 import { cargarContextoCosteo, ensamblarInputs } from '../services/calculo/costeoInputs.service';
 import { calcularCostoTotal } from '../services/calculo/costoTotal.service';
+import { resolverPrendaPorItem, nuevoIdHex } from '../services/resolucion.service';
 
 /** Redondeo de presentacion. El motor ya redondea sus propias salidas. */
 const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
@@ -82,7 +83,6 @@ api.put('/configuracion', async (c) => {
 });
 
 let inputsExcelCache: any = null;
-const overriddenCellQtyMap = new Map<string, number>();
 
 /**
  * Lector del Excel de inputs. Se EXPORTA para que los scripts de comparacion lean
@@ -372,154 +372,111 @@ api.get('/peso-mat-prima', async (c) => {
 api.get('/accesorios-matriz', async (c) => {
   const db = (c as any).db;
   const colegioId = c.req.query('colegioId');
+  const filtrar = !!(colegioId && colegioId !== 'all');
 
   let prodQuery = db.select().from(productos);
-  if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
+  if (filtrar) prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
   const allProds = await prodQuery.orderBy(asc(productos.itemNumero));
 
-  const inputs = loadExcelInputs();
-  const accRows = inputs ? inputs.accRows : [];
-  const accHeaders = inputs ? inputs.accHeaders : [];
+  // Las COLUMNAS salen del catalogo de accesorios, no de los encabezados del Excel.
+  //
+  // Esto es el corazon del cambio. Antes era:
+  //
+  //   const headerList = accHeaders.length > 0 ? accHeaders : dbAccs.map(...)
+  //
+  // o sea que los encabezados del Excel ganaban y la base era solo el respaldo. Como
+  // las cantidades tambien salian del Excel y los costos de la base, las dos fuentes
+  // se unian POR NOMBRE, y un nombre que no cruzaba daba un cero silencioso: la celda
+  // mostraba 0,00 y nadie avisaba.
+  //
+  // Pasaba de verdad: la columna del Excel se llama "Ojal Grande" y el accesorio de la
+  // base "Ojal grande", con g minuscula. En los items 16, 17 y 18 la pantalla mostraba
+  // 0,00 mientras el motor cobraba 1,60 Bs (2 unidades x 0,80), porque el motor lee
+  // detalle_acc por id y nunca dependio del nombre.
+  //
+  // Ahora los nombres salen de un solo lado, asi que no hay dos grafias que puedan
+  // discrepar. El bug no queda arreglado: queda inexpresable.
+  let accQuery = db.select().from(accesorios);
+  if (filtrar) {
+    accQuery = accQuery.where(or(eq(accesorios.colegioId, colegioId), isNull(accesorios.colegioId)));
+  }
+  const dbAccs = await accQuery.orderBy(asc(accesorios.descripcion));
 
-  const accMap = new Map<string, number>();
-  const totalAccMap = new Map<number, number>();
+  const headerList: string[] = dbAccs.map((a: any) => String(a.descripcion).trim());
 
-  if (accRows && accRows.length > 0) {
-    const auxHeaderIdx = accRows.findIndex((r: any) => r && r.some((c: any) => String(c).includes('UNIDAD DE COMPRA') || String(c).includes('COSTO Unitario')));
-    const matrixRows = accRows.slice(2, auxHeaderIdx !== -1 ? auxHeaderIdx : 30);
-
-    const parseItemNumbers = (val: any): number[] => {
-      if (typeof val === 'number') return [val];
-      const str = String(val).trim();
-      if (str.includes('-')) {
-        const parts = str.split('-').map(p => parseInt(p.trim())).filter(p => !isNaN(p));
-        if (parts.length === 2) {
-          const nums = [];
-          for (let i = parts[0]; i <= parts[1]; i++) nums.push(i);
-          return nums;
-        }
-      }
-      const num = parseInt(str);
-      return !isNaN(num) ? [num] : [];
-    };
-
-    matrixRows.forEach((r: any) => {
-      if (r && r[1] !== undefined) {
-        const itemNums = parseItemNumbers(r[1]);
-        itemNums.forEach((itemNum) => {
-          if (itemNum > 0) {
-            accHeaders.forEach((h: string, idx: number) => {
-              const val = Number(r[2 + idx]) || 0;
-              accMap.set(`${itemNum}_${h}`, val);
-            });
-            const total = Number(r[41]) || 0;
-            totalAccMap.set(itemNum, total);
-          }
-        });
-      }
-    });
+  // Dos accesorios con la misma descripcion colapsarian en una sola columna y el
+  // segundo pisaria al primero en silencio. Se avisa en vez de dejarlo pasar.
+  const avisos: string[] = [];
+  const vistos = new Set<string>();
+  for (const h of headerList) {
+    if (vistos.has(h)) avisos.push(`Hay mas de un accesorio llamado "${h}". La matriz los muestra como una sola columna.`);
+    vistos.add(h);
   }
 
-  const auxInfoMap = new Map<string, any>();
-  const tablaAux = inputs ? inputs.tablaAuxiliarRows : [];
+  const accesoriosInfo = dbAccs.map((a: any) => ({
+    nombre: String(a.descripcion).trim(),
+    unidadCompra: a.unidadCompra || 'unidad',
+    cantidadXUd: Number(a.cantidadXUd) || 1,
+    costoUdCompra: Number(a.costoUdCompra) || 0,
+    costoUnitarioBs: r4(Number(a.costoUnitario) || 0),
+  }));
 
-  let dbAccs: any[] = [];
-  try {
-    dbAccs = await db.select().from(accesorios);
-  } catch (e) {}
+  // La RECETA sale de detalle_acc, que es la que el motor de costeo usa. Antes salia
+  // del Excel, con las ediciones superpuestas desde un Map de modulo que se perdia al
+  // reiniciar el proceso: la pantalla y el costeo podian decir cosas distintas y de
+  // hecho las decian.
+  const lineas = await db
+    .select({
+      productoId: detalleAccesorio.productoId,
+      accesorioId: detalleAccesorio.accesorioId,
+      cantidadUso: detalleAccesorio.cantidadUso,
+    })
+    .from(detalleAccesorio);
 
-  if (dbAccs && dbAccs.length > 0) {
-    dbAccs.forEach((a: any) => {
-      const name = a.descripcion.trim();
-      auxInfoMap.set(name, {
-        unidadCompra: a.unidadCompra || 'unidad',
-        cantidadXUd: a.cantidadXUd || 1,
-        costoUdCompra: a.costoUdCompra || 0,
-        costoUnitarioBs: a.costoUnitario || 0,
-      });
-    });
+  const nombrePorId = new Map<string, string>();
+  const costoPorNombre = new Map<string, number>();
+  for (const a of dbAccs) {
+    const nom = String(a.descripcion).trim();
+    nombrePorId.set(a.id, nom);
+    costoPorNombre.set(nom, Number(a.costoUnitario) || 0);
   }
 
-  if (tablaAux && tablaAux.length > 0) {
-    tablaAux.forEach((r: any) => {
-      if (r && r[0]) {
-        const name = String(r[0]).trim();
-        if (!auxInfoMap.has(name)) {
-          const dbMatch = dbAccs.find((a: any) => a.descripcion.trim() === name);
-          const udComp = dbMatch ? dbMatch.unidadCompra : (r[2] || 'unidad');
-          const cantUd = dbMatch ? dbMatch.cantidadXUd : (Number(r[3]) || 1);
-          let costoUd = dbMatch ? dbMatch.costoUdCompra : (Number(r[4]) || 0);
-          const costF = Number(r[5]) || (cantUd > 0 ? costoUd / cantUd : 0);
-          const costG = Number(r[6]) || costF;
-          const unitCost = (!isNaN(costG) && costG > 0) ? costG : ((!isNaN(costF) && costF > 0) ? costF : 0);
-
-          if ((costoUd === 0 || isNaN(costoUd)) && unitCost > 0) {
-            costoUd = unitCost * cantUd;
-          }
-
-          auxInfoMap.set(name, {
-            unidadCompra: udComp,
-            cantidadXUd: cantUd,
-            costoUdCompra: costoUd,
-            costoUnitarioBs: unitCost
-          });
-        }
-      }
-    });
+  /** productoId -> nombre de accesorio -> cantidad de uso */
+  const recetaPorProd = new Map<string, Map<string, number>>();
+  for (const l of lineas) {
+    // Un accesorio que no esta en dbAccs es de otro colegio: su linea no se muestra.
+    const nom = nombrePorId.get(l.accesorioId);
+    if (!nom) continue;
+    if (!recetaPorProd.has(l.productoId)) recetaPorProd.set(l.productoId, new Map());
+    recetaPorProd.get(l.productoId)!.set(nom, Number(l.cantidadUso) || 0);
   }
-
-  const headerList = accHeaders.length > 0 ? accHeaders : (dbAccs.map((a: any) => a.descripcion.trim()));
-
-  const accesoriosInfo = headerList.map((h: string) => {
-    const info = auxInfoMap.get(h) || {};
-    return {
-      nombre: h,
-      unidadCompra: info.unidadCompra || 'unidad',
-      cantidadXUd: info.cantidadXUd || 1,
-      costoUdCompra: info.costoUdCompra || 0,
-      costoUnitarioBs: parseFloat((info.costoUnitarioBs || 0).toFixed(4))
-    };
-  });
 
   const data = allProds.map((prod: any) => {
+    const receta = recetaPorProd.get(prod.id) || new Map<string, number>();
     const rowObj: any = {
       productoId: prod.id,
       itemNumero: prod.itemNumero,
       descripcion: prod.descripcion,
-      totalAccesoriosBs: parseFloat((totalAccMap.get(prod.itemNumero) || 0).toFixed(2)),
+      totalAccesoriosBs: 0,
       accesorios: {},
       unidades: {},
-      costos: {}
+      costos: {},
     };
 
-    headerList.forEach((h: string) => {
-      const key = `${prod.itemNumero}_${h}`;
-      const info = auxInfoMap.get(h) || {};
-      const uCost = info.costoUnitarioBs || 0;
-      let qty = 0;
-      if (overriddenCellQtyMap.has(key)) {
-        qty = overriddenCellQtyMap.get(key)!;
-      } else {
-        const costBs = accMap.get(key) || 0;
-        if (costBs > 0) {
-          if (uCost > 0) {
-            qty = parseFloat((costBs / uCost).toFixed(2));
-          } else {
-            qty = 1;
-          }
-        }
-      }
-
-      const calculatedCost = parseFloat((qty * uCost).toFixed(2));
-      rowObj.accesorios[h] = calculatedCost;
-      rowObj.costos[h] = calculatedCost;
+    let suma = 0;
+    for (const h of headerList) {
+      const qty = receta.get(h) || 0;
+      const costo = r2(qty * (costoPorNombre.get(h) || 0));
+      rowObj.accesorios[h] = costo;
+      rowObj.costos[h] = costo;
       rowObj.unidades[h] = qty;
-    });
+      suma += costo;
+    }
 
-    let rowSum = 0;
-    Object.values(rowObj.accesorios).forEach((v: any) => rowSum += Number(v) || 0);
-    rowObj.totalAccesoriosBs = parseFloat(rowSum.toFixed(2));
-
+    // El total es la suma de las lineas que se muestran, no el total de la columna 41
+    // del Excel. Es la decision que el usuario tomo en la Fase 2: "que las lineas
+    // sumen, aunque quede 0,03 off".
+    rowObj.totalAccesoriosBs = r2(suma);
     return rowObj;
   });
 
@@ -527,18 +484,117 @@ api.get('/accesorios-matriz', async (c) => {
     success: true,
     accesorios: headerList,
     accesoriosInfo,
-    data
+    data,
+    fuente: 'detalle_acc',
+    avisos,
   });
 });
 
-// Store cell override route
+// PUT /api/inputs/accesorios-matriz-celda - Cambiar la cantidad de un accesorio
+//
+// ANTES esto no tocaba la base:
+//
+//   overriddenCellQtyMap.set(`${itemNumero}_${accesorioNombre}`, Number(cantidad) || 0);
+//   return c.json({ success: true });
+//
+// Un Map de modulo, indexado por nombre, sin `db` en ninguna parte. Cambiar una
+// cantidad movia el numero en pantalla, NO cambiaba el costeo, y se perdia al
+// reiniciar el proceso. Devolvia success: true siempre, incluso cuando el if de
+// adentro no entraba porque faltaba un campo.
+//
+// Es la misma familia que el precio de venta que no llegaba al disco, un paso mas
+// grave: ahi el dato al menos entraba a la base en memoria. Aca nunca entraba, y el
+// motor —que lee detalle_acc— no se enteraba nunca de la edicion.
+//
+// AHORA escribe detalle_acc, que es la tabla que el motor usa. Cantidad cero borra la
+// linea en vez de guardar un cero, para no ir acumulando filas sin uso.
 api.put('/accesorios-matriz-celda', async (c) => {
+  const db = (c as any).db;
   const body = await c.req.json();
-  const { itemNumero, accesorioNombre, cantidad } = body;
-  if (itemNumero > 0 && accesorioNombre) {
-    overriddenCellQtyMap.set(`${itemNumero}_${accesorioNombre}`, Number(cantidad) || 0);
+  const { itemNumero, accesorioNombre, cantidad, colegioId } = body;
+
+  if (!itemNumero || Number(itemNumero) <= 0 || !accesorioNombre) {
+    return c.json({
+      success: false,
+      error: 'Hacen falta itemNumero (mayor a cero) y accesorioNombre.',
+    }, 400);
   }
-  return c.json({ success: true });
+
+  const { prenda, estado, error } = await resolverPrendaPorItem(db, Number(itemNumero), colegioId);
+  if (!prenda) return c.json({ success: false, error }, estado as any);
+
+  // El accesorio se busca comparando descripciones ya recortadas: la base puede tener
+  // espacios al final y un eq() directo los fallaria.
+  const nombre = String(accesorioNombre).trim();
+  const todos = await db.select().from(accesorios);
+  const candidatos = todos.filter((a: any) => String(a.descripcion).trim() === nombre);
+
+  if (candidatos.length === 0) {
+    return c.json({ success: false, error: `No existe ningun accesorio llamado "${nombre}".` }, 404);
+  }
+  if (candidatos.length > 1) {
+    return c.json({
+      success: false,
+      error: `Hay ${candidatos.length} accesorios llamados "${nombre}". Hay que renombrar uno para poder distinguirlos.`,
+    }, 409);
+  }
+
+  const acc = candidatos[0];
+
+  // Un accesorio exclusivo de otro colegio no se puede asignar. colegio_id nulo es
+  // catalogo general de la empresa y lo puede usar cualquiera.
+  if (acc.colegioId && acc.colegioId !== prenda.colegioId) {
+    return c.json({
+      success: false,
+      error: `El accesorio "${nombre}" es exclusivo de otro colegio.`,
+    }, 409);
+  }
+
+  const cant = Number(cantidad) || 0;
+
+  const [linea] = await db
+    .select()
+    .from(detalleAccesorio)
+    .where(and(
+      eq(detalleAccesorio.productoId, prenda.id),
+      eq(detalleAccesorio.accesorioId, acc.id)
+    ))
+    .limit(1);
+
+  if (cant <= 0) {
+    if (linea) {
+      await db.delete(detalleAccesorio).where(eq(detalleAccesorio.id, linea.id));
+    }
+    return c.json({
+      success: true,
+      message: linea ? 'Accesorio quitado de la prenda' : 'La prenda ya no llevaba ese accesorio',
+      cantidadUso: 0,
+      costoBs: 0,
+    });
+  }
+
+  if (linea) {
+    await db.update(detalleAccesorio).set({ cantidadUso: cant }).where(eq(detalleAccesorio.id, linea.id));
+  } else {
+    await db.insert(detalleAccesorio).values({
+      id: nuevoIdHex(),
+      productoId: prenda.id,
+      accesorioId: acc.id,
+      cantidadUso: cant,
+    });
+  }
+
+  // Se devuelve el costo resultante para que la pantalla no tenga que recalcularlo por
+  // su cuenta: fue justo esa clase de calculo duplicado en el front la que produjo la
+  // cuarta copia de la formula de costeo.
+  return c.json({
+    success: true,
+    message: 'Cantidad guardada',
+    productoId: prenda.id,
+    accesorioId: acc.id,
+    cantidadUso: cant,
+    costoBs: r2(cant * (Number(acc.costoUnitario) || 0)),
+  });
 });
 
 // GET /api/inputs/mano-de-obra - Costos de mano de obra en los 3 grupos de tallas oficiales (2-10, 12-S, M-4XL)
