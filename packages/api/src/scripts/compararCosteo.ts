@@ -562,6 +562,66 @@ async function main() {
   console.log('');
   console.log(`  ${itemsOk} prendas cuadran con el Excel, ${itemsConDif} no.`);
 
+  // ---------- Reporte: costo NETO vs el CostoAntesImp del Excel ----------
+  //
+  // Este bloque existe por una leccion concreta. La primera corrida de la Fase 4
+  // imprimio "reja en verde" sin medir lo que habia cambiado:
+  //
+  //   - nuevo vs pantallas viejas dio 0 porque las tres bandas usan el mismo motor
+  //     y coinciden POR CONSTRUCCION. No prueba nada sobre la formula.
+  //   - el bloque de arriba solo compara costoBruto, que NO incluye indirectos.
+  //
+  // Asi que el cambio de absorcion de indirectos, el de mas impacto economico de
+  // todo el refactor, no producia ninguna senal. Verde sobre algo que no se estaba
+  // midiendo: la misma familia de error que el falso verde de la Fase 2, pero mas
+  // sutil, porque aca la verificacion corre bien y solo apunta al lugar equivocado.
+  //
+  // La hoja CostoAntesImp del Excel es el arbitro valido de costoUnitarioNeto: es
+  // exactamente el costo sin IVA. Comparar contra ella mide el efecto del cambio de
+  // absorcion en Bs, prenda por prenda.
+  console.log('');
+  console.log(SEP);
+  console.log('  COSTO NETO vs CostoAntesImp del EXCEL  —  aca se ve la absorcion de indirectos');
+  console.log(SEP);
+  console.log('  Solo combinaciones que se ofrecen y con dato en la hoja.');
+  console.log('');
+  console.log('  item  descripcion                  n  nuevo>excel  dif media  dif total');
+
+  let totalDelta = 0;
+  let totalCeldas = 0;
+  for (const [item, fs2] of [...porItem.entries()].sort((a, b) => a[0] - b[0])) {
+    const comp = fs2.filter(
+      (f) => f.seOfrece && f.excel.costoAntesImpuestos !== null && f.excel.costoAntesImpuestos > 0
+    );
+    if (comp.length === 0) continue;
+    const deltas = comp.map((f) => r2(num(f.nuevo.costoUnitarioNeto) - num(f.excel.costoAntesImpuestos)));
+    const suma = deltas.reduce((a, b) => a + b, 0);
+    const arriba = deltas.filter((d) => d > TOL).length;
+    totalDelta += suma;
+    totalCeldas += comp.length;
+    console.log(
+      `  ${String(item).padStart(4)}  ${String(fs2[0].descripcion).slice(0, 26).padEnd(26)} ` +
+      `${String(comp.length).padStart(2)}  ${String(arriba).padStart(11)}  ` +
+      `${(suma / comp.length).toFixed(2).padStart(9)}  ${suma.toFixed(2).padStart(9)}`
+    );
+  }
+
+  console.log('');
+  if (totalCeldas > 0) {
+    const media = totalDelta / totalCeldas;
+    console.log(`  ${totalCeldas} combinaciones comparadas. Diferencia media ${media.toFixed(2)} Bs por prenda.`);
+    console.log('');
+    console.log('  Interpretacion: una diferencia POSITIVA significa que el costo nuevo es mayor');
+    console.log('  que el del Excel. Eso es lo esperado despues de la Fase 4, porque el Excel');
+    console.log('  absorbe solo una parte del pool de indirectos y el modelo nuevo absorbe el');
+    console.log('  100%. La diferencia NO es un error: es el costo que el Excel no cargaba.');
+    console.log('  Ojo que en esta cuenta tambien entran los descuadres de datos ya conocidos');
+    console.log('  (mano de obra por bandas de talla, Blusa manga larga, Polera Bullying), asi');
+    console.log('  que la media no es absorcion pura.');
+  } else {
+    console.log('  Sin combinaciones comparables.');
+  }
+
   // ---------- Reporte: diferencias NUEVAS, agrupadas ----------
   //
   // Se agrupan a proposito. Listar una linea por diferencia daba mas de mil
