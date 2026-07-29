@@ -216,7 +216,30 @@ CREATE TABLE IF NOT EXISTS "configuracion_sistema" (
 );
 `;
 
-export async function getDb() {
+export interface OpcionesGetDb {
+  /**
+   * Abre la base SIN sembrar y SIN escribir el archivo.
+   *
+   * Por que hace falta. Hasta ahora, abrir la base era una operacion de
+   * escritura: las DOS ramas del if de mas abajo llamaban a `seedData` y despues
+   * a `saveDbToDisk`, tanto con la base vacia como con la base ya cargada. El
+   * comentario decia "guarded internally", pero el sembrado no tiene esa guarda
+   * para todas las tablas. En particular `mano_obra` se borra completa y se
+   * vuelve a insertar desde el Excel en CADA arranque, sin ninguna condicion.
+   *
+   * Consecuencia: cualquier script que dijera "simulacion, no escribe nada"
+   * escribia igual, porque el archivo se reescribia antes de que corriera su
+   * primera linea. Y cualquier correccion a mano de un costo de mano de obra
+   * hecha desde la UI sobrevivia solo hasta el siguiente arranque.
+   *
+   * Las migraciones NO se saltean: los CREATE TABLE IF NOT EXISTS, los ALTER
+   * TABLE y los indices van antes de este punto y son idempotentes. Lo unico que
+   * se saltea es el sembrado de datos y la escritura del archivo.
+   */
+  skipSeed?: boolean;
+}
+
+export async function getDb(opciones: OpcionesGetDb = {}) {
   if (dbInstance && dbDrizzle) return dbDrizzle;
 
   const initSqlJs = (await import('sql.js')).default;
@@ -290,9 +313,21 @@ export async function getDb() {
     }
   }
 
+  if (opciones.skipSeed) {
+    console.log(
+      `🔒 Base de datos abierta en modo solo lectura (${dbPath}), ${rowCount} colegio(s). ` +
+      `No se sembro nada y no se escribio el archivo.`
+    );
+    return dbDrizzle;
+  }
+
   if (rowCount > 0) {
     console.log(`✅ Base de datos persistente cargada desde disco (${dbPath}) con ${rowCount} colegio(s).`);
-    // Run seed anyway for any pending migrations (guarded internally)
+    // OJO: esto NO es solo "migraciones pendientes". `seedData` protege la
+    // mayoria de las tablas con una guarda de tabla vacia, pero a `mano_obra` le
+    // hace DELETE y INSERT sin condicion en cada llamada. O sea que abrir la
+    // base reescribe las 432 tarifas de mano de obra desde el Excel y descarta
+    // cualquier edicion hecha desde la UI. Pendiente de decision del usuario.
     try {
       await seedData(dbDrizzle);
       saveDbToDisk();
