@@ -16,6 +16,7 @@ import productoRoutes from './routes/producto';
 import tallaRoutes from './routes/talla';
 import telaRoutes from './routes/tela';
 import accesorioRoutes from './routes/accesorio';
+import detalleAccesorioRoutes from './routes/detalleAccesorio';
 import calculoRoutes, { loadExcelMatrices } from './routes/calculo';
 import inventarioRoutes from './routes/inventario';
 import precioRoutes from './routes/precio';
@@ -263,6 +264,10 @@ app.get('/api/dashboard-resumen', async (c) => {
 app.route('/api/colegios', colegioRoutes);
 app.route('/api/usuarios', usuarioRoutes);
 app.route('/api/productos', productoRoutes);
+// Receta de accesorios de cada prenda. Se monta en el mismo prefijo que
+// productoRoutes porque las rutas son /:productoId/accesorios, que no colisiona
+// con el /:id de productoRoutes (distinta cantidad de segmentos).
+app.route('/api/productos', detalleAccesorioRoutes);
 app.route('/api/tallas', tallaRoutes);
 app.route('/api/telas', telaRoutes);
 app.route('/api/accesorios', accesorioRoutes);
