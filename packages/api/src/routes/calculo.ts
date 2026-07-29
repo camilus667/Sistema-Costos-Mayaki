@@ -7,7 +7,6 @@ import { costearLote, costearPrendaTodasLasTallas } from '../services/calculo/co
 import { productos, tallas, preciosVenta, inventario } from '../database/schema';
 import XLSX from 'xlsx';
 import { findExcelPath } from '../scripts/seed';
-import { saveDbToDisk } from '../database/sqljs';
 
 /** Redondeo de presentacion. El motor ya redondea; esto es para los pesos crudos. */
 const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
@@ -318,20 +317,119 @@ api.get('/matriz-consolidada', async (c) => {
   }
 });
 
+/**
+ * Resuelve la prenda a partir de su numero de item, exigiendo colegio si hace falta.
+ *
+ * itemNumero se numera POR COLEGIO: viene de la fila del Excel de cada colegio, no
+ * es un id global. Con dos colegios cargados, el item 5 identifica DOS prendas
+ * distintas.
+ *
+ * La version anterior hacia `where(eq(itemNumero)).limit(1)` sin ORDER BY, asi que
+ * devolvia la fila que la base quisiera —en la practica la del colegio cargado
+ * primero— y los dos handlers que la usan ESCRIBEN. Editar el precio de una prenda
+ * del colegio B le habria cambiado el precio a la prenda del colegio A, en silencio,
+ * devolviendo success. Es la falla mas grave que encontro la auditoria de la Fase 6:
+ * no una fuga de lectura, una escritura sobre los datos de otro cliente.
+ *
+ * Detalle que vale registrar: el lookup de talla que va justo debajo de estas dos
+ * llamadas SI fue endurecido en la Fase 5, con `= colegio OR IS NULL`. Toque esas
+ * tres lineas y no vi que la de arriba no tenia scoping de colegio en absoluto.
+ *
+ * Comportamiento:
+ *  - con colegioId, filtra por el;
+ *  - sin colegioId, si el numero identifica UNA sola prenda usa esa, que es
+ *    exactamente lo que pasa hoy con un colegio, byte por byte;
+ *  - sin colegioId y con varias candidatas, RECHAZA con 409. Ambiguo es ambiguo:
+ *    mejor un error que escribirle el precio al cliente equivocado.
+ *
+ * El limit(2) es deliberado: solo hace falta distinguir "una" de "mas de una".
+ */
+async function resolverPrendaPorItem(db: any, itemNumero: number, colegioId?: string) {
+  const cond = colegioId
+    ? and(eq(productos.itemNumero, itemNumero), eq(productos.colegioId, colegioId))
+    : eq(productos.itemNumero, itemNumero);
+
+  const candidatas = await db.select().from(productos).where(cond).limit(2);
+
+  if (candidatas.length === 0) {
+    return {
+      prenda: null,
+      estado: 404,
+      error: colegioId
+        ? `No existe la prenda con item ${itemNumero} en el colegio ${colegioId}.`
+        : `No existe la prenda con item ${itemNumero}.`,
+    };
+  }
+  if (candidatas.length > 1) {
+    return {
+      prenda: null,
+      estado: 409,
+      error: `El item ${itemNumero} existe en mas de un colegio. Manda colegioId para indicar cual.`,
+    };
+  }
+  return { prenda: candidatas[0], estado: 200, error: null };
+}
+
+/** Busca la talla por codigo dentro del vocabulario visible para esa prenda. */
+async function resolverTallaPorCodigo(db: any, tallaCodigo: string, colegioIdPrenda: string) {
+  const [talla] = await db
+    .select()
+    .from(tallas)
+    .where(
+      and(
+        eq(tallas.codigo, tallaCodigo),
+        or(eq(tallas.colegioId, colegioIdPrenda), isNull(tallas.colegioId))
+      )
+    )
+    .limit(1);
+  return talla || null;
+}
+
 // PUT /api/calculo/precio-venta - Actualizar PrecioDeVenta directamente en la matriz
+//
+// Acepta colegioId opcional en el cuerpo. Sin colegio se comporta igual que antes
+// mientras el item sea inequivoco; con dos colegios cargados exige que se diga cual.
 api.put('/precio-venta', async (c) => {
   const db = (c as any).db;
-  const body = await c.req.json(); // { itemNumero, tallaCodigo, precioBs }
+  const body = await c.req.json(); // { itemNumero, tallaCodigo, precioBs, colegioId? }
 
-  const { itemNumero, tallaCodigo, precioBs } = body;
+  const { itemNumero, tallaCodigo, precioBs, colegioId } = body;
+
+  // La base manda: primero se resuelve contra la base, y solo despues se toca el
+  // cache del Excel. Al reves —como estaba— un fallo dejaba la matriz mostrando un
+  // precio que nunca se guardo: el cache decia una cosa y la base otra.
+  const { prenda, estado, error } = await resolverPrendaPorItem(db, itemNumero, colegioId);
+  if (!prenda) return c.json({ success: false, error }, estado as any);
+
+  const talla = await resolverTallaPorCodigo(db, tallaCodigo, prenda.colegioId);
+  if (!talla) {
+    return c.json({ success: false, error: `No existe la talla ${tallaCodigo} para esa prenda.` }, 404);
+  }
+
+  const nuevoPv = Number(precioBs) || 0;
+
+  try {
+    await db.delete(preciosVenta).where(and(eq(preciosVenta.productoId, prenda.id), eq(preciosVenta.tallaId, talla.id)));
+    await db.insert(preciosVenta).values({
+      productoId: prenda.id,
+      tallaId: talla.id,
+      precioBs: nuevoPv,
+    });
+  } catch (e: any) {
+    // Antes el catch se tragaba el error y el handler devolvia success igual. Si la
+    // escritura falla el usuario tiene que saberlo: la pantalla no puede mostrar
+    // como guardado algo que no se guardo.
+    console.error('Error actualizando DB para precioVenta:', e);
+    return c.json({ success: false, error: 'No se pudo guardar el precio: ' + (e?.message || String(e)) }, 500);
+  }
+
+  // Cache heredado del Excel. Se actualiza recien ahora, con la base ya escrita.
   const key = `${itemNumero}_${tallaCodigo}`;
-
   const excelData = loadExcelMatrices();
   if (excelData) {
-    excelData.precioVenta.set(key, Number(precioBs) || 0);
+    excelData.precioVenta.set(key, nuevoPv);
 
     const ct = excelData.costoTotal.get(key) || 0;
-    const nuevoPv = Number(precioBs) || 0;
     const nuevaUn = nuevoPv > 0 && ct > 0 ? nuevoPv - ct : 0;
     const nuevoMg = nuevoPv > 0 ? (nuevaUn / nuevoPv) * 100 : 0;
 
@@ -339,56 +437,60 @@ api.put('/precio-venta', async (c) => {
     excelData.margenPorcentaje.set(key, nuevoMg);
   }
 
-  try {
-    const [prod] = await db.select().from(productos).where(eq(productos.itemNumero, itemNumero)).limit(1);
-    if (prod) {
-      const [tallaObj] = await db.select().from(tallas).where(and(eq(tallas.codigo, tallaCodigo), or(eq(tallas.colegioId, prod.colegioId), isNull(tallas.colegioId)))).limit(1);
-      if (tallaObj) {
-        await db.delete(preciosVenta).where(and(eq(preciosVenta.productoId, prod.id), eq(preciosVenta.tallaId, tallaObj.id)));
-        await db.insert(preciosVenta).values({
-          productoId: prod.id,
-          tallaId: tallaObj.id,
-          precioBs: Number(precioBs) || 0,
-        });
-      }
-    }
-  } catch (e) {
-    console.error('Error actualizando DB para precioVenta:', e);
-  }
-
   return c.json({ success: true, message: 'Precio de venta actualizado exitosamente' });
 });
 
 // PUT /api/calculo/inventario-unidades - Actualizar INVENTARIO directamente en la matriz
+//
+// Mismo tratamiento que /precio-venta: colegioId opcional, la base manda, y no se
+// devuelve success si la escritura no ocurrio.
 api.put('/inventario-unidades', async (c) => {
   const db = (c as any).db;
-  const body = await c.req.json(); // { itemNumero, tallaCodigo, cantidad }
+  const body = await c.req.json(); // { itemNumero, tallaCodigo, cantidad, colegioId? }
 
-  const { itemNumero, tallaCodigo, cantidad } = body;
-  const key = `${itemNumero}_${tallaCodigo}`;
+  const { itemNumero, tallaCodigo, cantidad, colegioId } = body;
 
-  const excelData = loadExcelMatrices();
-  if (excelData) {
-    const cantNum = Number(cantidad) || 0;
-    excelData.inventarioUnidades.set(key, cantNum);
+  const { prenda, estado, error } = await resolverPrendaPorItem(db, itemNumero, colegioId);
+  if (!prenda) return c.json({ success: false, error }, estado as any);
 
-    const ct = excelData.costoTotal.get(key) || 0;
-    excelData.costoInventario.set(key, cantNum * ct);
+  const talla = await resolverTallaPorCodigo(db, tallaCodigo, prenda.colegioId);
+  if (!talla) {
+    return c.json({ success: false, error: `No existe la talla ${tallaCodigo} para esa prenda.` }, 404);
   }
 
+  const cantNum = Number(cantidad) || 0;
+
   try {
-    const [prod] = await db.select().from(productos).where(eq(productos.itemNumero, itemNumero)).limit(1);
-    if (prod) {
-      const [tallaObj] = await db.select().from(tallas).where(and(eq(tallas.codigo, tallaCodigo), or(eq(tallas.colegioId, prod.colegioId), isNull(tallas.colegioId)))).limit(1);
-      if (tallaObj) {
-        await db.update(inventario).set({
-          cantidad: Number(cantidad) || 0
-        }).where(and(eq(inventario.productoId, prod.id), eq(inventario.tallaId, tallaObj.id)));
-        saveDbToDisk();
-      }
+    // .returning() para distinguir "actualice una fila" de "no habia ninguna".
+    // Antes, si la prenda y la talla no tenian fila de inventario, el update no
+    // afectaba nada y el handler devolvia success: el mismo defecto que tenia el
+    // PUT de mano de obra.
+    const filas = await db
+      .update(inventario)
+      .set({ cantidad: cantNum })
+      .where(and(eq(inventario.productoId, prenda.id), eq(inventario.tallaId, talla.id)))
+      .returning();
+
+    if (filas.length === 0) {
+      return c.json({
+        success: false,
+        error: `La prenda item ${itemNumero} y la talla ${tallaCodigo} no tienen fila de inventario.`,
+      }, 404);
     }
-  } catch (e) {
+  } catch (e: any) {
     console.error('Error actualizando DB para inventario:', e);
+    return c.json({ success: false, error: 'No se pudo guardar el inventario: ' + (e?.message || String(e)) }, 500);
+  }
+
+  // El volcado a disco lo hace ahora el middleware de server.ts. La llamada
+  // explicita a saveDbToDisk() que vivia aca era la unica de este archivo, y por eso
+  // el precio de venta se guardaba solo si despues tocabas el inventario.
+  const key = `${itemNumero}_${tallaCodigo}`;
+  const excelData = loadExcelMatrices();
+  if (excelData) {
+    excelData.inventarioUnidades.set(key, cantNum);
+    const ct = excelData.costoTotal.get(key) || 0;
+    excelData.costoInventario.set(key, cantNum * ct);
   }
 
   return c.json({ success: true, message: 'Inventario actualizado exitosamente' });
