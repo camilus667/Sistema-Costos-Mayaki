@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, or, isNull } from 'drizzle-orm';
 import { calcularCostoTotal } from '../services/calculo/costoTotal.service';
 import { costearLote, costearPrendaTodasLasTallas } from '../services/calculo/costeoInputs.service';
 import { productos, tallas, preciosVenta, inventario } from '../database/schema';
@@ -342,7 +342,7 @@ api.put('/precio-venta', async (c) => {
   try {
     const [prod] = await db.select().from(productos).where(eq(productos.itemNumero, itemNumero)).limit(1);
     if (prod) {
-      const [tallaObj] = await db.select().from(tallas).where(and(eq(tallas.colegioId, prod.colegioId), eq(tallas.codigo, tallaCodigo))).limit(1);
+      const [tallaObj] = await db.select().from(tallas).where(and(eq(tallas.codigo, tallaCodigo), or(eq(tallas.colegioId, prod.colegioId), isNull(tallas.colegioId)))).limit(1);
       if (tallaObj) {
         await db.delete(preciosVenta).where(and(eq(preciosVenta.productoId, prod.id), eq(preciosVenta.tallaId, tallaObj.id)));
         await db.insert(preciosVenta).values({
@@ -379,7 +379,7 @@ api.put('/inventario-unidades', async (c) => {
   try {
     const [prod] = await db.select().from(productos).where(eq(productos.itemNumero, itemNumero)).limit(1);
     if (prod) {
-      const [tallaObj] = await db.select().from(tallas).where(and(eq(tallas.colegioId, prod.colegioId), eq(tallas.codigo, tallaCodigo))).limit(1);
+      const [tallaObj] = await db.select().from(tallas).where(and(eq(tallas.codigo, tallaCodigo), or(eq(tallas.colegioId, prod.colegioId), isNull(tallas.colegioId)))).limit(1);
       if (tallaObj) {
         await db.update(inventario).set({
           cantidad: Number(cantidad) || 0

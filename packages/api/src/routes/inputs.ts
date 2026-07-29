@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, or, isNull } from 'drizzle-orm';
 import { productos, tallas, pesoMateriaPrima, manoObra, telas, accesorios, detalleAccesorio, costosIndirectos } from '../database/schema';
 import * as XLSX from 'xlsx';
 import { findExcelPath } from '../scripts/seed';
@@ -132,7 +132,14 @@ api.get('/tabla-auxiliar-accesorios', async (c) => {
   const colegioId = c.req.query('colegioId');
 
   let accQuery = db.select().from(accesorios);
-  if (colegioId && colegioId !== 'all') accQuery = accQuery.where(eq(accesorios.colegioId, colegioId));
+  // FASE 5. NULL significa compartido, asi que un colegio ve SUS accesorios mas
+  // los de la empresa. Sin el isNull, filtrar por colegio habria escondido los 27
+  // insumos genericos y la pantalla habria perdido 27 filas.
+  if (colegioId && colegioId !== 'all') {
+    accQuery = accQuery.where(
+      or(eq(accesorios.colegioId, colegioId), isNull(accesorios.colegioId))
+    );
+  }
   const list = await accQuery;
 
   const inputs = loadExcelInputs();
@@ -605,7 +612,9 @@ api.get('/fijos-x-prenda', async (c) => {
   let indirectosList: any[] = [];
   try {
     let q = db.select().from(costosIndirectos);
-    if (colegioId && colegioId !== 'all') q = q.where(eq(costosIndirectos.colegioId, colegioId));
+    // FASE 5: costo_indirecto pierde colegio_id. El pool es de la empresa, decidido
+    // el 28-jul-2026, asi que no se filtra por colegio. Era el unico lugar que lo
+    // intentaba filtrar, y ni siquiera lo hacia el motor de costeo.
     indirectosList = await q;
   } catch (e) {}
 
@@ -656,7 +665,11 @@ api.put('/mano-de-obra/:productoId', async (c) => {
     const [prod] = await db.select().from(productos).where(eq(productos.id, productoId)).limit(1);
     if (!prod) return c.json({ success: false, error: 'Producto no encontrado' }, 404);
 
-    const allTallas = await db.select().from(tallas).where(eq(tallas.colegioId, prod.colegioId));
+    // FASE 5: compartidas mas las del colegio.
+    const allTallas = await db
+      .select()
+      .from(tallas)
+      .where(or(eq(tallas.colegioId, prod.colegioId), isNull(tallas.colegioId)));
 
     for (const tallaObj of allTallas) {
       const code = tallaObj.codigo;
@@ -748,7 +761,7 @@ api.put('/peso-mat-prima', async (c) => {
     const [prod] = await db.select().from(productos).where(eq(productos.id, productoId)).limit(1);
     if (!prod) return c.json({ success: false, error: 'Producto no encontrado' }, 404);
 
-    const [tallaObj] = await db.select().from(tallas).where(and(eq(tallas.colegioId, prod.colegioId), eq(tallas.codigo, tallaCodigo))).limit(1);
+    const [tallaObj] = await db.select().from(tallas).where(and(eq(tallas.codigo, tallaCodigo), or(eq(tallas.colegioId, prod.colegioId), isNull(tallas.colegioId)))).limit(1);
     if (tallaObj) {
       const mermaPct = typeof mermaPorcentaje === 'number' ? Number(mermaPorcentaje) : 8;
 

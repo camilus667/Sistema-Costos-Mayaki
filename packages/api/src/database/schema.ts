@@ -92,7 +92,7 @@ export const productos = sqliteTable('producto', {
 // ============================================
 export const tallas = sqliteTable('talla', {
   id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
-  colegioId: text('colegio_id').notNull().references(() => colegios.id),
+  colegioId: text('colegio_id').references(() => colegios.id),
   codigo: text('codigo').notNull(),
   nombre: text('nombre').notNull(),
   orden: integer('orden').notNull(),
@@ -117,7 +117,7 @@ export const pesoMateriaPrima = sqliteTable('peso_mat_prima', {
 // ============================================
 export const telas = sqliteTable('tela', {
   id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
-  colegioId: text('colegio_id').notNull().references(() => colegios.id),
+  colegioId: text('colegio_id').references(() => colegios.id),
   orden: integer('orden').default(0),
   descripcion: text('descripcion').notNull(),
   rendimiento: real('rendimiento').notNull(), // m/kg
@@ -137,7 +137,7 @@ export const telas = sqliteTable('tela', {
 // ============================================
 export const accesorios = sqliteTable('accesorio', {
   id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
-  colegioId: text('colegio_id').notNull().references(() => colegios.id),
+  colegioId: text('colegio_id').references(() => colegios.id),
   descripcion: text('descripcion').notNull(),
   codigo: text('codigo'),
   unidadCompra: text('unidad_compra').notNull(),
@@ -179,7 +179,6 @@ export const manoObra = sqliteTable('mano_obra', {
 // ============================================
 export const costosIndirectos = sqliteTable('costo_indirecto', {
   id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
-  colegioId: text('colegio_id').notNull().references(() => colegios.id),
   anioId: text('anio_id').references(() => aniosEscolares.id),
   concepto: text('concepto').notNull(),
   montoMensual: real('monto_mensual').notNull(),
@@ -283,7 +282,6 @@ export const historicoPrecios = sqliteTable('historico_precio', {
 // ============================================
 export const perSoles = sqliteTable('per_soles', {
   id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
-  colegioId: text('colegio_id').notNull().references(() => colegios.id),
   tipoCambio: real('tipo_cambio').notNull(),
   vigenteDesde: text('vigente_desde').default(sql`CURRENT_TIMESTAMP`).notNull(),
 });

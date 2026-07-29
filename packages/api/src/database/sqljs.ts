@@ -112,7 +112,8 @@ CREATE TABLE IF NOT EXISTS "usuario_colegio" (
 );
 CREATE TABLE IF NOT EXISTS "talla" (
  "id" text PRIMARY KEY NOT NULL,
- "colegio_id" text NOT NULL,
+ -- FASE 5: vocabulario de industria. precio_venta define que tallas se ofrecen.
+ "colegio_id" text,
  "codigo" text NOT NULL,
  "nombre" text NOT NULL,
  "orden" integer NOT NULL,
@@ -136,7 +137,8 @@ CREATE TABLE IF NOT EXISTS "producto" (
 );
 CREATE TABLE IF NOT EXISTS "tela" (
  "id" text PRIMARY KEY NOT NULL,
- "colegio_id" text NOT NULL,
+ -- FASE 5: NULL = compartido.
+ "colegio_id" text,
  "orden" integer DEFAULT 0,
  "descripcion" text NOT NULL,
  "rendimiento" real NOT NULL,
@@ -152,7 +154,8 @@ CREATE TABLE IF NOT EXISTS "tela" (
 );
 CREATE TABLE IF NOT EXISTS "accesorio" (
  "id" text PRIMARY KEY NOT NULL,
- "colegio_id" text NOT NULL,
+ -- FASE 5: NULL = compartido a nivel empresa.
+ "colegio_id" text,
  "descripcion" text NOT NULL,
  "codigo" text,
  "unidad_compra" text NOT NULL,
@@ -184,7 +187,7 @@ CREATE TABLE IF NOT EXISTS "mano_obra" (
 );
 CREATE TABLE IF NOT EXISTS "costo_indirecto" (
  "id" text PRIMARY KEY NOT NULL,
- "colegio_id" text NOT NULL,
+ -- FASE 5: sin colegio_id. El pool de indirectos es de la empresa.
  "anio_id" text,
  "concepto" text NOT NULL,
  "monto_mensual" real NOT NULL
@@ -241,7 +244,7 @@ CREATE TABLE IF NOT EXISTS "historico_precio" (
 );
 CREATE TABLE IF NOT EXISTS "per_soles" (
  "id" text PRIMARY KEY NOT NULL,
- "colegio_id" text NOT NULL,
+ -- FASE 5: el tipo de cambio no es del colegio.
  "tipo_cambio" real NOT NULL,
  "vigente_desde" text DEFAULT CURRENT_TIMESTAMP NOT NULL
 );

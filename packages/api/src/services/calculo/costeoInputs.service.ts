@@ -221,15 +221,42 @@ export async function cargarContextoCosteo(
     : await db.select().from(productos).orderBy(asc(productos.orden), asc(productos.itemNumero));
 
   // --- tallas ---
+  // FASE 5. Las tallas pasan a ser vocabulario COMPARTIDO: colegio_id NULL. Antes
+  // este mapa se indexaba por t.colegioId y se consultaba con producto.colegioId,
+  // asi que con las tallas compartidas la busqueda habria devuelto vacio y CADA
+  // PRENDA habria quedado sin ninguna talla — el costeo entero en cero filas.
+  //
+  // Ahora, para cada colegio, la lista es: las compartidas mas las propias. Eso
+  // funciona igual antes de migrar (no hay compartidas, cada colegio ve las suyas)
+  // y despues (todas compartidas, todos las ven), y ademas deja la puerta abierta a
+  // que un colegio tenga una talla exclusiva si algun dia hace falta.
   const listaTallas = await db.select().from(tallas).orderBy(asc(tallas.orden));
   const tallasPorId = new Map<string, any>();
   const tallasPorColegio = new Map<string, any[]>();
+
+  const tallasCompartidas: any[] = [];
+  const tallasEspecificas = new Map<string, any[]>();
   for (const t of listaTallas) {
     tallasPorId.set(t.id, t);
     if (t.activo === false) continue;
-    const arr = tallasPorColegio.get(t.colegioId) || [];
-    arr.push(t);
-    tallasPorColegio.set(t.colegioId, arr);
+    if (t.colegioId == null) {
+      tallasCompartidas.push(t);
+    } else {
+      const arr = tallasEspecificas.get(t.colegioId) || [];
+      arr.push(t);
+      tallasEspecificas.set(t.colegioId, arr);
+    }
+  }
+
+  const colegiosPresentes = new Set<string>();
+  for (const p of listaProductos) if (p.colegioId) colegiosPresentes.add(String(p.colegioId));
+  for (const cid of tallasEspecificas.keys()) colegiosPresentes.add(cid);
+  for (const cid of colegiosPresentes) {
+    const propias = tallasEspecificas.get(cid) || [];
+    tallasPorColegio.set(
+      cid,
+      [...tallasCompartidas, ...propias].sort((a: any, b: any) => num(a.orden) - num(b.orden))
+    );
   }
 
   // --- telas ---
