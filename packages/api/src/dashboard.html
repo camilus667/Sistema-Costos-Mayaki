@@ -173,12 +173,15 @@
               TOTAL</button>
             <button class="excel-tab" onclick="switchExcelConcept('precioVenta', this)">Precio de Venta al
               Público</button>
-            <button class="excel-tab" onclick="switchExcelConcept('costoAntesImp', this)">Subtotal antes de
-              impuestos</button>
-            <button class="excel-tab" onclick="switchExcelConcept('costoTotal', this)">Precio final con
-              Impuestos</button>
-            <button class="excel-tab" onclick="switchExcelConcept('utilidadNeta', this)">Utilidad Bruta</button>
-            <button class="excel-tab" onclick="switchExcelConcept('margenPorcentaje', this)">Margen Bruto Real
+            <button class="excel-tab" onclick="switchExcelConcept('costoUnitarioNeto', this)">Costo unitario
+              neto</button>
+            <button class="excel-tab" onclick="switchExcelConcept('utilidadConFactura', this)">Utilidad con
+              factura</button>
+            <button class="excel-tab" onclick="switchExcelConcept('margenConFactura', this)">Margen con factura
+              (%)</button>
+            <button class="excel-tab" onclick="switchExcelConcept('utilidadSinFactura', this)">Utilidad sin
+              factura</button>
+            <button class="excel-tab" onclick="switchExcelConcept('margenSinFactura', this)">Margen sin factura
               (%)</button>
             <button class="excel-tab" onclick="switchExcelConcept('inventarioUnidades', this)">INVENTARIO</button>
             <button class="excel-tab" onclick="switchExcelConcept('costoInventario', this)">Costo Inventario</button>
@@ -999,8 +1002,11 @@
         const accCost = dato(p.subtotalAccesoriosBs, 'accesorios');
 
         // Sin recalculo de respaldo. Estos dos vienen del motor o no vienen.
-        const subtotalAntesImp = dato(p.costoAntesImpuestosBs, 'costo antes de impuestos');
-        const precioFinalIva = dato(p.precioFinalConIvaBs, 'costo total con impuestos');
+        const subtotalAntesImp = dato(p.costoUnitarioNetoBs, 'costo unitario neto');
+        // Ya no existe un "precio final con impuestos" del lado del costo: era el
+        // costo inflado un 13%. Lo que importa ahora es el ingreso por canal.
+        const ingresoCon = p.ingresoNetoConFacturaBs;
+        const ingresoSin = p.ingresoNetoSinFacturaBs;
 
         // El backend ahora devuelve un diagnostico: prenda sin peso de tela, sin
         // tela vinculada, sin receta de accesorios, o talla que no se ofrece. Se
@@ -1048,7 +1054,9 @@
               <div style="text-align:right;">
                 <div style="font-size:0.72rem; color:#94a3b8; text-transform:uppercase; letter-spacing:1px; font-weight:700;">Subtotal antes de impuestos</div>
                 <div style="font-size:2rem; font-weight:900; color:#fbbf24; line-height:1.1;">Bs. ${subtotalAntesImp.toFixed(2)}</div>
-                <div style="font-size:0.78rem; color:#34d399; font-weight:700; margin-top:0.35rem;">Precio final con Impuestos: <strong>Bs. ${precioFinalIva.toFixed(2)}</strong></div>
+                <div style="font-size:0.78rem; color:#94a3b8; font-weight:600; margin-top:0.35rem;">Costo unitario neto, sin IVA</div>
+                <div style="font-size:0.78rem; color:#34d399; font-weight:700; margin-top:0.35rem;">${typeof ingresoCon === 'number' ? 'Ingreso con factura: <strong>Bs. ' + ingresoCon.toFixed(2) + '</strong>' : 'Sin precio de venta cargado'}</div>
+                <div style="font-size:0.78rem; color:#34d399; font-weight:700;">${typeof ingresoSin === 'number' ? 'Ingreso sin factura: <strong>Bs. ' + ingresoSin.toFixed(2) + '</strong>' : ''}</div>
               </div>
             </div>
 
@@ -1835,7 +1843,7 @@
           } else {
             if (val === null || val === undefined || val === 0) return '<td style="text-align:center; color: var(--text-muted);">-</td>';
             let formattedVal = '-';
-            if (currentExcelConcept === 'margenPorcentaje') {
+            if ((currentExcelConcept === 'margenConFactura' || currentExcelConcept === 'margenSinFactura')) {
               formattedVal = `<strong style="color:${getMarginColor(val)}; font-weight:700;">${val.toFixed(1)}%</strong>`;
             } else if (currentExcelConcept === 'precioInventario') {
               formattedVal = val.toLocaleString('es-BO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -1881,7 +1889,7 @@
             fTot = cTot.toLocaleString();
           } else if (currentExcelConcept === 'precioInventario') {
             fTot = cTot.toLocaleString('es-BO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-          } else if (currentExcelConcept === 'margenPorcentaje') {
+          } else if ((currentExcelConcept === 'margenConFactura' || currentExcelConcept === 'margenSinFactura')) {
             fTot = '-';
           } else {
             fTot = cTot.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1949,9 +1957,9 @@
 
           const tallas = json.data;
 
-          const activeProducedTallas = tallas.filter(t => t.costoTotal > 0 && t.margenPorcentaje !== null && t.margenPorcentaje !== undefined && t.margenPorcentaje !== 0);
+          const activeProducedTallas = tallas.filter(t => t.costoUnitarioNeto > 0 && t.margenConFactura !== null && t.margenConFactura !== undefined && t.margenConFactura !== 0);
           if (activeProducedTallas.length > 0) {
-            const realAvgMargin = activeProducedTallas.reduce((sum, t) => sum + t.margenPorcentaje, 0) / activeProducedTallas.length;
+            const realAvgMargin = activeProducedTallas.reduce((sum, t) => sum + t.margenConFactura, 0) / activeProducedTallas.length;
             const marginColor = getMarginColor(realAvgMargin);
 
             if (selectElem && selectElem.selectedIndex >= 0) {
@@ -1973,12 +1981,14 @@
             { name: 'Costo accesorios', desc: 'Suma del costo de todos los insumos (botones, cierres, hilos, elásticos, etiquetas) usados en la prenda.', key: 'costoAccesorios', fmt: v => v ? v.toFixed(2) : '-' },
             { name: 'Mano de Obra Directa', desc: 'Costo directo pagado por el corte, confección y armado de la prenda según su rango de talla.', key: 'costoManoObra', fmt: v => v ? '<span style="color:white;">' + v.toFixed(2) + '</span>' : '-' },
             { name: 'Costos Indirectos', desc: 'Gastos fijos de taller prorrateados según el factor de complejidad de la prenda (incluye costos indirectos de producción).', key: 'costoFijosVariable', fmt: v => v ? '<span style="color:white;">' + v.toFixed(2) + '</span>' : '-' },
-            { name: 'Subtotal antes de impuestos', desc: 'Subtotal del costo de producción antes de aplicar la tasa impositiva del 13% IVA para facturar.', key: 'costoAntesImpuestos', fmt: v => v ? '<strong style="color:#f97316;">' + v.toFixed(2) + '</strong>' : '-' },
-            { name: 'Impuestos', desc: 'Impuesto al Valor Agregado (13%) calculado sobre el costo para la emisión de factura de producción.', key: 'iva', fmt: v => v ? v.toFixed(2) : '-' },
-            { name: 'Precio final con Impuestos', desc: 'Costo final unitario de producción terminada (Subtotal antes de impuestos + 13% IVA).', key: 'costoTotal', fmt: v => v ? '<strong style="color:#f97316; font-size:0.9rem;">' + v.toFixed(2) + '</strong>' : '-' },
-            { name: 'Precio de Venta al Público', desc: 'Precio final de venta al público fijado para esta talla en la matriz comercial.', key: 'precioVenta', fmt: v => v ? '<strong>' + v.toFixed(2) + '</strong>' : '-' },
-            { name: 'Utilidad Bruta', desc: 'Ganancia obtenida por cada prenda vendida (Precio Venta - Precio final con Impuestos).', key: 'utilidadNeta', fmt: v => v !== null && v !== 0 ? '<strong style="color:var(--success);">' + v.toFixed(2) + '</strong>' : '-' },
-            { name: 'Margen Bruto Real (%)', desc: 'Porcentaje de utilidad bruta sobre el Precio de Venta al Público: (Utilidad Bruta / Precio de Venta al Público) × 100.', key: 'margenPorcentaje', fmt: v => v !== null && v !== 0 ? `<strong style="color:${getMarginColor(v)}; font-weight:700;">` + v.toFixed(2) + '%</strong>' : '-' }
+            { name: 'Costo unitario neto', desc: 'El costo completo de producir la prenda. NO incluye IVA: el IVA de compras es crédito fiscal recuperable, no un costo. Antes este número se mostraba inflado un 13%.', key: 'costoUnitarioNeto', fmt: v => v ? '<strong style="color:#f97316;">' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Precio de Venta al Público', desc: 'Precio de lista CON factura fijado para esta talla. La venta sin factura aplica el descuento configurado.', key: 'precioVenta', fmt: v => v ? '<strong>' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Ingreso neto con factura', desc: 'Lo que queda del precio de lista después del débito fiscal. El IVA boliviano va por dentro: de 100 Bs quedan 87.', key: 'ingresoNetoConFactura', fmt: v => v ? v.toFixed(2) : '-' },
+            { name: 'Ingreso neto sin factura', desc: 'Precio de lista menos el descuento por no facturar. No se debe débito fiscal, pero el crédito fiscal de las compras queda sin usar.', key: 'ingresoNetoSinFactura', fmt: v => v ? v.toFixed(2) : '-' },
+            { name: 'Utilidad con factura', desc: 'Ingreso neto con factura menos el costo unitario neto.', key: 'utilidadConFactura', fmt: v => v !== null && v !== 0 ? '<strong style="color:var(--success);">' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Utilidad sin factura', desc: 'Ingreso neto sin factura menos el costo unitario neto.', key: 'utilidadSinFactura', fmt: v => v !== null && v !== 0 ? '<strong style="color:var(--success);">' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Margen con factura (%)', desc: 'Utilidad sobre el ingreso efectivamente cobrado, no sobre el precio de lista. Medir contra plata que nunca entra sobreestima la rentabilidad.', key: 'margenConFactura', fmt: v => v !== null && v !== 0 ? `<strong style="color:${getMarginColor(v)}; font-weight:700;">` + v.toFixed(2) + '%</strong>' : '-' },
+            { name: 'Margen sin factura (%)', desc: 'El mismo margen para el canal sin factura. Comparar los dos dice qué canal conviene a este precio.', key: 'margenSinFactura', fmt: v => v !== null && v !== 0 ? `<strong style="color:${getMarginColor(v)}; font-weight:700;">` + v.toFixed(2) + '%</strong>' : '-' }
           ];
 
           tbody.innerHTML = rows.map(r => `

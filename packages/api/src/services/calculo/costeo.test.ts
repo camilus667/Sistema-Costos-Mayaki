@@ -45,6 +45,8 @@ const SACO = {
   costoBrutoExcel: 169.464,   // hoja CostoBruto
 };
 
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
 /** Receta de accesorios de la Chompa cuello en V (item 19). Suma 7,84 Bs. */
 const RECETA_CHOMPA = [
   { cantidadUso: 1, costoUnitario: 5.0 },   // Bordado escudo
@@ -142,24 +144,8 @@ describe('calcularCostoTotal — merma', () => {
   });
 });
 
-describe('calcularCostoTotal — IVA', () => {
-  it('la tasa se recibe como FRACCION, no como porcentaje', () => {
-    // Si alguien pasa 13 en vez de 0,13, el IVA sale 1300%. Es el error que casi
-    // se cometio al armar el servicio de inputs.
-    const r = calcularCostoTotal({ costoManoObra: 100, tasaIva: 0.13 });
-    expect(r.costoAntesImpuestos).toBe(100);
-    expect(r.iva).toBe(13);
-    expect(r.costoTotal).toBe(113);
-  });
-
-  it('pasar 13 en vez de 0,13 produce un disparate detectable', () => {
-    // No es el comportamiento deseado: se fija para documentar por que la
-    // conversion tiene que ser explicita.
-    const r = calcularCostoTotal({ costoManoObra: 100, tasaIva: 13 });
-    expect(r.iva).toBe(1300);
-  });
-
-  it('costoAntesImpuestos + iva da exactamente costoTotal', () => {
+describe('calcularCostoTotal — el IVA ya no toca el costo', () => {
+  it('el costo neto es la suma de sus componentes, sin importar la tasa', () => {
     const r = calcularCostoTotal({
       pesoConMermaGramos: 378,
       precioBsG: SACO.precioBsG,
@@ -168,7 +154,40 @@ describe('calcularCostoTotal — IVA', () => {
       costoFijo: 1.1933,
       tasaIva: 0.13,
     });
-    expect(r.costoAntesImpuestos + r.iva).toBeCloseTo(r.costoTotal, 2);
+    // 45,93 + 23,52 + 100 + 1,1933, redondeado una sola vez al final.
+    expect(r.costoUnitarioNeto).toBe(170.64);
+    expect(r.costoUnitarioNeto).toBe(
+      calcularCostoTotal({
+        pesoConMermaGramos: 378,
+        precioBsG: SACO.precioBsG,
+        costoAccesorios: 23.52,
+        costoManoObra: 100,
+        costoFijo: 1.1933,
+        tasaIva: 0,
+      }).costoUnitarioNeto
+    );
+  });
+
+  it('la tasa solo mueve el lado del precio', () => {
+    const base = { costoManoObra: 100, precioVenta: 200, impuestosActivos: true };
+    const sin = calcularCostoTotal({ ...base, tasaIva: 0 });
+    const con = calcularCostoTotal({ ...base, tasaIva: 0.13 });
+    expect(sin.costoUnitarioNeto).toBe(con.costoUnitarioNeto);
+    expect(sin.ingresoNetoConFactura).toBe(200);
+    expect(con.ingresoNetoConFactura).toBe(174); // 200 x 0,87
+  });
+
+  it('pasar 13 en vez de 0,13 produce un disparate detectable', () => {
+    // No es el comportamiento deseado: se fija para documentar por que la
+    // conversion tiene que ser explicita, y por que el zod de /calcular pone
+    // tope 1 en tasaIva.
+    const r = calcularCostoTotal({
+      costoManoObra: 100,
+      precioVenta: 100,
+      impuestosActivos: true,
+      tasaIva: 13,
+    });
+    expect(r.ingresoNetoConFactura).toBeLessThan(0);
   });
 });
 
@@ -243,20 +262,22 @@ describe('calcularCostoTotal — fijos e indirectos', () => {
   });
 });
 
-describe('calcularCostoTotal — margen', () => {
-  it('utilidad y margen sobre el precio de venta', () => {
-    const r = calcularCostoTotal({ costoManoObra: 100, tasaIva: 0.13, precioVenta: 150 });
-    expect(r.costoTotal).toBe(113);
-    expect(r.utilidadNeta).toBe(37);
-    expect(r.margenPorcentaje).toBe(24.67);
+describe('calcularCostoTotal — utilidad por canal', () => {
+  it('utilidad sobre el ingreso cobrado, con el costo neto', () => {
+    // Sin impuestos activos el ingreso con factura es el precio de lista.
+    const r = calcularCostoTotal({ costoManoObra: 100, precioVenta: 150 });
+    expect(r.costoUnitarioNeto).toBe(100);
+    expect(r.ingresoNetoConFactura).toBe(150);
+    expect(r.utilidadConFactura).toBe(50);
+    expect(r.margenConFactura).toBe(33.33);
   });
 
   it('sin precio de venta devuelve null, no cero', () => {
     // Cero significaria "margen cero", que es una afirmacion distinta de "no se
     // sabe el precio".
     const r = calcularCostoTotal({ costoManoObra: 100 });
-    expect(r.utilidadNeta).toBeNull();
-    expect(r.margenPorcentaje).toBeNull();
+    expect(r.utilidadConFactura).toBeNull();
+    expect(r.margenConFactura).toBeNull();
   });
 });
 
@@ -481,30 +502,35 @@ const CANAL: CalculoInputs = {
 };
 
 describe('Fase 3 — el costo neto no lleva IVA', () => {
-  it('costoUnitarioNeto es el costo sin IVA, identico a costoAntesImpuestos', () => {
+  it('costoUnitarioNeto es la suma de los componentes, sin IVA encima', () => {
     const r = calcularCostoTotal(CANAL);
     expect(r.costoUnitarioNeto).toBe(50);
-    expect(r.costoUnitarioNeto).toBe(r.costoAntesImpuestos);
+    // Y coincide con la suma explicita de sus partes: no hay nada oculto.
+    expect(r.costoUnitarioNeto).toBe(
+      r2(r.costoBruto + r.costoFijosVariable + r.costoIndirecto)
+    );
   });
 
-  it('el costoTotal viejo sobreestima el costo un 13%', () => {
+  it('el modelo viejo sobreestimaba el costo un 13%', () => {
     // El IVA de compras es credito fiscal recuperable en el regimen general
     // boliviano. Meterlo al costo lo infla y subestima el margen, lo que puede
     // llevar a rechazar negocio rentable o a sobre-preciar.
     const r = calcularCostoTotal(CANAL);
-    expect(r.costoTotal).toBe(56.5);
-    expect(r.costoTotal - r.costoUnitarioNeto).toBe(6.5);
+    const costoViejo = r.costoUnitarioNeto * 1.13; // lo que devolvia costoTotal
+    expect(costoViejo).toBeCloseTo(56.5, 2);
+    expect(costoViejo - r.costoUnitarioNeto).toBeCloseTo(6.5, 2);
   });
 
-  it('ADITIVO: los campos viejos no se movieron ni un centavo', () => {
-    // Garantia de que la Fase 3 se puede desplegar sin que ninguna pantalla
-    // cambie de numero. La reja de paridad tiene que seguir en cero diferencias.
-    const r = calcularCostoTotal(CANAL);
-    expect(r.costoAntesImpuestos).toBe(50);
-    expect(r.iva).toBe(6.5);
-    expect(r.costoTotal).toBe(56.5);
-    expect(r.utilidadNeta).toBe(43.5);
-    expect(r.margenPorcentaje).toBe(43.5);
+  it('los campos del modelo viejo ya no existen', () => {
+    // Impide que vuelvan por la ventana. Eran dos representaciones del mismo
+    // numero mas un error: la misma patologia que la auditoria marco en la tabla
+    // de telas, con cuatro representaciones del mismo precio.
+    const r = calcularCostoTotal(CANAL) as any;
+    expect(r.costoTotal).toBeUndefined();
+    expect(r.iva).toBeUndefined();
+    expect(r.costoAntesImpuestos).toBeUndefined();
+    expect(r.utilidadNeta).toBeUndefined();
+    expect(r.margenPorcentaje).toBeUndefined();
   });
 });
 
@@ -546,14 +572,21 @@ describe('Fase 3 — ingreso neto por canal', () => {
     expect(r.margenSinFactura).toBe(44.44);
   });
 
-  it('el margen que reporta el sistema hoy cae ENTRE los dos reales', () => {
-    // Los dos errores se compensan parcialmente: el motor infla el costo con IVA
-    // (subestima el margen) y a la vez no netea el precio (lo sobreestima). Por eso
-    // nada parecia roto. Este test fija la magnitud de ese enmascaramiento.
+  it('el margen que reportaba el modelo viejo caia ENTRE los dos reales', () => {
+    // Los dos errores se compensaban parcialmente: el motor inflaba el costo con
+    // IVA (subestimaba el margen) y a la vez no neteaba el precio (lo
+    // sobreestimaba). Por eso nada parecia roto. Este test fija la magnitud de ese
+    // enmascaramiento, que es el argumento de negocio de toda la Fase 3.
     const r = calcularCostoTotal({ ...CANAL, impuestosActivos: true });
-    expect(r.margenPorcentaje).toBe(43.5);
-    expect(r.margenPorcentaje!).toBeGreaterThan(r.margenConFactura!);
-    expect(r.margenPorcentaje!).toBeLessThan(r.margenSinFactura!);
+    const margenViejo = 43.5; // (100 - 50 x 1,13) / 100 x 100
+    expect(margenViejo).toBeGreaterThan(r.margenConFactura!);
+    expect(margenViejo).toBeLessThan(r.margenSinFactura!);
+  });
+
+  it('la utilidad por canal usa el costo neto, no el inflado', () => {
+    const r = calcularCostoTotal({ ...CANAL, impuestosActivos: true });
+    expect(r.utilidadConFactura).toBe(37); // 87 - 50
+    expect(r.utilidadSinFactura).toBe(40); // 90 - 50
   });
 
   it('sin precio de venta, los cuatro campos de canal son null', () => {

@@ -85,18 +85,14 @@ type Campo =
   | 'costoAccesorios'
   | 'costoManoObra'
   | 'costoBruto'
-  | 'costoAntesImpuestos'
-  | 'iva'
-  | 'costoTotal';
+  | 'costoUnitarioNeto';
 
 const CAMPOS: Campo[] = [
   'costoTela',
   'costoAccesorios',
   'costoManoObra',
   'costoBruto',
-  'costoAntesImpuestos',
-  'iva',
-  'costoTotal',
+  'costoUnitarioNeto',
 ];
 
 interface Fila {
@@ -182,8 +178,11 @@ const RULINGS = [
  */
 function valorExcel(fila: Fila, campo: Campo): number | null {
   if (campo === 'costoBruto') return fila.excel.costoBruto;
-  if (campo === 'costoAntesImpuestos') return fila.excel.costoAntesImpuestos;
-  if (campo === 'costoTotal') return fila.excel.costoTotal;
+  // FASE 3: la hoja CostoAntesImp sigue siendo un arbitro valido, porque es
+  // exactamente el costo neto sin IVA. La que quedo sin contraparte es CostoTotal:
+  // esa le suma el 13% de IVA de compras, que es credito fiscal recuperable y no
+  // costo. De las tres hojas de costo del Excel, solo una estaba equivocada.
+  if (campo === 'costoUnitarioNeto') return fila.excel.costoAntesImpuestos;
   return null;
 }
 
@@ -224,9 +223,7 @@ const REGLAS: Regla[] = [
       const esperado: Partial<Record<Campo, number>> = {
         costoAccesorios: OJAL_BS,
         costoBruto: OJAL_BS,
-        costoAntesImpuestos: OJAL_BS,
-        iva: OJAL_BS * tasaIva,
-        costoTotal: OJAL_BS * (1 + tasaIva),
+        costoUnitarioNeto: OJAL_BS,
       };
       const e = esperado[d.campo];
       return e !== undefined && Math.abs(d.delta - e) <= 0.02;
@@ -360,8 +357,7 @@ async function main() {
       for (const [codigo, v] of Object.entries<any>(row.tallas || {})) {
         viejoConsolidada.set(`${row.itemNumero}_${codigo}`, {
           costoBruto: num(v.costoBruto),
-          costoAntesImpuestos: num(v.costoAntesImp),
-          costoTotal: num(v.costoTotal),
+          costoUnitarioNeto: num(v.costoUnitarioNeto),
         });
       }
     }
@@ -390,9 +386,7 @@ async function main() {
           // reconstruye de sus tres componentes. De paso deja ver si su propio
           // desglose suma su propio costoAntesImpuestos.
           costoBruto: r2(num(d.costoTela) + num(d.costoAccesorios) + num(d.costoManoObra)),
-          costoAntesImpuestos: num(d.costoAntesImpuestos),
-          iva: num(d.iva),
-          costoTotal: num(d.costoTotal),
+          costoUnitarioNeto: num(d.costoUnitarioNeto),
         });
       }
     } catch (e: any) {
@@ -425,9 +419,7 @@ async function main() {
           costoAccesorios: num(p?.subtotalAccesoriosBs),
           costoManoObra: num(p?.manoDeObra?.totalManoObraBs),
           costoBruto: num(p?.costoDirectoTotalBs),
-          costoAntesImpuestos: num(p?.costoAntesImpuestosBs),
-          iva: num(p?.ivaBs),
-          costoTotal: num(p?.precioFinalConIvaBs),
+          costoUnitarioNeto: num(p?.costoUnitarioNetoBs),
         });
       }
     } catch (e: any) {
@@ -461,9 +453,7 @@ async function main() {
         costoAccesorios: f.resultado.costoAccesorios,
         costoManoObra: f.resultado.costoManoObra,
         costoBruto: f.resultado.costoBruto,
-        costoAntesImpuestos: f.resultado.costoAntesImpuestos,
-        iva: f.resultado.iva,
-        costoTotal: f.resultado.costoTotal,
+        costoUnitarioNeto: f.resultado.costoUnitarioNeto,
       },
       excel: {
         costoBruto: hCB.valor(item, cod),

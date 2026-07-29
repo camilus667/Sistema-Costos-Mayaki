@@ -7,16 +7,31 @@ import { IVA_RATE } from '@sistema-uniformes/shared';
  * FORMULA IMPLEMENTADA (este comentario describe lo que el codigo hace de
  * verdad; el anterior no coincidia con la implementacion):
  *
- *   1. pesoConMerma  = peso limpio x (1 + merma/100)      [ver nota de merma]
- *   2. costoTela     = pesoConMerma x precioBsG
- *   3. costoBruto    = costoTela + costoAccesorios + costoManoObra
- *   4. costoFijosVar = costoFijo x factorComplejidad
- *   5. costoIndirecto= indirectoMensual / produccionMes    [ver nota]
- *   6. costoAntesImp = costoBruto + costoFijosVar + costoIndirecto
- *   7. iva           = costoAntesImp x tasa
- *   8. costoTotal    = costoAntesImp + iva
- *   9. utilidadNeta  = precioVenta - costoTotal
- *  10. margen %      = utilidadNeta / precioVenta x 100
+ * LADO DEL COSTO — nunca lleva IVA.
+ *   1. pesoConMerma      = peso limpio x (1 + merma/100)   [ver nota de merma]
+ *   2. costoTela         = pesoConMerma x precioBsG
+ *   3. costoBruto        = costoTela + costoAccesorios + costoManoObra
+ *   4. costoFijosVar     = costoFijo x factorComplejidad
+ *   5. costoIndirecto    = indirectoMensual / produccionMes  [ver nota]
+ *   6. costoUnitarioNeto = costoBruto + costoFijosVar + costoIndirecto
+ *
+ * LADO DEL PRECIO — aca si entran los impuestos, y solo si el check esta activo.
+ *   7. ingresoNetoConFactura = precioVenta x (1 - tasa)    [IVA por dentro]
+ *   8. ingresoNetoSinFactura = precioVenta x (1 - descuentoSinFactura)
+ *   9. utilidad<canal>       = ingresoNeto<canal> - costoUnitarioNeto
+ *  10. margen<canal> %       = utilidad<canal> / ingresoNeto<canal> x 100
+ *
+ * FASE 3 — por que desaparecieron `costoAntesImpuestos`, `iva` y `costoTotal`.
+ * El paso 7 anterior hacia `iva = costoAntesImp x tasa` y el 8 se lo sumaba al
+ * costo. Eso es un error contable: en el regimen general boliviano el IVA de
+ * compras es credito fiscal recuperable, asi que no es costo. Sumarlo
+ * sobreestimaba el costo ~13% y subestimaba el margen, y podia llevar a rechazar
+ * negocio rentable o a sobre-preciar. Ademas `costoAntesImpuestos` y
+ * `costoUnitarioNeto` son el mismo numero, y el nombre viejo mentia: sugeria que
+ * faltaba sumarle un impuesto cuando ya era el costo completo.
+ *
+ * El margen se mide contra el ingreso efectivamente cobrado, no contra el precio
+ * de lista. Medirlo contra plata que nunca entra al bolsillo lo sobreestima.
  *
  * NOTA SOBRE LA MERMA — corrige un error de doble aplicacion.
  * En la base, `peso_mat_prima` guarda el peso de dos formas:
@@ -110,23 +125,20 @@ export interface CalculoResultado {
   costoBruto: number;
   costoFijosVariable: number;
   costoIndirecto: number;
-  costoAntesImpuestos: number;
-  iva: number;
-  costoTotal: number;
-  utilidadNeta: number | null;
-  margenPorcentaje: number | null;
-
-  // ------------------------------------------------------------------------
-  // FASE 3 — la vista correcta. Convive con los campos de arriba durante la
-  // transicion; `costoTotal`, `iva`, `utilidadNeta` y `margenPorcentaje` siguen
-  // devolviendo exactamente lo mismo que antes para no mover ninguna pantalla.
-  // ------------------------------------------------------------------------
-
   /**
-   * El costo unitario de verdad: SIN IVA. Es identico a `costoAntesImpuestos`, y
-   * existe con nombre propio porque ese nombre miente — sugiere que falta sumarle
-   * un impuesto, cuando en realidad ya es el costo completo. El IVA de compras es
-   * credito fiscal recuperable, no costo.
+   * EL costo unitario. Sin IVA, y no hay otro.
+   *
+   * Reemplaza a los tres campos que habia antes — `costoAntesImpuestos`, `iva` y
+   * `costoTotal` — que eran dos representaciones del mismo numero mas un error.
+   * El IVA de compras es credito fiscal recuperable en el regimen general
+   * boliviano, asi que no pertenece al costo: sumarlo lo sobreestimaba ~13% y
+   * subestimaba el margen, lo que puede llevar a rechazar negocio rentable.
+   *
+   * El nombre viejo `costoAntesImpuestos` mentia: sugeria que faltaba sumarle un
+   * impuesto cuando ya era el costo completo. Y tener `costoTotal` al lado, con el
+   * 13% encima, era la misma patologia que la auditoria marco en la tabla de
+   * telas: cuatro representaciones del mismo precio, cualquiera de ellas capaz de
+   * quedar inconsistente.
    */
   costoUnitarioNeto: number;
 
@@ -147,6 +159,10 @@ export interface CalculoResultado {
    */
   ingresoNetoConFactura: number | null;
   ingresoNetoSinFactura: number | null;
+  /** Ingreso neto menos el costo neto, por canal. Reemplaza a `utilidadNeta`. */
+  utilidadConFactura: number | null;
+  utilidadSinFactura: number | null;
+  /** Sobre el ingreso cobrado, no sobre el precio de lista. */
   margenConFactura: number | null;
   margenSinFactura: number | null;
   /**
@@ -275,28 +291,17 @@ export function calcularCostoTotal(inputs: CalculoInputs): CalculoResultado {
 
   const costoAntesImpuestos = costoBruto.plus(costoFijosVariable).plus(costoIndirecto);
 
+  // La tasa se usa SOLO del lado del precio. El costo no lleva IVA.
   const tasa = inputs.tasaIva != null ? D(inputs.tasaIva) : D(IVA_RATE || 0.13);
-  const iva = costoAntesImpuestos.times(tasa);
-  const costoTotal = costoAntesImpuestos.plus(iva);
 
-  let utilidadNeta: number | null = null;
-  let margenPorcentaje: number | null = null;
-  if (inputs.precioVenta != null && inputs.precioVenta > 0) {
-    const pv = D(inputs.precioVenta);
-    const un = pv.minus(costoTotal);
-    utilidadNeta = out(un);
-    margenPorcentaje = out(un.div(pv).times(100));
-  }
-
-  // ---------- FASE 3: la vista correcta ----------
-  //
-  // El costo neto es `costoAntesImpuestos` sin mas: el IVA de compras es credito
-  // fiscal recuperable y no pertenece al costo. `costoTotal`, que le suma el 13%,
-  // queda arriba solo para que ninguna pantalla se mueva durante la transicion.
+  // El costo neto es la suma de sus componentes y nada mas. Antes aca se le sumaba
+  // el 13% para producir `costoTotal`, que era el error contable de fondo.
   const costoUnitarioNeto = costoAntesImpuestos;
 
   let ingresoNetoConFactura: number | null = null;
   let ingresoNetoSinFactura: number | null = null;
+  let utilidadConFactura: number | null = null;
+  let utilidadSinFactura: number | null = null;
   let margenConFactura: number | null = null;
   let margenSinFactura: number | null = null;
 
@@ -322,6 +327,8 @@ export function calcularCostoTotal(inputs: CalculoInputs): CalculoResultado {
     // margen contra plata que nunca entra al bolsillo sobreestima la rentabilidad.
     ingresoNetoConFactura = out(netoCon);
     ingresoNetoSinFactura = out(netoSin);
+    utilidadConFactura = out(netoCon.minus(costoUnitarioNeto));
+    utilidadSinFactura = out(netoSin.minus(costoUnitarioNeto));
     margenConFactura = netoCon.isZero()
       ? null
       : out(netoCon.minus(costoUnitarioNeto).div(netoCon).times(100));
@@ -340,13 +347,11 @@ export function calcularCostoTotal(inputs: CalculoInputs): CalculoResultado {
     costoIndirecto: out(costoIndirecto),
     costoAntesImpuestos: out(costoAntesImpuestos),
     iva: out(iva),
-    costoTotal: out(costoTotal),
-    utilidadNeta,
-    margenPorcentaje,
-
     costoUnitarioNeto: out(costoUnitarioNeto),
     ingresoNetoConFactura,
     ingresoNetoSinFactura,
+    utilidadConFactura,
+    utilidadSinFactura,
     margenConFactura,
     margenSinFactura,
     diagnostico: {

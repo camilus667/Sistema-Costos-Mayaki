@@ -838,10 +838,11 @@ api.get('/desglose-inteligente-producto', async (c) => {
             totalFijosBs: 0,
           },
           costoDirectoTotalBs: 0,
-          costoAntesImpuestosBs: 0,
-          ivaBs: 0,
-          costoTotalProduccionBs: 0,
-          precioFinalConIvaBs: 0,
+          costoUnitarioNetoBs: 0,
+          ingresoNetoConFacturaBs: null,
+          ingresoNetoSinFacturaBs: null,
+          margenConFacturaPct: null,
+          margenSinFacturaPct: null,
           seOfrece: false,
           diagnostico: { faltantes: ['La prenda no tiene ninguna talla activa en el colegio.'] },
         };
@@ -892,13 +893,14 @@ api.get('/desglose-inteligente-producto', async (c) => {
           totalFijosBs: r2(res.costoFijosVariable + res.costoIndirecto),
         },
         costoDirectoTotalBs: res.costoBruto,
-        costoAntesImpuestosBs: res.costoAntesImpuestos,
-        // ivaBs y precioFinalConIvaBs ahora vienen del MISMO resultado, asi que
-        // costoAntesImpuestos + ivaBs da exactamente precioFinalConIvaBs. Antes
-        // se calculaban por dos caminos independientes y podian diferir en 0,01.
-        ivaBs: res.iva,
-        costoTotalProduccionBs: res.costoTotal,
-        precioFinalConIvaBs: res.costoTotal,
+        // Fase 3: un solo costo, sin IVA. Antes habia tres campos para dos
+        // conceptos — costoAntesImpuestosBs, costoTotalProduccionBs y
+        // precioFinalConIvaBs — y los dos ultimos eran el mismo numero inflado.
+        costoUnitarioNetoBs: res.costoUnitarioNeto,
+        ingresoNetoConFacturaBs: res.ingresoNetoConFactura,
+        ingresoNetoSinFacturaBs: res.ingresoNetoSinFactura,
+        margenConFacturaPct: res.margenConFactura,
+        margenSinFacturaPct: res.margenSinFactura,
 
         // Aditivos. Lo que antes se resolvia devolviendo 0 en silencio.
         seOfrece: meta.seOfrece,
