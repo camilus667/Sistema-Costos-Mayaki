@@ -84,7 +84,13 @@ api.put('/configuracion', async (c) => {
 let inputsExcelCache: any = null;
 const overriddenCellQtyMap = new Map<string, number>();
 
-function loadExcelInputs() {
+/**
+ * Lector del Excel de inputs. Se EXPORTA para que los scripts de comparacion lean
+ * el archivo exactamente igual que los endpoints. Si un script reimplementara el
+ * parseo, una diferencia contra la base podria ser un bug del parser y no un dato
+ * distinto, y la comparacion no serviria para decidir nada.
+ */
+export function loadExcelInputs() {
   if (inputsExcelCache) return inputsExcelCache;
 
   try {
