@@ -1,0 +1,563 @@
+import fs from 'fs';
+import * as XLSX from 'xlsx';
+import { getDb } from '../database/sqljs';
+import { findExcelPath } from './seed';
+import { costearLote } from '../services/calculo/costeoInputs.service';
+
+/**
+ * ARNES DE PARIDAD DE LA FASE 2.
+ *
+ * Compara a tres bandas, por (itemNumero, talla):
+ *
+ *   NUEVO   el servicio costeoInputs + el motor, leyendo la base
+ *   VIEJO   las tres pantallas actuales, por HTTP contra el server levantado:
+ *             - /api/calculo/matriz-consolidada
+ *             - /api/calculo/matriz-prenda/:productoId
+ *             - /api/inputs/desglose-inteligente-producto
+ *   EXCEL   las hojas CostoBruto, CostoAntesImp y CostoTotal de CAMBRIDGE.xlsx
+ *
+ * ESTE SCRIPT NO DECIDE NADA. Clasifica cada diferencia en IGUAL, ESPERADA o
+ * NUEVA y las reporta. Decidido con el usuario el 29-jul-2026: cada descuadre se
+ * le presenta uno por uno antes de tocar el codigo viejo. Una NUEVA bloquea el
+ * borrado de las copias hasta que se explique.
+ *
+ * Por que el Excel es el oraculo y no las pantallas. Las tres pantallas no son
+ * tres copias de la misma formula. `matriz-consolidada` y `matriz-prenda` casi no
+ * calculan: leen los totales ya hechos del Excel y despejan el costo de tela por
+ * resta. Y `desglose-inteligente-producto` tiene tres defectos conocidos. Exigir
+ * igualdad exacta contra ellas seria reproducir sus bugs. Por eso lo que mas
+ * importa de la salida es la columna "nuevo coincide con Excel".
+ *
+ * SOLO LEE. Abre la base con `getDb({ skipSeed: true })`, que no siembra y no
+ * escribe el archivo. Sin eso, abrir la base era una operacion de escritura.
+ *
+ * USO
+ *   npx tsx src/scripts/compararCosteo.ts
+ *   npx tsx src/scripts/compararCosteo.ts --url http://localhost:3000
+ *   npx tsx src/scripts/compararCosteo.ts --item 27
+ *   npx tsx src/scripts/compararCosteo.ts --solo-ofrecidas --csv paridad.csv
+ *
+ * Requiere el server corriendo, porque las pantallas viejas se consultan por HTTP.
+ */
+
+// ---------------------------------------------------------------------------
+// Argumentos
+// ---------------------------------------------------------------------------
+
+const argv = process.argv.slice(2);
+const flag = (nombre: string): string | undefined => {
+  const i = argv.indexOf(nombre);
+  return i >= 0 ? argv[i + 1] : undefined;
+};
+const URL_BASE = (flag('--url') || 'http://localhost:3000').replace(/\/$/, '');
+const CSV = flag('--csv');
+const ITEM = flag('--item') ? Number(flag('--item')) : undefined;
+const SOLO_OFRECIDAS = argv.includes('--solo-ofrecidas');
+const TOL = flag('--tolerancia') ? Number(flag('--tolerancia')) : 0.01;
+const SEP = '='.repeat(78);
+
+const num = (v: any): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+const r2 = (n: number) => Math.round(n * 100) / 100;
+const fmt = (v: number | null | undefined) =>
+  v === null || v === undefined ? '     -' : v.toFixed(2).padStart(6);
+
+// ---------------------------------------------------------------------------
+// Tipos
+// ---------------------------------------------------------------------------
+
+type Banda = 'consolidada' | 'prenda' | 'desglose';
+const BANDAS: Banda[] = ['consolidada', 'prenda', 'desglose'];
+
+/** Campos comparables. No todas las bandas exponen todos. */
+type Campo =
+  | 'costoTela'
+  | 'costoAccesorios'
+  | 'costoManoObra'
+  | 'costoBruto'
+  | 'costoAntesImpuestos'
+  | 'iva'
+  | 'costoTotal';
+
+const CAMPOS: Campo[] = [
+  'costoTela',
+  'costoAccesorios',
+  'costoManoObra',
+  'costoBruto',
+  'costoAntesImpuestos',
+  'iva',
+  'costoTotal',
+];
+
+interface Fila {
+  item: number;
+  descripcion: string;
+  tallaCodigo: string;
+  seOfrece: boolean;
+  modoCosteo: string;
+  tieneManoObra: boolean;
+  sinBaseDeTela: boolean;
+  sinPrecioDeTela: boolean;
+  origenCostoTela: string;
+  precioAdquisicionBs: number | null;
+  nuevo: Partial<Record<Campo, number>>;
+  excel: { costoBruto: number | null; costoAntesImpuestos: number | null; costoTotal: number | null };
+  viejo: Partial<Record<Banda, Partial<Record<Campo, number>>>>;
+}
+
+interface Dif {
+  fila: Fila;
+  banda: Banda;
+  campo: Campo;
+  nuevo: number;
+  viejo: number;
+  delta: number;
+  clase: 'ESPERADA' | 'NUEVA';
+  reglaId?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Diferencias esperadas, escritas ANTES de correr la comparacion
+// ---------------------------------------------------------------------------
+
+/**
+ * Se escriben por adelantado a proposito. Si se anotaran despues de ver la
+ * salida, cualquier descuadre se podria racionalizar como "ya sabiamos".
+ */
+interface Regla {
+  id: string;
+  descripcion: string;
+  aplica: (d: Omit<Dif, 'clase' | 'reglaId'>, tasaIva: number) => boolean;
+}
+
+const OJAL_BS = 1.6;
+
+const REGLAS: Regla[] = [
+  {
+    id: 'semiterminados-sin-aplicar',
+    descripcion:
+      'Items 19 y 20 sin precio de adquisicion en la base: el importador de semiterminados no se aplico. ' +
+      'Viejo y nuevo quedan igual de mal contra el Excel (7,84 contra 52,84 a 147,84). ' +
+      'Deja de aplicar en cuanto se corra el importador; si despues de eso sigue habiendo diferencia, es NUEVA.',
+    aplica: (d) => [19, 20].includes(d.fila.item) && d.fila.precioAdquisicionBs === null,
+  },
+  {
+    id: 'ojal-grande',
+    descripcion:
+      'Items 16, 17 y 18 (Falda plisada, Jamper, Vestido): el desglose viejo muestra el accesorio ' +
+      '"Ojal Grande" en 0,00. Busca el nombre del encabezado de la matriz contra un mapa armado con el ' +
+      'nombre de la Tabla Auxiliar ("Ojal grande", con g minuscula), no lo encuentra, cae en costo ' +
+      'unitario 0 y asume cantidad 1. Faltan exactamente 1,60 Bs = 2 unidades x 0,80.',
+    aplica: (d, tasaIva) => {
+      if (!([16, 17, 18].includes(d.fila.item) && d.banda === 'desglose')) return false;
+      const esperado: Partial<Record<Campo, number>> = {
+        costoAccesorios: OJAL_BS,
+        costoBruto: OJAL_BS,
+        costoAntesImpuestos: OJAL_BS,
+        iva: OJAL_BS * tasaIva,
+        costoTotal: OJAL_BS * (1 + tasaIva),
+      };
+      const e = esperado[d.campo];
+      return e !== undefined && Math.abs(d.delta - e) <= 0.02;
+    },
+  },
+  {
+    id: 'mano-obra-fabricada',
+    descripcion:
+      'El desglose viejo, cuando no encuentra fila de mano de obra para la talla, promedia todas las ' +
+      'tallas de la prenda, y si tampoco hay ninguna usa 15,00 Bs hardcodeados. El nuevo no inventa: ' +
+      'devuelve 0 y lo reporta en faltantes.',
+    aplica: (d) => d.banda === 'desglose' && !d.fila.tieneManoObra,
+  },
+  {
+    id: 'saco-sin-tela-vinculada',
+    descripcion:
+      'Item 27 Saco: producto.tela_id es NULL. El nuevo reporta sinPrecioDeTela y deja la tela en 0. ' +
+      'Las matrices viejas despejan la tela por resta del total del Excel y por eso parecen correctas. ' +
+      'Se cierra vinculando Casimir Italiano (0,1215 Bs/g); es dato faltante, no un bug de codigo.',
+    aplica: (d) => d.fila.item === 27 && d.fila.sinPrecioDeTela,
+  },
+  {
+    id: 'polera-bullying-sin-peso',
+    descripcion:
+      'Item 26 Polera Bullying: se vende en 14 tallas y no tiene peso de tela cargado en 13. ' +
+      'Tela 0 en viejo y en nuevo; el sistema la costea con tela gratis en ambos.',
+    aplica: (d) => d.fila.item === 26 && d.fila.sinBaseDeTela,
+  },
+];
+
+// ---------------------------------------------------------------------------
+// HTTP a las pantallas viejas
+// ---------------------------------------------------------------------------
+
+async function traer(ruta: string): Promise<any> {
+  const res = await fetch(`${URL_BASE}${ruta}`);
+  if (!res.ok) throw new Error(`${ruta} devolvio HTTP ${res.status}`);
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Principal
+// ---------------------------------------------------------------------------
+
+async function main() {
+  console.log(SEP);
+  console.log('  PARIDAD DE COSTEO  —  nuevo vs pantallas viejas vs Excel');
+  console.log(SEP);
+  console.log(`Server viejo: ${URL_BASE}`);
+  console.log(`Tolerancia:   ${TOL.toFixed(2)} Bs (redondeo, no cuenta como diferencia)`);
+  console.log('Este script NO decide nada. Clasifica y reporta.');
+  console.log('');
+
+  // ---------- NUEVO ----------
+  const db = await getDb({ skipSeed: true });
+  const { ctx, filas: filasNuevas } = await costearLote(db);
+  const tasaIva = ctx.tasaIvaFraccion;
+
+  console.log(`Config: tasa IVA ${ctx.sysConfig.tasaIva}% = ${tasaIva} como fraccion`);
+  console.log(
+    `        indirectos ${ctx.totalIndirectosMensual.toFixed(2)} Bs/mes, ` +
+    `volumen ${ctx.sysConfig.volumenMensualProduccion}/mes, ` +
+    `tarifa por punto ${ctx.tarifaPuntoComplejidad.toFixed(4)}`
+  );
+  if (ctx.avisosGlobales.length) {
+    console.log('');
+    console.log('Avisos al cargar la base:');
+    ctx.avisosGlobales.forEach((a) => console.log(`  ! ${a}`));
+  }
+
+  const colegioId = ctx.productos[0]?.colegioId;
+  if (!colegioId) {
+    console.log('No hay productos en la base. Nada que comparar.');
+    return;
+  }
+
+  // ---------- EXCEL ----------
+  // Mismo shim de interop que usa importarSemiterminados: bajo tsx el namespace
+  // real de xlsx puede quedar colgado de .default.
+  const X: any = (XLSX as any).default || XLSX;
+  const wb = X.readFile(findExcelPath());
+  // Layout verificado, el mismo que usa importarSemiterminados: encabezado en la
+  // fila indice 1 con los codigos de talla desde la columna 2, itemNumero en la 0.
+  const leerHoja = (nombre: string) => {
+    const hoja = wb.Sheets[nombre];
+    const filas: any[][] = hoja ? X.utils.sheet_to_json(hoja, { header: 1 }) : [];
+    const enc = filas[1] || [];
+    const colPorCodigo = new Map<string, number>();
+    for (let c = 2; c < enc.length; c++) {
+      const cod = String(enc[c] ?? '').trim();
+      if (cod) colPorCodigo.set(cod, c);
+    }
+    const porItem = new Map<number, any[]>();
+    for (const f of filas) {
+      const it = num(f?.[0]);
+      // Ultima fila gana si el item aparece repetido, igual que en
+      // importarSemiterminados. Ese criterio es el que dio 28 de 28 exactas, asi
+      // que se replica en vez de elegir otro.
+      if (it > 0) porItem.set(it, f);
+    }
+    return {
+      valor: (item: number, codigo: string): number | null => {
+        const f = porItem.get(item);
+        const c = colPorCodigo.get(codigo);
+        if (!f || c === undefined) return null;
+        const v = f[c];
+        return v === null || v === undefined || v === '' ? null : num(v);
+      },
+    };
+  };
+  const hCB = leerHoja('CostoBruto');
+  const hCA = leerHoja('CostoAntesImp');
+  const hCT = leerHoja('CostoTotal');
+
+  // ---------- VIEJO: matriz-consolidada ----------
+  const viejoConsolidada = new Map<string, Partial<Record<Campo, number>>>();
+  try {
+    const j = await traer(`/api/calculo/matriz-consolidada?colegioId=${encodeURIComponent(colegioId)}`);
+    for (const row of j.data || []) {
+      for (const [codigo, v] of Object.entries<any>(row.tallas || {})) {
+        viejoConsolidada.set(`${row.itemNumero}_${codigo}`, {
+          costoBruto: num(v.costoBruto),
+          costoAntesImpuestos: num(v.costoAntesImp),
+          costoTotal: num(v.costoTotal),
+        });
+      }
+    }
+    console.log(`\nmatriz-consolidada: ${viejoConsolidada.size} celdas.`);
+  } catch (e: any) {
+    console.log(`\nmatriz-consolidada NO respondio: ${e.message}`);
+    console.log('Levantar el server con "npx tsx src/server.ts" y volver a correr.');
+    return;
+  }
+
+  // ---------- VIEJO: matriz-prenda ----------
+  const viejoPrenda = new Map<string, Partial<Record<Campo, number>>>();
+  for (const p of ctx.productos) {
+    try {
+      const j = await traer(`/api/calculo/matriz-prenda/${encodeURIComponent(p.id)}`);
+      for (const d of j.data || []) {
+        viejoPrenda.set(`${num(p.itemNumero)}_${d.tallaCodigo}`, {
+          costoTela: num(d.costoTela),
+          costoAccesorios: num(d.costoAccesorios),
+          costoManoObra: num(d.costoManoObra),
+          // matriz-prenda no devuelve costoBruto como campo propio, asi que se
+          // reconstruye de sus tres componentes. De paso deja ver si su propio
+          // desglose suma su propio costoAntesImpuestos.
+          costoBruto: r2(num(d.costoTela) + num(d.costoAccesorios) + num(d.costoManoObra)),
+          costoAntesImpuestos: num(d.costoAntesImpuestos),
+          iva: num(d.iva),
+          costoTotal: num(d.costoTotal),
+        });
+      }
+    } catch (e: any) {
+      console.log(`  ! matriz-prenda item ${p.itemNumero}: ${e.message}`);
+    }
+  }
+  console.log(`matriz-prenda: ${viejoPrenda.size} celdas.`);
+
+  // ---------- VIEJO: desglose-inteligente-producto ----------
+  // Una llamada por talla: el endpoint devuelve UNA talla por prenda. Se indexa
+  // por la talla que efectivamente devolvio (tallaActual), no por la pedida,
+  // porque tiene su propia cadena de fallback.
+  const viejoDesglose = new Map<string, Partial<Record<Campo, number>>>();
+  const tallasDelColegio = ctx.tallasPorColegio.get(colegioId) || [];
+  for (const t of tallasDelColegio) {
+    try {
+      const j = await traer(
+        `/api/inputs/desglose-inteligente-producto?colegioId=${encodeURIComponent(colegioId)}` +
+        `&tallaId=${encodeURIComponent(t.id)}`
+      );
+      for (const p of j.data || []) {
+        const cod = p?.tallaActual?.codigo;
+        if (!cod || cod !== t.codigo) continue; // devolvio otra talla, no comparable
+        viejoDesglose.set(`${num(p.itemNumero)}_${cod}`, {
+          costoTela: num(p?.tela?.costoTelaBs),
+          costoAccesorios: num(p?.subtotalAccesoriosBs),
+          costoManoObra: num(p?.manoDeObra?.totalManoObraBs),
+          costoBruto: num(p?.costoDirectoTotalBs),
+          costoAntesImpuestos: num(p?.costoAntesImpuestosBs),
+          iva: num(p?.ivaBs),
+          costoTotal: num(p?.precioFinalConIvaBs),
+        });
+      }
+    } catch (e: any) {
+      console.log(`  ! desglose talla ${t.codigo}: ${e.message}`);
+    }
+  }
+  console.log(`desglose-inteligente-producto: ${viejoDesglose.size} celdas.`);
+
+  // ---------- Armado de filas ----------
+  const filas: Fila[] = [];
+  for (const f of filasNuevas) {
+    const item = f.meta.itemNumero;
+    if (ITEM !== undefined && item !== ITEM) continue;
+    if (SOLO_OFRECIDAS && !f.meta.seOfrece) continue;
+    const cod = f.meta.tallaCodigo;
+    const k = `${item}_${cod}`;
+
+    filas.push({
+      item,
+      descripcion: f.meta.descripcion,
+      tallaCodigo: cod,
+      seOfrece: f.meta.seOfrece,
+      modoCosteo: f.meta.modoCosteo,
+      tieneManoObra: f.meta.tieneManoObra,
+      sinBaseDeTela: f.resultado.diagnostico.sinBaseDeTela,
+      sinPrecioDeTela: f.resultado.diagnostico.sinPrecioDeTela,
+      origenCostoTela: f.resultado.diagnostico.origenCostoTela,
+      precioAdquisicionBs: f.meta.precioAdquisicionBs,
+      nuevo: {
+        costoTela: f.resultado.costoTela,
+        costoAccesorios: f.resultado.costoAccesorios,
+        costoManoObra: f.resultado.costoManoObra,
+        costoBruto: f.resultado.costoBruto,
+        costoAntesImpuestos: f.resultado.costoAntesImpuestos,
+        iva: f.resultado.iva,
+        costoTotal: f.resultado.costoTotal,
+      },
+      excel: {
+        costoBruto: hCB.valor(item, cod),
+        costoAntesImpuestos: hCA.valor(item, cod),
+        costoTotal: hCT.valor(item, cod),
+      },
+      viejo: {
+        consolidada: viejoConsolidada.get(k),
+        prenda: viejoPrenda.get(k),
+        desglose: viejoDesglose.get(k),
+      },
+    });
+  }
+
+  // ---------- Clasificacion ----------
+  const difs: Dif[] = [];
+  let comparaciones = 0;
+  for (const fila of filas) {
+    for (const banda of BANDAS) {
+      const v = fila.viejo[banda];
+      if (!v) continue;
+      for (const campo of CAMPOS) {
+        const nv = fila.nuevo[campo];
+        const vv = v[campo];
+        if (nv === undefined || vv === undefined) continue;
+        comparaciones++;
+        const delta = r2(nv - vv);
+        if (Math.abs(delta) <= TOL) continue;
+
+        const base = { fila, banda, campo, nuevo: nv, viejo: vv, delta };
+        const regla = REGLAS.find((r) => r.aplica(base, tasaIva));
+        difs.push({
+          ...base,
+          clase: regla ? 'ESPERADA' : 'NUEVA',
+          reglaId: regla?.id,
+        });
+      }
+    }
+  }
+
+  // ---------- Reporte: nuevo vs Excel, lo que mas importa ----------
+  console.log('');
+  console.log(SEP);
+  console.log('  NUEVO vs EXCEL  —  el oraculo. Por prenda, tallas que cuadran.');
+  console.log(SEP);
+  const porItem = new Map<number, Fila[]>();
+  for (const f of filas) {
+    const a = porItem.get(f.item) || [];
+    a.push(f);
+    porItem.set(f.item, a);
+  }
+  let itemsOk = 0;
+  let itemsConDif = 0;
+  for (const [item, fs2] of [...porItem.entries()].sort((a, b) => a[0] - b[0])) {
+    const comparables = fs2.filter((f) => f.excel.costoBruto !== null && f.excel.costoBruto > 0);
+    if (comparables.length === 0) continue;
+    const cuadran = comparables.filter(
+      (f) => Math.abs(num(f.nuevo.costoBruto) - num(f.excel.costoBruto)) <= TOL
+    );
+    const ok = cuadran.length === comparables.length;
+    if (ok) itemsOk++;
+    else itemsConDif++;
+    const marca = ok ? 'OK  ' : '<-- ';
+    console.log(
+      `  ${marca} item ${String(item).padStart(2)}  ${String(fs2[0].descripcion).slice(0, 26).padEnd(26)} ` +
+      `${String(cuadran.length).padStart(2)}/${String(comparables.length).padStart(2)} tallas cuadran en costoBruto`
+    );
+    if (!ok) {
+      for (const f of comparables) {
+        const d = r2(num(f.nuevo.costoBruto) - num(f.excel.costoBruto));
+        if (Math.abs(d) <= TOL) continue;
+        console.log(
+          `           talla ${f.tallaCodigo.padEnd(8)} nuevo ${fmt(f.nuevo.costoBruto)}  ` +
+          `excel ${fmt(f.excel.costoBruto)}  dif ${fmt(d)}   tela: ${f.origenCostoTela}`
+        );
+      }
+    }
+  }
+  console.log('');
+  console.log(`  ${itemsOk} prendas cuadran con el Excel, ${itemsConDif} no.`);
+
+  // ---------- Reporte: diferencias NUEVAS ----------
+  const nuevas = difs.filter((d) => d.clase === 'NUEVA');
+  console.log('');
+  console.log(SEP);
+  console.log(`  DIFERENCIAS NUEVAS: ${nuevas.length}  —  bloquean el borrado de las copias`);
+  console.log(SEP);
+  if (nuevas.length === 0) {
+    console.log('  Ninguna. Todas las diferencias encontradas estaban pre-registradas.');
+  } else {
+    console.log('  banda        item talla     campo                nuevo  viejo   dif  nuevo=Excel?');
+    for (const d of nuevas) {
+      const ex =
+        d.campo === 'costoBruto'
+          ? d.fila.excel.costoBruto
+          : d.campo === 'costoAntesImpuestos'
+          ? d.fila.excel.costoAntesImpuestos
+          : d.campo === 'costoTotal'
+          ? d.fila.excel.costoTotal
+          : null;
+      const coincide =
+        ex === null ? 'sin dato' : Math.abs(d.nuevo - ex) <= TOL ? 'SI' : 'no';
+      console.log(
+        `  ${d.banda.padEnd(12)} ${String(d.fila.item).padStart(3)} ${d.fila.tallaCodigo.padEnd(8)} ` +
+        `${d.campo.padEnd(20)} ${fmt(d.nuevo)} ${fmt(d.viejo)} ${fmt(d.delta)}  ${coincide}`
+      );
+    }
+  }
+
+  // ---------- Reporte: diferencias ESPERADAS ----------
+  console.log('');
+  console.log(SEP);
+  console.log('  DIFERENCIAS ESPERADAS, agrupadas por regla');
+  console.log(SEP);
+  for (const r of REGLAS) {
+    const suyas = difs.filter((d) => d.reglaId === r.id);
+    console.log(`\n  [${r.id}]  ${suyas.length} diferencias`);
+    console.log(`  ${r.descripcion}`);
+    if (suyas.length === 0) {
+      console.log('  -> No se activo. Si esperabas que si, algo cambio.');
+      continue;
+    }
+    const items = [...new Set(suyas.map((d) => d.fila.item))].sort((a, b) => a - b);
+    const campos = [...new Set(suyas.map((d) => d.campo))];
+    const rango = suyas.map((d) => Math.abs(d.delta));
+    console.log(
+      `  -> items ${items.join(', ')} | campos ${campos.join(', ')} | ` +
+      `dif de ${Math.min(...rango).toFixed(2)} a ${Math.max(...rango).toFixed(2)} Bs`
+    );
+  }
+
+  // ---------- Resumen ----------
+  console.log('');
+  console.log(SEP);
+  console.log('  RESUMEN');
+  console.log(SEP);
+  console.log(`  Filas comparadas:        ${filas.length}`);
+  console.log(`  Comparaciones de campo:  ${comparaciones}`);
+  console.log(`  Iguales (dentro de ${TOL.toFixed(2)}): ${comparaciones - difs.length}`);
+  console.log(`  Esperadas:               ${difs.length - nuevas.length}`);
+  console.log(`  NUEVAS:                  ${nuevas.length}`);
+  console.log('');
+  for (const banda of BANDAS) {
+    const dB = difs.filter((d) => d.banda === banda);
+    const nB = dB.filter((d) => d.clase === 'NUEVA');
+    console.log(`  ${banda.padEnd(12)} ${String(dB.length).padStart(4)} difs, ${nB.length} nuevas`);
+  }
+  console.log('');
+  console.log(
+    nuevas.length === 0
+      ? '  Sin diferencias nuevas. Igual NADA se borra hasta que el usuario falle cada caso esperado.'
+      : '  Hay diferencias nuevas. No se borra ninguna copia hasta explicarlas una por una.'
+  );
+
+  // ---------- CSV ----------
+  if (CSV) {
+    const cab = [
+      'item', 'descripcion', 'talla', 'seOfrece', 'modoCosteo', 'origenCostoTela',
+      'sinBaseDeTela', 'sinPrecioDeTela', 'tieneManoObra',
+      ...CAMPOS.map((c) => `nuevo_${c}`),
+      'excel_costoBruto', 'excel_costoAntesImp', 'excel_costoTotal',
+      ...BANDAS.flatMap((b) => CAMPOS.map((c) => `${b}_${c}`)),
+    ];
+    const lineas = [cab.join(',')];
+    for (const f of filas) {
+      lineas.push([
+        f.item, `"${String(f.descripcion).replace(/"/g, '""')}"`, f.tallaCodigo,
+        f.seOfrece ? 1 : 0, f.modoCosteo, f.origenCostoTela,
+        f.sinBaseDeTela ? 1 : 0, f.sinPrecioDeTela ? 1 : 0, f.tieneManoObra ? 1 : 0,
+        ...CAMPOS.map((c) => f.nuevo[c] ?? ''),
+        f.excel.costoBruto ?? '', f.excel.costoAntesImpuestos ?? '', f.excel.costoTotal ?? '',
+        ...BANDAS.flatMap((b) => CAMPOS.map((c) => f.viejo[b]?.[c] ?? '')),
+      ].join(','));
+    }
+    fs.writeFileSync(CSV, lineas.join('\n'), 'utf8');
+    console.log(`\n  CSV escrito en ${CSV} (${filas.length} filas).`);
+  }
+
+  console.log(SEP);
+}
+
+main().catch((e) => {
+  console.error('Error en la comparacion:', e);
+  process.exit(1);
+});
