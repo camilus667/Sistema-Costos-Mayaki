@@ -104,20 +104,42 @@ api.post('/', zValidator('json', crearAccesorioSchema), async (c) => {
 });
 
 // PUT /api/accesorios/:id - Actualizar accesorio
+//
+// RE-DERIVA costoUnitario. Antes hacia `.set(body)` a secas, asi que editar el costo
+// de la unidad de compra o la cantidad por unidad dejaba costoUnitario con el valor
+// VIEJO — y costoUnitario es el que multiplica la cantidad de uso en el costeo de cada
+// prenda. O sea que corregir el precio de un boton en la pantalla no cambiaba el costo
+// de ninguna prenda, y nada avisaba.
+//
+// Es el mismo defecto del campo derivado que se corrigio en el POST, sobre el otro
+// camino. Vale la pena decirlo asi: un campo derivado que se guarda tiene que
+// recalcularse en TODA escritura, no solo en la primera. Si se recalcula en una sola,
+// el sistema queda con una via por la que el dato se desincroniza en silencio.
 api.put('/:id', zValidator('json', crearAccesorioSchema.partial()), async (c) => {
   const db = (c as any).db;
   const id = c.req.param('id');
   const body = c.req.valid('json');
 
-  const [updatedAccesorio] = await db
-    .update(accesorios)
-    .set(body)
-    .where(eq(accesorios.id, id))
-    .returning();
-
-  if (!updatedAccesorio) {
+  const [existente] = await db.select().from(accesorios).where(eq(accesorios.id, id)).limit(1);
+  if (!existente) {
     return c.json({ success: false, error: 'Accesorio no encontrado' }, 404);
   }
+
+  // Los dos insumos de la division, tomando lo que llego y cayendo a lo guardado.
+  const cantidadXUd = body.cantidadXUd ?? Number(existente.cantidadXUd) ?? 1;
+  const costoUdCompra = body.costoUdCompra ?? Number(existente.costoUdCompra) ?? 0;
+
+  // Si el cliente manda costoUnitario explicito se respeta; si no, se deriva.
+  const costoUnitario = body.costoUnitario ?? (cantidadXUd > 0 ? costoUdCompra / cantidadXUd : 0);
+
+  const [updatedAccesorio] = await db
+    .update(accesorios)
+    .set({
+      ...body,
+      costoUnitario: Math.round(costoUnitario * 10000) / 10000,
+    })
+    .where(eq(accesorios.id, id))
+    .returning();
 
   return c.json({
     success: true,

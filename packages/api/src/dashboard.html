@@ -318,12 +318,10 @@
           </div>
 
           <div class="admin-tabs-bar" style="border-bottom:none; margin:0; padding:0;">
-            <button class="admin-tab-btn active" id="btn-atab-telas" onclick="switchAdminTab('telas')">🧵 Telas del
-              Colegio</button>
+            <button class="admin-tab-btn active" id="btn-atab-telas" onclick="switchAdminTab('telas')">🧵 Telas</button>
             <button class="admin-tab-btn" id="btn-atab-prendas" onclick="switchAdminTab('prendas')">👔 Prendas &
               Reordenamiento</button>
-            <button class="admin-tab-btn" id="btn-atab-insumos" onclick="switchAdminTab('insumos')">🧵 Insumos de la
-              Empresa</button>
+            <button class="admin-tab-btn" id="btn-atab-insumos" onclick="switchAdminTab('insumos')">🧵 Insumos</button>
             <button class="admin-tab-btn" id="btn-atab-tallas" onclick="switchAdminTab('tallas')">📏 Tallas
               Habilitadas</button>
             <button class="admin-tab-btn" id="btn-atab-colegios" onclick="switchAdminTab('colegios')">🏛️ Perfil &
@@ -389,7 +387,7 @@
             </div>
           </div>
 
-          <!-- SUBTAB: INSUMOS DE LA EMPRESA -->
+          <!-- SUBTAB: INSUMOS -->
           <div id="admin-sec-insumos" style="display:none;">
             <div style="background:#0f172a; border:1px solid #334155; border-radius:10px; padding:0.85rem 1rem; margin-bottom:1rem;">
               <div style="font-size:0.78rem; color:#94a3b8; line-height:1.5;">
@@ -468,7 +466,8 @@
               </table>
             </div>
             <div style="font-size:0.72rem; color:#64748b; margin-top:0.6rem;">
-              Esta lista es de consulta. Los costos se editan en la pantalla de Inputs, en Tabla Auxiliar de Accesorios.
+              Cada campo se guarda al salir de él, y el costo unitario se recalcula en el servidor.
+              Cambiar el costo de un insumo mueve el costo de todas las prendas que lo llevan.
             </div>
           </div>
 
@@ -2730,6 +2729,11 @@
       if (c.style.display === 'block') document.getElementById('ni-desc').focus();
     }
 
+    /** Escapa para meter texto dentro de un atributo HTML entre comillas dobles. */
+    function escAttr(s) {
+      return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+    }
+
     async function cargarInsumosAdmin() {
       const tbody = document.getElementById('tb-admin-insumos-body');
       if (!tbody) return;
@@ -2752,17 +2756,87 @@
             ? '<span style="background:#78350f; color:#fbbf24; padding:0.15rem 0.5rem; border-radius:4px; font-size:0.68rem; font-weight:700;">colegio</span>'
             : '<span style="background:#064e3b; color:#34d399; padding:0.15rem 0.5rem; border-radius:4px; font-size:0.68rem; font-weight:700;">empresa</span>';
           return `
-          <tr>
-            <td style="padding:0.4rem 0.75rem; font-weight:600; color:#f8fafc;">${a.descripcion}</td>
-            <td style="text-align:center; color:#94a3b8;">${a.unidadCompra || '—'}</td>
-            <td style="text-align:center; color:#94a3b8;">${a.cantidadXUd ?? '—'}</td>
-            <td style="text-align:right; color:#94a3b8;">${Number(a.costoUdCompra || 0).toFixed(2)}</td>
-            <td style="text-align:right; font-weight:700; color:#38bdf8;">${Number(a.costoUnitario || 0).toFixed(4)}</td>
+          <tr id="fila-insumo-${a.id}">
+            <td style="padding:0.3rem 0.5rem;">
+              <input type="text" id="ai-desc-${a.id}" class="cell-editable-sm"
+                style="width:100%; font-weight:600; color:#f8fafc;" value="${escAttr(a.descripcion)}"
+                onchange="guardarInsumo('${a.id}')">
+            </td>
+            <td style="padding:0.3rem 0.35rem;">
+              <input type="text" id="ai-unid-${a.id}" class="cell-editable-sm"
+                style="width:100%; text-align:center;" value="${escAttr(a.unidadCompra || '')}"
+                onchange="guardarInsumo('${a.id}')">
+            </td>
+            <td style="padding:0.3rem 0.35rem;">
+              <input type="number" id="ai-cant-${a.id}" class="cell-editable-sm"
+                style="width:100%; text-align:center;" step="0.01" min="0.01"
+                value="${a.cantidadXUd ?? 1}" onchange="guardarInsumo('${a.id}')">
+            </td>
+            <td style="padding:0.3rem 0.35rem;">
+              <input type="number" id="ai-costo-${a.id}" class="cell-editable-sm"
+                style="width:100%; text-align:right;" step="0.01" min="0"
+                value="${Number(a.costoUdCompra || 0)}" onchange="guardarInsumo('${a.id}')">
+            </td>
+            <td id="ai-unit-${a.id}" style="text-align:right; font-weight:700; color:#38bdf8;">${Number(a.costoUnitario || 0).toFixed(4)}</td>
             <td style="text-align:center;">${badge}</td>
           </tr>`;
         }).join('');
       } catch (e) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:2rem; color:#f87171;">Error al cargar insumos: ' + e + '</td></tr>';
+      }
+    }
+
+    /**
+     * Guarda una fila de insumo. Se dispara al salir del campo, no con un boton de
+     * Guardar general: en esta sesion aparecieron tres pantallas distintas que decian
+     * haber guardado sin guardar, asi que cada cambio confirma o falla por si mismo.
+     *
+     * El costo unitario que se muestra viene de la RESPUESTA del servidor, no de
+     * dividir en el navegador. Es un valor derivado, y la division tiene que vivir en
+     * un solo lado: si la calculara aca tambien, tendria dos cuentas que pueden
+     * separarse y ninguna razon para creerle a una mas que a la otra.
+     */
+    async function guardarInsumo(id) {
+      const descripcion = document.getElementById('ai-desc-' + id).value.trim();
+      const unidadCompra = document.getElementById('ai-unid-' + id).value.trim();
+      const cantidadXUd = parseFloat(document.getElementById('ai-cant-' + id).value);
+      const costoUdCompra = parseFloat(document.getElementById('ai-costo-' + id).value);
+
+      if (!descripcion) { alert('El nombre del insumo no puede quedar vacío.'); await cargarInsumosAdmin(); return; }
+      if (!unidadCompra) { alert('La unidad de compra no puede quedar vacía.'); await cargarInsumosAdmin(); return; }
+      if (!(cantidadXUd > 0)) { alert('La cantidad por unidad tiene que ser mayor a cero.'); await cargarInsumosAdmin(); return; }
+      if (!(costoUdCompra > 0)) { alert('El costo de la unidad de compra tiene que ser mayor a cero.'); await cargarInsumosAdmin(); return; }
+
+      const fila = document.getElementById('fila-insumo-' + id);
+      try {
+        const res = await fetch('/api/accesorios/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ descripcion, unidadCompra, cantidadXUd, costoUdCompra })
+        });
+        const json = await res.json();
+        if (!json.success) {
+          alert('No se pudo guardar: ' + (json.error || 'error desconocido'));
+          await cargarInsumosAdmin();
+          return;
+        }
+
+        // El servidor re-deriva el costo unitario en cada escritura: se muestra el suyo.
+        document.getElementById('ai-unit-' + id).textContent =
+          Number(json.data.costoUnitario || 0).toFixed(4);
+
+        if (fila) {
+          fila.style.transition = 'background 0.15s';
+          fila.style.background = '#064e3b';
+          setTimeout(() => { fila.style.background = ''; }, 550);
+        }
+
+        // El costo de este insumo entra en toda prenda que lo lleve, asi que las
+        // pantallas de costeo que estan a la vista quedaron viejas.
+        await refrescarCosteoTrasReceta();
+      } catch (e) {
+        alert('Error al guardar el insumo: ' + e);
+        await cargarInsumosAdmin();
       }
     }
 

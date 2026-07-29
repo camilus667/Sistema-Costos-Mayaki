@@ -470,6 +470,38 @@ async function main() {
           : 'Correcto.')
   );
 
+  // Y la EDICION del insumo, que es donde estaba el bug de verdad: el PUT hacia
+  // .set(body) sin recalcular costoUnitario, asi que corregir el costo de compra
+  // dejaba el costo unitario viejo — y ese es el que multiplica la cantidad de uso en
+  // el costeo de cada prenda. Corregir el precio de un boton no cambiaba el costo de
+  // ninguna prenda, y nada avisaba.
+  const idInsumo = insumoNuevo.json?.data?.id;
+  if (!idInsumo) {
+    anotar('PUT /api/accesorios/:id re-deriva el costo unitario', false,
+      'No se pudo obtener el id del insumo recien creado.');
+  } else {
+    const editado = await http('PUT', `/api/accesorios/${idInsumo}`, {
+      descripcion: `${MARCA} insumo`,
+      unidadCompra: 'bolsa',
+      cantidadXUd: 4,
+      costoUdCompra: 20,
+    });
+    const costoTrasEdicion = Number(await unoDesdeDisco(
+      `SELECT costo_unitario FROM accesorio WHERE id = '${esc(idInsumo)}';`
+    ));
+    anotar(
+      'PUT /api/accesorios/:id re-deriva el costo unitario',
+      editado.status === 200 && Math.abs(costoTrasEdicion - 5) < 0.0005,
+      `se cambio el costo de compra de 10 a 20 con cantidad 4; en disco el costo ` +
+        `unitario quedo en ${costoTrasEdicion} y debia ser 5. ` +
+        (Math.abs(costoTrasEdicion - 2.5) < 0.0005
+          ? 'Quedo en 2.5, el valor viejo: el PUT no re-derivo y el costeo usaria el precio anterior.'
+          : Math.abs(costoTrasEdicion - 5) < 0.0005
+            ? 'Correcto.'
+            : 'Valor inesperado.')
+    );
+  }
+
   // ---------------------------------------------------------------- limpieza
   console.log('');
   console.log(SEP);
