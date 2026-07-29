@@ -249,4 +249,144 @@ api.delete('/:productoId/accesorios/:detalleId', async (c) => {
   return c.json({ success: true, message: 'Accesorio quitado de la prenda' });
 });
 
+/**
+ * POST /api/productos/:productoId/accesorios/copiar-de/:origenId
+ *
+ * Copia la receta de accesorios de otra prenda. Es la operacion que hace barato
+ * dar de alta un colegio nuevo: se crea la prenda, se copia la receta de la
+ * prenda equivalente de otro colegio, y solo se ajusta lo distinto.
+ *
+ * A proposito NO es todo-o-nada. Al copiar entre colegios, los accesorios
+ * exclusivos del colegio de origen (la insignia bordada, la etiqueta con logo)
+ * no pueden viajar, y abortar por eso obligaria a capturar todo a mano otra vez.
+ * En vez de fallar, se copia lo que corresponde y se devuelve el detalle de lo
+ * omitido, para que quede explicito que hay que crear el equivalente.
+ *
+ * Query param opcional: ?reemplazar=true vacia la receta del destino antes de
+ * copiar. Por defecto se suma a lo que ya exista.
+ */
+api.post('/:productoId/accesorios/copiar-de/:origenId', async (c) => {
+  const db = (c as any).db;
+  const productoId = c.req.param('productoId');
+  const origenId = c.req.param('origenId');
+  const reemplazar = c.req.query('reemplazar') === 'true';
+
+  if (productoId === origenId) {
+    return c.json({ success: false, error: 'La prenda de origen y la de destino son la misma' }, 400);
+  }
+
+  const [destino] = await db
+    .select()
+    .from(productos)
+    .where(eq(productos.id, productoId))
+    .limit(1);
+
+  if (!destino) {
+    return c.json({ success: false, error: 'Prenda de destino no encontrada' }, 404);
+  }
+
+  const [origen] = await db
+    .select()
+    .from(productos)
+    .where(eq(productos.id, origenId))
+    .limit(1);
+
+  if (!origen) {
+    return c.json({ success: false, error: 'Prenda de origen no encontrada' }, 404);
+  }
+
+  const receta = await db
+    .select({
+      accesorioId: detalleAccesorio.accesorioId,
+      cantidadUso: detalleAccesorio.cantidadUso,
+      descripcion: accesorios.descripcion,
+      colegioId: accesorios.colegioId,
+      costoUnitario: accesorios.costoUnitario,
+    })
+    .from(detalleAccesorio)
+    .innerJoin(accesorios, eq(detalleAccesorio.accesorioId, accesorios.id))
+    .where(eq(detalleAccesorio.productoId, origenId));
+
+  if (receta.length === 0) {
+    return c.json({
+      success: false,
+      error: 'La prenda de origen no tiene accesorios asignados, no hay nada que copiar',
+    }, 400);
+  }
+
+  if (reemplazar) {
+    await db.delete(detalleAccesorio).where(eq(detalleAccesorio.productoId, productoId));
+  }
+
+  const filasDestino = await db
+    .select({ accesorioId: detalleAccesorio.accesorioId })
+    .from(detalleAccesorio)
+    .where(eq(detalleAccesorio.productoId, productoId));
+
+  const yaAsignados = new Set(filasDestino.map((r: any) => r.accesorioId));
+
+  const aInsertar: any[] = [];
+  const copiados: any[] = [];
+  const omitidosPorColegio: any[] = [];
+  const omitidosYaExistian: any[] = [];
+
+  for (const linea of receta) {
+    if (yaAsignados.has(linea.accesorioId)) {
+      omitidosYaExistian.push({ descripcion: linea.descripcion });
+      continue;
+    }
+
+    if (!accesorioUsablePorProducto({ colegioId: linea.colegioId }, destino)) {
+      omitidosPorColegio.push({
+        descripcion: linea.descripcion,
+        cantidadUso: linea.cantidadUso,
+      });
+      continue;
+    }
+
+    aInsertar.push({
+      id: nuevoId(),
+      productoId,
+      accesorioId: linea.accesorioId,
+      cantidadUso: linea.cantidadUso,
+    });
+
+    copiados.push({
+      descripcion: linea.descripcion,
+      cantidadUso: linea.cantidadUso,
+      costoTotalBs: redondear((linea.cantidadUso || 0) * (linea.costoUnitario || 0)),
+    });
+  }
+
+  if (aInsertar.length > 0) {
+    await db.insert(detalleAccesorio).values(aInsertar);
+  }
+
+  if (aInsertar.length > 0 || reemplazar) {
+    saveDbToDisk();
+  }
+
+  const mensaje = omitidosPorColegio.length > 0
+    ? `Se copiaron ${copiados.length} accesorios. Quedaron ${omitidosPorColegio.length} sin copiar por ser exclusivos de otro colegio: hay que crear el equivalente para este colegio y asignarlo a mano.`
+    : `Se copiaron ${copiados.length} accesorios.`;
+
+  return c.json({
+    success: true,
+    origen: { id: origen.id, itemNumero: origen.itemNumero, descripcion: origen.descripcion },
+    destino: { id: destino.id, itemNumero: destino.itemNumero, descripcion: destino.descripcion },
+    reemplazo: reemplazar,
+    copiados,
+    omitidosPorSerExclusivosDeOtroColegio: omitidosPorColegio,
+    omitidosPorEstarYaAsignados: omitidosYaExistian,
+    resumen: {
+      copiados: copiados.length,
+      omitidos: omitidosPorColegio.length + omitidosYaExistian.length,
+      subtotalCopiadoBs: redondear(
+        copiados.reduce((t: number, l: any) => t + l.costoTotalBs, 0)
+      ),
+    },
+    mensaje,
+  }, 201);
+});
+
 export default api;
