@@ -724,6 +724,71 @@ async function main() {
     }
   }
 
+  // ==========================================================================
+  // 7) EXPORTACIONES  —  las que volcaban tablas enteras
+  console.log('');
+  console.log(SEP);
+  console.log('  7. EXPORTACIONES  —  filtros que no filtraban');
+  console.log(SEP);
+
+  const invSinFiltro = await http('GET', '/api/export/inventario');
+  const nInvTodo = invSinFiltro.json?.data?.inventario?.length ?? -1;
+  const invDelColegio = await http('GET', `/api/export/inventario?colegioId=${encodeURIComponent(colegioId)}`);
+  const filasInv: any[] = invDelColegio.json?.data?.inventario || [];
+  const ajenas = filasInv.filter((f) => f.colegioId && f.colegioId !== colegioId);
+
+  anotar(
+    'la exportacion de inventario trae el colegio de cada fila',
+    filasInv.length > 0 && filasInv.every((f) => f.colegioId),
+    `${filasInv.length} fila(s), ${filasInv.filter((f) => f.colegioId).length} con colegioId. ` +
+      'Antes la exportacion no incluia el colegio, asi que era imposible saber de quien era cada fila.'
+  );
+
+  anotar(
+    'ninguna fila exportada pertenece a otro colegio',
+    ajenas.length === 0,
+    ajenas.length === 0
+      ? `las ${filasInv.length} filas son del colegio pedido.`
+      : `${ajenas.length} fila(s) de otro colegio se colaron en la exportacion.`
+  );
+
+  anotar(
+    'la exportacion declara su alcance',
+    typeof invSinFiltro.json?.data?.alcance === 'string' &&
+      invSinFiltro.json.data.alcance.includes('EMPRESA'),
+    `sin filtro el alcance dice ${JSON.stringify(invSinFiltro.json?.data?.alcance)} ` +
+      `sobre ${nInvTodo} fila(s). Un volcado de toda la empresa tiene que decir que lo es.`
+  );
+
+  // Este SI discrimina aunque el otro colegio este vacio: filtrar por una prenda dentro
+  // del mismo colegio reduce el conteo. Antes /generar ignoraba `filtros` por completo,
+  // asi que devolvia lo mismo con filtro y sin filtro.
+  const unaPrenda = await filasDesdeDisco(
+    `SELECT id FROM producto WHERE colegio_id = '${esc(colegioId)}' LIMIT 1;`
+  );
+  if (unaPrenda.length === 0) {
+    noConcluye('POST /api/export/generar aplica sus filtros', 'No hay ninguna prenda para filtrar.');
+  } else {
+    const idPrenda = String(unaPrenda[0][0]);
+    const filasEsperadas = Number(await unoDesdeDisco(
+      `SELECT COUNT(*) FROM inventario WHERE producto_id = '${esc(idPrenda)}';`
+    ));
+    const gen = await http('POST', '/api/export/generar', {
+      tipo: 'inventario',
+      filtros: { productoId: idPrenda },
+    });
+    const nGen = gen.json?.data?.resultados?.length ?? -1;
+    anotar(
+      'POST /api/export/generar aplica sus filtros',
+      nGen === filasEsperadas && nGen < nInvTodo,
+      `filtrando por una prenda devolvio ${nGen}, en disco esa prenda tiene ${filasEsperadas} ` +
+        `fila(s) de inventario, y sin filtro son ${nInvTodo}. ` +
+        (nGen === nInvTodo
+          ? 'Devolvio TODO: el parametro filtros se sigue ignorando.'
+          : 'Correcto, y discrimina: el conteo bajo respecto del total.')
+    );
+  }
+
   // ---------------------------------------------------------------- limpieza
   console.log('');
   console.log(SEP);
