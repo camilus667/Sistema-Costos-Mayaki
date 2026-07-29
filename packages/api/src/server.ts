@@ -9,7 +9,7 @@ import { logger } from 'hono/logger';
 import { prettyJSON } from 'hono/pretty-json';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getDb, schema } from './database/sqljs';
+import { getDb, saveDbToDisk, schema } from './database/sqljs';
 import colegioRoutes from './routes/colegio';
 import usuarioRoutes from './routes/usuario';
 import productoRoutes from './routes/producto';
@@ -135,12 +135,43 @@ app.get('/health', async (c) => {
   }
 });
 
-// Database init middleware - inyecta DB en el context
+// Database init middleware - inyecta DB en el context, y persiste al salir.
+//
+// PERSISTENCIA AUTOMATICA. sql.js vive en memoria: una escritura solo llega al
+// disco cuando alguien llama saveDbToDisk(). Ese "alguien" era cada handler, a
+// mano, y la mitad no lo hacia. Escribian en memoria, devolvian 200, y el dato se
+// perdia al reiniciar el proceso:
+//
+//   PUT /api/calculo/precio-venta              <- el precio de venta
+//   PUT /api/inputs/tabla-auxiliar-accesorios/:id  <- el costo del accesorio
+//   POST, PUT y DELETE de tela, talla y accesorio
+//   POST, PUT, DELETE y PATCH de colegio
+//
+// Peor que perderse siempre: se perdia a veces. saveDbToDisk() vuelca la base
+// entera, asi que si despues de editar un precio el usuario tocaba el inventario
+// —que si guardaba— el precio se persistia de rebote. El mismo gesto se guardaba
+// o se perdia segun lo que el usuario hiciera despues.
+//
+// Es la tercera vez en el refactor que aparece este patron (antes: mano_obra
+// resembrada en cada arranque, y el PUT de mano de obra que respondia OK y
+// desaparecia). Sembrar dieciseis llamadas mas seria repetir la causa. El flush
+// vive en UN lugar, corre despues del handler, solo en escrituras que salieron
+// bien, y no se puede olvidar.
+//
+// Esto es especifico del entrypoint local. index.ts usa D1, donde la escritura ya
+// es durable y no hay nada que volcar.
 app.use('/api/*', async (c, next) => {
   const db = await getDb();
   (c as any).db = db;
   (c as any).schema = schema;
-  return next();
+
+  await next();
+
+  const metodo = c.req.method;
+  const esEscritura = metodo !== 'GET' && metodo !== 'HEAD' && metodo !== 'OPTIONS';
+  if (esEscritura && c.res.status < 400) {
+    saveDbToDisk();
+  }
 });
 
 // API resumen dashboard avanzado con KPIs financieros completos de prendas, precios y costos
