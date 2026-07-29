@@ -86,6 +86,23 @@ function anotar(nombre: string, ok: boolean, detalle: string) {
   console.log(`         ${detalle}`);
 }
 
+/**
+ * Tercer estado: el chequeo corrio pero NO PUEDE distinguir el exito del fracaso con
+ * los datos que hay.
+ *
+ * Existe porque la seccion de aislamiento cayo en esa trampa: con el segundo colegio
+ * en cero prendas, "devolvio 27 y el colegio tiene 27" se cumple igual si el filtro
+ * esta roto, porque no hay filas ajenas que se puedan colar. Reportarlo como PASA da
+ * confianza sin dar evidencia, y un verde vacio es peor que no tener chequeo.
+ */
+const inconclusos: Resultado[] = [];
+
+function noConcluye(nombre: string, detalle: string) {
+  inconclusos.push({ nombre, ok: false, detalle });
+  console.log(`  ????  ${nombre}`);
+  console.log(`         ${detalle}`);
+}
+
 const esc = (s: string) => String(s).replace(/'/g, "''");
 
 async function main() {
@@ -603,6 +620,25 @@ async function main() {
     const otroNombre = String(otro[1]);
     const prendasOtro = Number(otro[2]);
     console.log(`  Se compara contra: ${otroNombre} (${prendasOtro} prenda(s))`);
+    // Con el otro colegio SIN prendas, los dos conteos de abajo no pueden fallar: si el
+    // filtro estuviera roto y devolviera todo, "todo" seria igual a "las de este
+    // colegio". Un chequeo que no puede distinguir el exito del fracaso no debe decir
+    // PASA, porque un verde vacio es peor que no tener chequeo: da confianza sin dar
+    // evidencia. Se reportan como NO CONCLUYENTES.
+    const puedeDiscriminar = prendasOtro > 0;
+    if (!puedeDiscriminar) {
+      console.log('');
+      console.log(`  ATENCION: ${otroNombre} no tiene prendas, asi que los conteos de abajo`);
+      console.log('  no discriminan. Una consulta sin filtro devolveria el mismo numero que una');
+      console.log('  filtrada, porque no hay filas ajenas que se puedan colar.');
+      console.log('');
+      console.log('  Para que esto mida de verdad hace falta UNA prenda en el otro colegio.');
+      console.log('  Se crea desde Configuracion, pestaña Prendas & Recetas, con el ambito en ese');
+      console.log('  colegio, y despues se le copia la receta de la prenda equivalente con el');
+      console.log('  boton Copiar. Es exactamente el alta de colegio para la que se hizo todo esto.');
+      console.log('');
+    }
+
 
     // Cuantas prendas tiene cada uno segun el DISCO, que es la verdad.
     const enDiscoDelColegio = Number(await unoDesdeDisco(
@@ -611,24 +647,43 @@ async function main() {
 
     const prodFiltrados = await http('GET', `/api/productos?colegioId=${encodeURIComponent(colegioId)}`);
     const nProd = Array.isArray(prodFiltrados.json?.data) ? prodFiltrados.json.data.length : -1;
-    anotar(
-      'GET /api/productos?colegioId= devuelve SOLO las prendas de ese colegio',
-      nProd === enDiscoDelColegio,
-      `devolvio ${nProd}, en disco ese colegio tiene ${enDiscoDelColegio}. ` +
-        (nProd > enDiscoDelColegio
-          ? 'Devolvio mas: se estan filtrando prendas de otro colegio.'
-          : 'Correcto.')
-    );
+    const detalleProd =
+      `devolvio ${nProd}, en disco ese colegio tiene ${enDiscoDelColegio}` +
+      ` y el otro tiene ${prendasOtro}. `;
+
+    if (!puedeDiscriminar) {
+      noConcluye(
+        'GET /api/productos?colegioId= devuelve SOLO las prendas de ese colegio',
+        detalleProd + 'No discrimina: sin prendas en el otro colegio, un filtro roto daria el mismo numero.'
+      );
+    } else {
+      anotar(
+        'GET /api/productos?colegioId= devuelve SOLO las prendas de ese colegio',
+        nProd === enDiscoDelColegio,
+        detalleProd +
+          (nProd > enDiscoDelColegio
+            ? 'Devolvio mas: se estan colando prendas de otro colegio.'
+            : 'Correcto, y esta vez con evidencia: si el filtro fallara, se verian las del otro.')
+      );
+    }
 
     // La matriz de accesorios, que es la que se acaba de repuntar a detalle_acc.
     const matrizFiltrada = await http('GET', `/api/inputs/accesorios-matriz?colegioId=${encodeURIComponent(colegioId)}`);
     const nMatriz = Array.isArray(matrizFiltrada.json?.data) ? matrizFiltrada.json.data.length : -1;
-    anotar(
-      'la matriz de accesorios se acota al colegio pedido',
-      nMatriz === enDiscoDelColegio,
-      `devolvio ${nMatriz} prenda(s), ese colegio tiene ${enDiscoDelColegio}. ` +
-        (nMatriz > enDiscoDelColegio ? 'Incluye prendas de otro colegio.' : 'Correcto.')
-    );
+    const detalleMatriz = `devolvio ${nMatriz} prenda(s), ese colegio tiene ${enDiscoDelColegio}. `;
+
+    if (!puedeDiscriminar) {
+      noConcluye(
+        'la matriz de accesorios se acota al colegio pedido',
+        detalleMatriz + 'No discrimina, por la misma razon.'
+      );
+    } else {
+      anotar(
+        'la matriz de accesorios se acota al colegio pedido',
+        nMatriz === enDiscoDelColegio,
+        detalleMatriz + (nMatriz > enDiscoDelColegio ? 'Incluye prendas de otro colegio.' : 'Correcto.')
+      );
+    }
 
     // Y la que mas importa: que un insumo exclusivo de un colegio NO se le pueda
     // asignar a una prenda del otro. Esto es una ESCRITURA cruzada, la clase de falla
@@ -717,6 +772,12 @@ async function main() {
   }
   console.log('');
   console.log(`  ${pasan} pasan, ${fallan} fallan, de ${resultados.length}.`);
+  if (inconclusos.length > 0) {
+    console.log('');
+    console.log(`  Y ${inconclusos.length} NO CONCLUYENTE(S): corrieron, pero con estos datos no`);
+    console.log('  pueden distinguir el exito del fracaso. NO cuentan como verde.');
+    for (const r of inconclusos) console.log(`    ????  ${r.nombre}`);
+  }
   console.log('');
   if (fallan === 0) {
     console.log('  Los caminos de escritura quedan verificados contra el disco.');
