@@ -415,6 +415,20 @@ describe('ensamblarInputs', () => {
     expect(f3.inputs.costoIndirectoUnitario! / f1.inputs.costoIndirectoUnitario!).toBeCloseTo(3, 5);
   });
 
+  it('FASE 4: la tasa NO depende del alcance de la consulta', () => {
+    // Bug real detectado por el arnes: el factor promedio se calculaba sobre la
+    // lista FILTRADA de productos, asi que al costear una prenda sola el promedio
+    // era su propio factor, el factor se cancelaba, y toda prenda absorbia 11,93
+    // en vez de su parte proporcional. Costear una prenda sola daba distinto que
+    // costearla dentro del lote. La tasa es propiedad del negocio, no de la query.
+    const ctx = ctxDePrueba();
+    const solo = ensamblarInputs(ctx, { ...PROD, factorComplejidad: 1 }, TALLA);
+    // Con factorPromedio 2 y tasa 5,9667, una prenda de factor 1 absorbe 5,97.
+    // Si la tasa dependiera del alcance, absorberia 11,93.
+    expect(solo.inputs.costoIndirectoUnitario).toBeCloseTo(5.9667, 3);
+    expect(solo.inputs.costoIndirectoUnitario).not.toBeCloseTo(11.9333, 3);
+  });
+
   it('FASE 4: una prenda con el factor promedio absorbe el pool por unidad', () => {
     // La normalizacion es lo que hace que la asignacion SUME el pool. Una prenda
     // con factor igual al promedio tiene que absorber exactamente

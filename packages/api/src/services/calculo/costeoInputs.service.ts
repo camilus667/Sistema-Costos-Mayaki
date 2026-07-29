@@ -382,7 +382,39 @@ export async function cargarContextoCosteo(
     ? num(sysConfig.volumenAnualProduccion)
     : volumenMes * 12;
 
-  const factores = listaProductos
+  // EL FACTOR PROMEDIO NO PUEDE DEPENDER DEL FILTRO DEL LLAMADOR.
+  //
+  // Bug real que introdujo la primera version de esto y que detecto el arnes de
+  // paridad. El promedio se calculaba sobre `listaProductos`, que viene filtrada
+  // por `opts.productoId`. Cuando el llamador pedia UNA prenda — que es lo que
+  // hace `matriz-prenda` via costearPrendaTodasLasTallas — el promedio era el
+  // factor de esa misma prenda, y entonces:
+  //
+  //   tasaPorPuntoFactor x factor = (pool / (volumen x factor)) x factor
+  //                               = pool / volumen
+  //
+  // o sea el factor se cancelaba y toda prenda absorbia el promedio del pool,
+  // 11,93 Bs, en vez de su parte proporcional. Resultado: costear una prenda sola
+  // daba un numero distinto que costearla dentro del lote. Exactamente la clase de
+  // inconsistencia que este refactor vino a eliminar.
+  //
+  // Se detecto porque el arnes mostro 281 diferencias SOLO en la banda `prenda`,
+  // con `consolidada` y `desglose` en cero — las tres usando el mismo motor. Una
+  // discrepancia entre bandas que comparten codigo solo puede venir del contexto.
+  //
+  // La tasa es una propiedad del NEGOCIO, no de la consulta: el pool de indirectos
+  // es de la empresa y se reparte sobre toda la produccion. Asi que el denominador
+  // se calcula siempre sobre el catalogo completo, ignorando los filtros.
+  let factoresCatalogo: any[] = [];
+  try {
+    factoresCatalogo = await db
+      .select({ factorComplejidad: productos.factorComplejidad, activo: productos.activo })
+      .from(productos);
+  } catch (e) {
+    avisosGlobales.push('No se pudo leer el catalogo completo para el factor promedio de indirectos.');
+  }
+  const factores = factoresCatalogo
+    .filter((p: any) => p.activo !== false)
     .map((p: any) => (num(p.factorComplejidad) > 0 ? num(p.factorComplejidad) : 1));
   const factorPromedio = factores.length > 0
     ? factores.reduce((a: number, b: number) => a + b, 0) / factores.length
