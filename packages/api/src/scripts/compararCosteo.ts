@@ -286,7 +286,7 @@ async function main() {
   console.log(
     `        indirectos ${ctx.totalIndirectosMensual.toFixed(2)} Bs/mes, ` +
     `volumen ${ctx.sysConfig.volumenMensualProduccion}/mes, ` +
-    `tarifa por punto ${ctx.tarifaPuntoComplejidad.toFixed(4)}`
+    `tasa por punto de factor ${ctx.tasaPorPuntoFactor.toFixed(4)}, absorcion ${ctx.sysConfig.porcentajeAbsorcionIndirectos}%`
   );
   if (ctx.avisosGlobales.length) {
     console.log('');
