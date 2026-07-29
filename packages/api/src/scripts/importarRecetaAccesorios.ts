@@ -51,6 +51,24 @@ function nuevoId(): string {
 
 const redondear = (n: number): number => Math.round(n * 100) / 100;
 
+/**
+ * Clave de comparacion de nombres de accesorio.
+ *
+ * Hace falta porque la hoja no es consistente consigo misma: el encabezado de
+ * la matriz dice "Ojal Grande" y la Tabla Auxiliar dice "Ojal grande", con g
+ * minuscula. La base se sembro desde la Tabla Auxiliar, asi que comparar por
+ * nombre exacto deja ese accesorio sin resolver.
+ *
+ * Ese desajuste tambien afecta al codigo actual: inputs.ts busca el costo
+ * unitario con el nombre del encabezado contra un mapa armado con el nombre de
+ * la Tabla Auxiliar, no lo encuentra, cae en costo unitario 0 y termina
+ * mostrando el accesorio con costo 0.00 Bs. El total de la columna 41 si lo
+ * incluye, asi que el desglose por linea no suma su propio total.
+ */
+function clave(nombre: string): string {
+  return String(nombre || '').trim().toLowerCase();
+}
+
 function ubicarExcel(): string {
   const candidatos = [
     path.resolve(process.cwd(), 'CAMBRIDGE.xlsx'),
@@ -151,7 +169,7 @@ async function main() {
     if (!r || !r[0]) continue;
     const nombre = String(r[0]).trim();
     const cu = Number(r[5]) || 0;
-    if (nombre) costoUnitarioExcel.set(nombre, cu);
+    if (nombre) costoUnitarioExcel.set(clave(nombre), cu);
   }
 
   // --- Matriz item x accesorio (valores en Bs) ---
@@ -182,7 +200,7 @@ async function main() {
   for (const p of prods) prodPorItem.set(Number(p.itemNumero), p);
 
   const accPorNombre = new Map<string, any>();
-  for (const a of accs) accPorNombre.set(String(a.descripcion).trim(), a);
+  for (const a of accs) accPorNombre.set(clave(a.descripcion), a);
 
   console.log(`Prendas en base: ${prods.length}   Accesorios en base: ${accs.length}`);
 
@@ -190,6 +208,7 @@ async function main() {
   const aInsertar: any[] = [];
   const sinCostoUnitario: string[] = [];
   const accesorioNoEnBase = new Set<string>();
+  const nombresDiscrepantes = new Map<string, string>();
   const itemNoEnBase = new Set<number>();
   const derivadoPorItem = new Map<number, number>();
 
@@ -201,11 +220,17 @@ async function main() {
     const prod = prodPorItem.get(item);
     if (!prod) { itemNoEnBase.add(item); continue; }
 
-    const acc = accPorNombre.get(nombre);
+    const acc = accPorNombre.get(clave(nombre));
     if (!acc) { accesorioNoEnBase.add(nombre); continue; }
 
+    // Se registra cuando la coincidencia necesito normalizacion, para poder
+    // limpiar el dato despues.
+    if (String(acc.descripcion).trim() !== nombre) {
+      nombresDiscrepantes.set(nombre, String(acc.descripcion).trim());
+    }
+
     // El costo unitario de la base es la fuente; el del Excel es el respaldo.
-    const cu = Number(acc.costoUnitario) || costoUnitarioExcel.get(nombre) || 0;
+    const cu = Number(acc.costoUnitario) || costoUnitarioExcel.get(clave(nombre)) || 0;
 
     if (cu <= 0) {
       // Sin costo unitario la cantidad no se puede derivar. No se inventa un 1.
@@ -235,6 +260,16 @@ async function main() {
     console.log(`\nAccesorios de la hoja sin fila en la base (${accesorioNoEnBase.size}):`);
     for (const n of accesorioNoEnBase) console.log(`  · ${n}`);
     console.log('  Hay que crearlos en /api/accesorios antes de volver a correr esto.');
+  }
+
+  if (nombresDiscrepantes.size > 0) {
+    console.log(`\nNombres que solo coinciden normalizando (${nombresDiscrepantes.size}):`);
+    for (const [enHoja, enBase] of nombresDiscrepantes) {
+      console.log(`  · matriz: "${enHoja}"   base: "${enBase}"`);
+    }
+    console.log('  Se resolvieron igual, pero conviene unificar la escritura: con');
+    console.log('  nombre exacto, inputs.ts no encuentra el costo unitario, asume');
+    console.log('  cantidad 1 y muestra el accesorio en 0.00 Bs.');
   }
 
   if (itemNoEnBase.size > 0) {
