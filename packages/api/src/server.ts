@@ -17,6 +17,7 @@ import tallaRoutes from './routes/talla';
 import telaRoutes from './routes/tela';
 import accesorioRoutes from './routes/accesorio';
 import detalleAccesorioRoutes from './routes/detalleAccesorio';
+import copiaPrendaRoutes from './routes/copiaPrenda';
 import calculoRoutes, { loadExcelMatrices } from './routes/calculo';
 import inventarioRoutes from './routes/inventario';
 import precioRoutes from './routes/precio';
@@ -340,6 +341,9 @@ app.route('/api/productos', productoRoutes);
 // productoRoutes porque las rutas son /:productoId/accesorios, que no colisiona
 // con el /:id de productoRoutes (distinta cantidad de segmentos).
 app.route('/api/productos', detalleAccesorioRoutes);
+// Copiar los datos de costeo de una prenda de referencia: factor, tela, pesos, mano de
+// obra y receta. Tercer router en el mismo prefijo, patron que este proyecto ya usa.
+app.route('/api/productos', copiaPrendaRoutes);
 app.route('/api/tallas', tallaRoutes);
 app.route('/api/telas', telaRoutes);
 app.route('/api/accesorios', accesorioRoutes);

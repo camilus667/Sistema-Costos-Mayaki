@@ -566,25 +566,53 @@
                 </div>
               </div>
 
-              <div style="display:grid; grid-template-columns: 1fr auto auto; gap:0.6rem; align-items:end; margin-top:0.9rem; padding-top:0.85rem; border-top:1px solid #1e293b;">
-                <div>
-                  <label style="font-size:0.72rem; color:#94a3b8;">Copiar la receta de otra prenda</label>
-                  <select id="receta-origen" class="cell-editable-sm" style="width:100%; padding:0.4rem;"></select>
+              <div style="margin-top:0.9rem; padding-top:0.85rem; border-top:1px solid #1e293b;">
+                <div style="display:grid; grid-template-columns: 1fr auto; gap:0.6rem; align-items:end;">
+                  <div>
+                    <label style="font-size:0.72rem; color:#94a3b8;">Copiar los datos de costeo de otra prenda</label>
+                    <select id="receta-origen" class="cell-editable-sm" style="width:100%; padding:0.4rem;"></select>
+                  </div>
+                  <div>
+                    <button class="btn" style="background:#7c3aed; padding:0.45rem 1.2rem;" onclick="copiarDeReferencia()">Copiar</button>
+                  </div>
                 </div>
-                <label style="font-size:0.75rem; color:#f59e0b; display:flex; align-items:center; gap:0.4rem; cursor:pointer; padding-bottom:0.5rem;">
+
+                <div style="display:flex; gap:1.1rem; flex-wrap:wrap; margin-top:0.7rem; font-size:0.76rem; color:#cbd5e1;">
+                  <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
+                    <input type="checkbox" id="cp-receta" checked> Receta de insumos
+                  </label>
+                  <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
+                    <input type="checkbox" id="cp-pesos" checked> Pesos de tela por talla
+                  </label>
+                  <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
+                    <input type="checkbox" id="cp-manoobra" checked> Mano de obra por talla
+                  </label>
+                  <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
+                    <input type="checkbox" id="cp-factor" checked> Factor de complejidad
+                  </label>
+                  <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
+                    <input type="checkbox" id="cp-tela"> Tela asignada
+                  </label>
+                </div>
+
+                <label style="display:flex; align-items:center; gap:0.4rem; margin-top:0.6rem; font-size:0.78rem; color:#f59e0b; cursor:pointer;">
                   <input type="checkbox" id="receta-reemplazar">
-                  Reemplazar lo que ya tiene
+                  Reemplazar lo que la prenda ya tenga
                 </label>
-                <div>
-                  <button class="btn" style="background:#7c3aed; padding:0.45rem 1rem;" onclick="copiarRecetaDe()">Copiar</button>
+
+                <div id="receta-nota-tela" style="font-size:0.72rem; color:#38bdf8; margin-top:0.6rem; font-weight:600;"></div>
+                <div style="font-size:0.72rem; color:#64748b; margin-top:0.35rem; line-height:1.5;">
+                  Sin marcar "reemplazar" solo se llena lo que está <strong>vacío</strong>: un peso ya cargado no se
+                  toca, un factor distinto de 1 no se toca, y una línea de receta que ya existe no se duplica.
+                  Copiar no debe borrar trabajo hecho a mano. Marcalo cuando quieras realinear una prenda ya cargada
+                  con su referencia.
+                  <br>
+                  Los datos copiados son <strong>provisionales y trazables</strong>: sabés de qué prenda salieron.
+                  Un peso copiado se equivoca en un 5%; el cero con el que nace una prenda se equivoca en un 100%.
+                  Los insumos exclusivos de otro colegio no viajan, y la respuesta dice cuáles quedaron sin copiar.
                 </div>
               </div>
-              <div id="receta-nota-tela" style="font-size:0.72rem; color:#38bdf8; margin-top:0.5rem; font-weight:600;"></div>
-              <div style="font-size:0.72rem; color:#64748b; margin-top:0.35rem;">
-                Copiar es la operación que hace barato dar de alta un colegio: se crea la prenda, se copia la receta
-                de una prenda que use la misma tela —de este colegio o de otro— y solo se ajusta lo distinto.
-                Los insumos exclusivos de otro colegio no viajan, y la respuesta dice cuáles quedaron sin copiar.
-              </div>
+
             </div>
 
             <div style="max-height: 680px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
@@ -2762,38 +2790,97 @@
       } catch (e) { alert('Error al quitar el insumo: ' + e); }
     }
 
-    async function copiarRecetaDe() {
+    /**
+     * Copia los datos de costeo de una prenda de referencia.
+     *
+     * Antes esto copiaba SOLO la receta, y eso dejaba la prenda nueva costeando casi
+     * nada: POST /:id/prendas crea sus 16 pesos EN CERO y ninguna mano de obra, asi que
+     * con la receta copiada faltaban dos de los tres componentes del costo. El usuario
+     * copiaba, veia el costo en cero, y no tenia forma de saber que le faltaba.
+     */
+    async function copiarDeReferencia() {
       if (!recetaProductoActual) return;
       const origenId = document.getElementById('receta-origen').value;
       if (!origenId) return alert('Elegí la prenda de la que querés copiar.');
-      const reemplazar = document.getElementById('receta-reemplazar').checked;
+
+      const que = {
+        receta: document.getElementById('cp-receta').checked,
+        pesos: document.getElementById('cp-pesos').checked,
+        manoObra: document.getElementById('cp-manoobra').checked,
+        factor: document.getElementById('cp-factor').checked,
+        tela: document.getElementById('cp-tela').checked,
+        reemplazar: document.getElementById('receta-reemplazar').checked,
+      };
+
+      if (!que.receta && !que.pesos && !que.manoObra && !que.factor && !que.tela) {
+        return alert('No marcaste nada para copiar.');
+      }
+
+      if (que.reemplazar) {
+        const lista = Object.keys(que).filter(k => k !== 'reemplazar' && que[k]).join(', ');
+        if (!confirm(
+          'Vas a REEMPLAZAR lo que esta prenda ya tenga en: ' + lista + '.\n\n' +
+          'Los valores actuales se pierden. Sin este check, solo se llenaría lo que está vacío.'
+        )) return;
+      }
 
       try {
-        const res = await fetch(
-          '/api/productos/' + recetaProductoActual + '/accesorios/copiar-de/' + origenId +
-          (reemplazar ? '?reemplazar=true' : ''),
-          { method: 'POST' }
-        );
+        const res = await fetch('/api/productos/' + recetaProductoActual + '/copiar-de/' + origenId, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(que)
+        });
         const json = await res.json();
-        if (!json.success) return alert('No se pudo copiar: ' + (json.error || 'error'));
-
-        // La copia NO es todo o nada a proposito: los insumos exclusivos de otro
-        // colegio no pueden viajar, y hay que decir cuales quedaron afuera.
-        let msg = json.mensaje || 'Receta copiada.';
-        const omitidos = json.omitidosPorSerExclusivosDeOtroColegio || [];
-        if (omitidos.length > 0) {
-          msg += '\n\nSin copiar por ser de otro colegio:\n' +
-            omitidos.map(o => '  · ' + o.descripcion + ' (cantidad ' + o.cantidadUso + ')').join('\n') +
-            '\n\nHay que crear el equivalente para este colegio y agregarlo a mano.';
+        if (!json.success) {
+          return alert('No se pudo copiar:\n\n' + (json.error || 'error desconocido'));
         }
-        alert(msg);
+
+        // Se informa CONCEPTO POR CONCEPTO, incluido lo que NO se copio y por que. Un
+        // "copiado exitosamente" que oculta que tres de cinco conceptos se saltearon es
+        // la clase de mensaje que hizo invisibles la mitad de los bugs de este sistema.
+        const partes = [`Copiado desde item ${json.origen.itemNumero} — ${json.origen.descripcion}:`];
+
+        if (json.receta) {
+          partes.push(`  · Receta: ${json.receta.copiados.length} insumo(s), ${json.receta.subtotalCopiadoBs.toFixed(2)} Bs`);
+          if (json.receta.omitidosPorEstarYaAsignados.length > 0) {
+            partes.push(`    ${json.receta.omitidosPorEstarYaAsignados.length} ya estaban asignados`);
+          }
+        }
+        if (json.pesos) {
+          partes.push(`  · Pesos: ${json.pesos.actualizados} actualizado(s), ${json.pesos.insertados} nuevo(s), ${json.pesos.saltados} sin tocar`);
+        }
+        if (json.manoObra) {
+          partes.push(`  · Mano de obra: ${json.manoObra.actualizados} actualizada(s), ${json.manoObra.insertados} nueva(s), ${json.manoObra.saltados} sin tocar`);
+        }
+        if (json.factor) {
+          partes.push(json.factor.copiado
+            ? `  · Factor: ${json.factor.de} → ${json.factor.a}`
+            : `  · Factor: sin cambios (${json.factor.motivo})`);
+        }
+        if (json.tela) {
+          partes.push(json.tela.copiado ? '  · Tela: asignada' : `  · Tela: sin cambios (${json.tela.motivo})`);
+        }
+        if ((json.avisos || []).length > 0) {
+          partes.push('');
+          partes.push('ATENCIÓN:');
+          for (const a of json.avisos) partes.push('  ' + a);
+        }
+
+        alert(partes.join('\n'));
+
         document.getElementById('receta-reemplazar').checked = false;
         await cargarReceta();
-        // Los candidatos cambian: esta prenda ahora tiene receta y puede ser origen de otras.
         await cargarCandidatosCopia(recetaProductoActual);
+        // El factor, los pesos y la tela cambian el costo: la config y las matrices
+        // quedaron viejas.
+        await cargarConfigAdminColegio();
         await refrescarCosteoTrasReceta();
-      } catch (e) { alert('Error al copiar la receta: ' + e); }
+      } catch (e) {
+        alert('Error al copiar: ' + e);
+      }
     }
+
+
 
     /** El costo de accesorios cambio, asi que las pantallas que lo muestran quedaron viejas. */
     async function refrescarCosteoTrasReceta() {

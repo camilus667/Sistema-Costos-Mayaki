@@ -789,6 +789,97 @@ async function main() {
     );
   }
 
+  // ==========================================================================
+  // 8) COPIAR DE UNA PRENDA DE REFERENCIA
+  //
+  // El chequeo importante es el segundo, y se puede hacer SIN mutar datos: copiar sobre
+  // una prenda que ya tiene todo cargado, sin marcar "reemplazar", NO debe tocar nada.
+  // Esa es la propiedad central de la operacion —copiar no destruye trabajo humano— y si
+  // fallara, la prueba misma dejaria el dato pisado. Aca ese riesgo trabaja a favor: si
+  // el peso cambia, el chequeo lo dice Y el bug ya ocurrio, asi que se detecta a la
+  // primera en vez de en produccion.
+  console.log('');
+  console.log(SEP);
+  console.log('  8. COPIAR DE UNA PRENDA DE REFERENCIA');
+  console.log(SEP);
+
+  const dosPrendas = await filasDesdeDisco(`
+    SELECT id, item_numero, descripcion FROM producto
+    WHERE colegio_id = '${esc(colegioId)}'
+    ORDER BY item_numero
+    LIMIT 2;
+  `);
+
+  if (dosPrendas.length < 2) {
+    noConcluye('copiar de referencia respeta lo ya cargado', 'Hacen falta dos prendas en el colegio.');
+  } else {
+    const [destinoId, destinoItem] = dosPrendas[0];
+    const [origenId, origenItem] = dosPrendas[1];
+
+    const pedidoVacio = await http('POST', `/api/productos/${destinoId}/copiar-de/${origenId}`, {
+      receta: false, pesos: false, manoObra: false, factor: false, tela: false,
+    });
+    anotar(
+      'un pedido de copia sin nada marcado devuelve 400',
+      pedidoVacio.status === 400 && pedidoVacio.json?.success === false,
+      `status ${pedidoVacio.status}. Un pedido vacio no es un error del sistema, es un pedido ` +
+        'vacio: se dice, en vez de responder success sobre cero trabajo.'
+    );
+
+    // El peso y el factor ANTES, leidos del disco.
+    const pesoAntes = Number(await unoDesdeDisco(`
+      SELECT p.peso_con_merma FROM peso_mat_prima p
+      JOIN talla t ON t.id = p.talla_id
+      WHERE p.producto_id = '${esc(String(destinoId))}'
+      ORDER BY t.orden LIMIT 1;
+    `));
+    const factorAntes = Number(await unoDesdeDisco(
+      `SELECT factor_complejidad FROM producto WHERE id = '${esc(String(destinoId))}';`
+    ));
+
+    const sinReemplazar = await http('POST', `/api/productos/${destinoId}/copiar-de/${origenId}`, {
+      receta: true, pesos: true, manoObra: true, factor: true, tela: false, reemplazar: false,
+    });
+
+    const pesoDespues = Number(await unoDesdeDisco(`
+      SELECT p.peso_con_merma FROM peso_mat_prima p
+      JOIN talla t ON t.id = p.talla_id
+      WHERE p.producto_id = '${esc(String(destinoId))}'
+      ORDER BY t.orden LIMIT 1;
+    `));
+    const factorDespues = Number(await unoDesdeDisco(
+      `SELECT factor_complejidad FROM producto WHERE id = '${esc(String(destinoId))}';`
+    ));
+
+    anotar(
+      'copiar SIN reemplazar no pisa un peso ya cargado',
+      sinReemplazar.status === 201 && Math.abs(pesoDespues - pesoAntes) < 0.0005,
+      `item ${destinoItem} desde item ${origenItem}: el peso de la primera talla era ${pesoAntes} ` +
+        `y quedo en ${pesoDespues}. ` +
+        (Math.abs(pesoDespues - pesoAntes) >= 0.0005
+          ? 'CAMBIO: la copia piso un dato cargado sin que se lo pidieran.'
+          : `Correcto, y el server lo reporta: ${sinReemplazar.json?.pesos?.saltados} peso(s) sin tocar.`)
+    );
+
+    anotar(
+      'copiar SIN reemplazar no pisa un factor distinto del default',
+      Math.abs(factorDespues - factorAntes) < 0.0005 || factorAntes === 1,
+      `el factor era ${factorAntes} y quedo en ${factorDespues}. ` +
+        (factorAntes === 1
+          ? 'El destino tenia el default 1, asi que copiarlo es correcto y este chequeo no discrimina.'
+          : 'Un factor distinto de 1 es una decision de alguien: copiar no debe deshacerla.')
+    );
+
+    const origenFantasma = await http('POST', `/api/productos/${destinoId}/copiar-de/${MARCA}`, {
+      receta: true,
+    });
+    anotar(
+      'copiar de una prenda inexistente devuelve 404',
+      origenFantasma.status === 404 && origenFantasma.json?.success === false,
+      `status ${origenFantasma.status}, success ${JSON.stringify(origenFantasma.json?.success)}.`
+    );
+  }
+
   // ---------------------------------------------------------------- limpieza
   console.log('');
   console.log(SEP);
