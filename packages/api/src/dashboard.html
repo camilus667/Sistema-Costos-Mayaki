@@ -579,10 +579,11 @@
                   <button class="btn" style="background:#7c3aed; padding:0.45rem 1rem;" onclick="copiarRecetaDe()">Copiar</button>
                 </div>
               </div>
-              <div style="font-size:0.72rem; color:#64748b; margin-top:0.5rem;">
+              <div id="receta-nota-tela" style="font-size:0.72rem; color:#38bdf8; margin-top:0.5rem; font-weight:600;"></div>
+              <div style="font-size:0.72rem; color:#64748b; margin-top:0.35rem;">
                 Copiar es la operación que hace barato dar de alta un colegio: se crea la prenda, se copia la receta
-                de la prenda equivalente, y solo se ajusta lo distinto. Los insumos exclusivos de otro colegio no
-                viajan, y la respuesta dice cuáles quedaron sin copiar.
+                de una prenda que use la misma tela —de este colegio o de otro— y solo se ajusta lo distinto.
+                Los insumos exclusivos de otro colegio no viajan, y la respuesta dice cuáles quedaron sin copiar.
               </div>
             </div>
 
@@ -2502,15 +2503,69 @@
       document.getElementById('receta-titulo').textContent = 'item ' + itemNumero + ' — ' + descripcion;
       document.getElementById('panel-receta').style.display = 'block';
 
-      // Las prendas de origen para copiar: todas menos esta.
-      const prods = (adminConfigData && adminConfigData.productos) || [];
-      document.getElementById('receta-origen').innerHTML =
-        '<option value="">-- elegí una prenda --</option>' +
-        prods.filter(p => p.id !== productoId)
-          .map(p => `<option value="${p.id}">item ${p.itemNumero} — ${p.descripcion}</option>`).join('');
-
+      // Las prendas de origen las propone el servidor, por tela y cruzando colegios.
+      await cargarCandidatosCopia(productoId);
       await cargarReceta();
       document.getElementById('panel-receta').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    /**
+     * Llena el selector de origen para copiar la receta.
+     *
+     * Antes se llenaba con adminConfigData.productos, o sea las prendas del MISMO
+     * colegio. Para una prenda recien creada en un colegio nuevo ese selector salia
+     * VACIO: la funcion de copiar no servia justo en el caso para el que existe.
+     *
+     * Ahora el servidor propone por TELA y cruzando colegios, en dos grupos. Cada
+     * opcion dice cuantos insumos trae y cuanto suman, porque elegir entre "item 2" y
+     * "item 13" sin saber que hay adentro es elegir a ciegas.
+     */
+    async function cargarCandidatosCopia(productoId) {
+      const sel = document.getElementById('receta-origen');
+      const nota = document.getElementById('receta-nota-tela');
+      sel.innerHTML = '<option value="">Buscando prendas parecidas...</option>';
+
+      try {
+        const res = await fetch('/api/productos/' + productoId + '/accesorios/candidatos-copia');
+        const json = await res.json();
+        if (!json.success) {
+          sel.innerHTML = '<option value="">(no se pudieron cargar las prendas)</option>';
+          if (nota) nota.textContent = json.error || '';
+          return;
+        }
+
+        const etiqueta = (p) =>
+          `item ${p.itemNumero} — ${p.descripcion}` +
+          (p.esDeOtroColegio ? ' · ' + p.colegioNombre : '') +
+          ` · ${p.lineas} insumo(s), ${Number(p.subtotalBs).toFixed(2)} Bs`;
+
+        const opciones = (lista) =>
+          lista.map(p => `<option value="${escAttr(p.id)}">${escAttr(etiqueta(p))}</option>`).join('');
+
+        let html = '<option value="">-- elegí una prenda --</option>';
+        if ((json.mismaTela || []).length > 0) {
+          html += `<optgroup label="Misma tela: ${escAttr(json.prenda.telaDescripcion || '')}">` +
+            opciones(json.mismaTela) + '</optgroup>';
+        }
+        if ((json.otras || []).length > 0) {
+          html += '<optgroup label="Otras prendas con receta">' + opciones(json.otras) + '</optgroup>';
+        }
+        if ((json.mismaTela || []).length === 0 && (json.otras || []).length === 0) {
+          html = '<option value="">(ninguna otra prenda tiene receta para copiar)</option>';
+        }
+        sel.innerHTML = html;
+
+        if (nota) {
+          nota.textContent = json.motivoSinMismaTela
+            ? json.motivoSinMismaTela
+            : json.prenda.telaDescripcion
+              ? 'Se sugieren primero las prendas que usan la misma tela: ' + json.prenda.telaDescripcion
+              : '';
+        }
+      } catch (e) {
+        sel.innerHTML = '<option value="">(error al cargar)</option>';
+        if (nota) nota.textContent = String(e);
+      }
     }
 
     async function cargarReceta() {
@@ -2653,6 +2708,8 @@
         alert(msg);
         document.getElementById('receta-reemplazar').checked = false;
         await cargarReceta();
+        // Los candidatos cambian: esta prenda ahora tiene receta y puede ser origen de otras.
+        await cargarCandidatosCopia(recetaProductoActual);
         await refrescarCosteoTrasReceta();
       } catch (e) { alert('Error al copiar la receta: ' + e); }
     }

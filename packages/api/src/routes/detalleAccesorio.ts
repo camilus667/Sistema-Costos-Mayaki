@@ -14,30 +14,19 @@
  *   POST   /api/productos/:productoId/accesorios
  *   PUT    /api/productos/:productoId/accesorios/:detalleId
  *   DELETE /api/productos/:productoId/accesorios/:detalleId
+ *   POST   /api/productos/:productoId/accesorios/copiar-de/:origenId
+ *   GET    /api/productos/:productoId/accesorios/candidatos-copia
  */
 
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { and, asc, eq } from 'drizzle-orm';
-import { detalleAccesorio, accesorios, productos } from '../database/schema';
+import { detalleAccesorio, accesorios, productos, colegios, telas } from '../database/schema';
 import { saveDbToDisk } from '../database/sqljs';
+import { nuevoIdHex } from '../services/resolucion.service';
 
 const api = new Hono();
-
-/**
- * Genera un id con el mismo formato que el default del schema
- * (`lower(hex(randomblob(16)))`): 32 caracteres hexadecimales.
- * Se genera en JS y no en SQL porque las tablas se crean con DDL literal en
- * sqljs.ts, donde la columna `id` no lleva DEFAULT.
- */
-function nuevoId(): string {
-  const c: any = (globalThis as any).crypto;
-  if (c?.randomUUID) return c.randomUUID().replace(/-/g, '');
-  let s = '';
-  for (let i = 0; i < 32; i++) s += Math.floor(Math.random() * 16).toString(16);
-  return s;
-}
 
 const redondear = (n: number): number => Math.round(n * 100) / 100;
 
@@ -55,9 +44,9 @@ const actualizarSchema = z.object({
  * `colegioId` nulo significa catálogo general de la empresa (botones, cierres,
  * elástico, hilo) y es usable por cualquier colegio.
  *
- * Hoy `accesorio.colegio_id` es NOT NULL, así que esta validación restringe la
- * asignación al mismo colegio. Cuando la columna pase a nullable, los accesorios
- * generales quedan habilitados sin tocar esta función.
+ * FASE 5 APLICADA: `accesorio.colegio_id` ya es nullable, y 27 de los 38 accesorios
+ * del catálogo tienen NULL. Esta función se escribió antes de la migración prevista
+ * para ese momento y quedó correcta sin tocarla, que era la intención.
  */
 function accesorioUsablePorProducto(accesorio: any, producto: any): boolean {
   if (!accesorio.colegioId) return true;
@@ -116,6 +105,122 @@ api.get('/:productoId/accesorios', async (c) => {
   });
 });
 
+/**
+ * GET /api/productos/:productoId/accesorios/candidatos-copia
+ *
+ * De que prendas conviene copiar la receta de ESTA prenda.
+ *
+ * POR QUE EXISTE. El selector de origen de la pantalla se llenaba con las prendas del
+ * MISMO colegio. Para el caso que mas importa —una prenda recien creada en un colegio
+ * nuevo— ese selector sale VACIO, porque no hay otras prendas en ese colegio todavia.
+ * La funcion de copiar no servia justamente cuando mas hace falta.
+ *
+ * EL CRITERIO: misma tela. Dos prendas que se cortan de la misma tela suelen compartir
+ * construccion —botones, entretela, etiquetas, hilo— asi que su receta es un punto de
+ * partida razonable. Y el criterio cruza colegios, que es lo que el alta necesita: la
+ * camisa del colegio nuevo se parece a la camisa del colegio viejo mucho mas de lo que
+ * se parece a cualquier otra prenda del suyo.
+ *
+ * Se devuelven DOS grupos y no solo el primero. Si ninguna prenda comparte la tela
+ * —o si esta prenda todavia no tiene tela asignada— quedarse solo con "misma tela"
+ * reproduciria el selector vacio que se viene a arreglar.
+ *
+ * Y se excluyen las prendas SIN receta: copiar de una receta vacia devuelve 400, asi
+ * que ofrecerla es una trampa. Es el mismo criterio que el selector de insumos, que solo
+ * ofrece los que la prenda todavia no lleva.
+ */
+api.get('/:productoId/accesorios/candidatos-copia', async (c) => {
+  const db = (c as any).db;
+  const productoId = c.req.param('productoId');
+
+  const [destino] = await db
+    .select()
+    .from(productos)
+    .where(eq(productos.id, productoId))
+    .limit(1);
+
+  if (!destino) {
+    return c.json({ success: false, error: 'Prenda no encontrada' }, 404);
+  }
+
+  const [todasLasPrendas, colegiosLista, telasLista, lineas] = await Promise.all([
+    db.select().from(productos).orderBy(asc(productos.itemNumero)),
+    db.select().from(colegios),
+    db.select().from(telas),
+    db
+      .select({
+        productoId: detalleAccesorio.productoId,
+        cantidadUso: detalleAccesorio.cantidadUso,
+        costoUnitario: accesorios.costoUnitario,
+      })
+      .from(detalleAccesorio)
+      .innerJoin(accesorios, eq(detalleAccesorio.accesorioId, accesorios.id)),
+  ]);
+
+  // El subtotal se agrega en JS y no en SQL: son un par de cientos de lineas, y una
+  // suma con groupBy aca obligaria a confiar en como el driver traduce el agregado.
+  const resumenPorPrenda = new Map<string, { lineas: number; subtotal: number }>();
+  for (const l of lineas) {
+    const actual = resumenPorPrenda.get(l.productoId) || { lineas: 0, subtotal: 0 };
+    actual.lineas += 1;
+    actual.subtotal += (Number(l.cantidadUso) || 0) * (Number(l.costoUnitario) || 0);
+    resumenPorPrenda.set(l.productoId, actual);
+  }
+
+  const nombreColegio = new Map<string, string>();
+  for (const col of colegiosLista) nombreColegio.set(col.id, String(col.nombre));
+
+  const nombreTela = new Map<string, string>();
+  for (const t of telasLista) nombreTela.set(t.id, String(t.descripcion));
+
+  const mismaTela: any[] = [];
+  const otras: any[] = [];
+
+  for (const p of todasLasPrendas) {
+    if (p.id === productoId) continue;
+
+    const resumen = resumenPorPrenda.get(p.id);
+    if (!resumen || resumen.lineas === 0) continue; // sin receta no hay nada que copiar
+
+    const fila = {
+      id: p.id,
+      itemNumero: p.itemNumero,
+      descripcion: p.descripcion,
+      colegioId: p.colegioId,
+      colegioNombre: nombreColegio.get(p.colegioId) || '?',
+      esDeOtroColegio: p.colegioId !== destino.colegioId,
+      telaId: p.telaId,
+      telaDescripcion: p.telaId ? (nombreTela.get(p.telaId) || '?') : null,
+      lineas: resumen.lineas,
+      subtotalBs: redondear(resumen.subtotal),
+    };
+
+    if (destino.telaId && p.telaId === destino.telaId) mismaTela.push(fila);
+    else otras.push(fila);
+  }
+
+  return c.json({
+    success: true,
+    prenda: {
+      id: destino.id,
+      itemNumero: destino.itemNumero,
+      descripcion: destino.descripcion,
+      colegioId: destino.colegioId,
+      telaId: destino.telaId,
+      telaDescripcion: destino.telaId ? (nombreTela.get(destino.telaId) || '?') : null,
+    },
+    mismaTela,
+    otras,
+    // Se dice explicito por que el primer grupo puede venir vacio, para que la pantalla
+    // pueda explicarlo en vez de mostrar una lista corta sin motivo aparente.
+    motivoSinMismaTela: !destino.telaId
+      ? 'Esta prenda no tiene tela asignada, asi que no se puede sugerir por tela.'
+      : mismaTela.length === 0
+        ? 'Ninguna otra prenda con receta usa esta tela.'
+        : null,
+  });
+});
+
 // POST /api/productos/:productoId/accesorios — asignar un accesorio a la prenda
 api.post('/:productoId/accesorios', zValidator('json', asignarSchema), async (c) => {
   const db = (c as any).db;
@@ -169,7 +274,7 @@ api.post('/:productoId/accesorios', zValidator('json', asignarSchema), async (c)
 
   const [creado] = await db
     .insert(detalleAccesorio)
-    .values({ id: nuevoId(), productoId, accesorioId, cantidadUso })
+    .values({ id: nuevoIdHex(), productoId, accesorioId, cantidadUso })
     .returning();
 
   saveDbToDisk();
@@ -345,7 +450,7 @@ api.post('/:productoId/accesorios/copiar-de/:origenId', async (c) => {
     }
 
     aInsertar.push({
-      id: nuevoId(),
+      id: nuevoIdHex(),
       productoId,
       accesorioId: linea.accesorioId,
       cantidadUso: linea.cantidadUso,
