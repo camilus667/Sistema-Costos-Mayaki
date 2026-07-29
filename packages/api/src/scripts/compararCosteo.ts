@@ -54,6 +54,8 @@ const CSV = flag('--csv');
 const ITEM = flag('--item') ? Number(flag('--item')) : undefined;
 const SOLO_OFRECIDAS = argv.includes('--solo-ofrecidas');
 const TOL = flag('--tolerancia') ? Number(flag('--tolerancia')) : 0.01;
+/** Cuantas filas de ejemplo mostrar por cada grupo de diferencias. */
+const TOP = flag('--top') ? Number(flag('--top')) : 4;
 const SEP = '='.repeat(78);
 
 const num = (v: any): number => {
@@ -114,8 +116,19 @@ interface Dif {
   nuevo: number;
   viejo: number;
   delta: number;
-  clase: 'ESPERADA' | 'NUEVA';
+  clase: 'ESPERADA' | 'NO_OFRECIDA' | 'NUEVA';
   reglaId?: string;
+}
+
+/**
+ * Valor de la hoja del Excel correspondiente al campo, o null si esa hoja no
+ * tiene ese concepto. El Excel solo trae los tres totales, no el desglose.
+ */
+function valorExcel(fila: Fila, campo: Campo): number | null {
+  if (campo === 'costoBruto') return fila.excel.costoBruto;
+  if (campo === 'costoAntesImpuestos') return fila.excel.costoAntesImpuestos;
+  if (campo === 'costoTotal') return fila.excel.costoTotal;
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -407,11 +420,18 @@ async function main() {
 
         const base = { fila, banda, campo, nuevo: nv, viejo: vv, delta };
         const regla = REGLAS.find((r) => r.aplica(base, tasaIva));
-        difs.push({
-          ...base,
-          clase: regla ? 'ESPERADA' : 'NUEVA',
-          reglaId: regla?.id,
-        });
+
+        // Regla decidida el 29-jul-2026: precio_venta es la fuente de verdad de
+        // si la prenda se ofrece en esa talla. Una combinacion que no se ofrece
+        // no existe, asi que un descuadre ahi no puede bloquear nada. Se cuenta
+        // aparte y se reporta, no se esconde.
+        const clase: Dif['clase'] = regla
+          ? 'ESPERADA'
+          : !fila.seOfrece
+          ? 'NO_OFRECIDA'
+          : 'NUEVA';
+
+        difs.push({ ...base, clase, reglaId: regla?.id });
       }
     }
   }
@@ -457,31 +477,115 @@ async function main() {
   console.log('');
   console.log(`  ${itemsOk} prendas cuadran con el Excel, ${itemsConDif} no.`);
 
-  // ---------- Reporte: diferencias NUEVAS ----------
+  // ---------- Reporte: diferencias NUEVAS, agrupadas ----------
+  //
+  // Se agrupan a proposito. Listar una linea por diferencia daba mas de mil
+  // lineas sueltas, que no se pueden leer ni pegar en ningun lado. Mil
+  // diferencias casi nunca son mil problemas: son unos pocos patrones
+  // sistematicos. El trabajo del arnes es encontrar el patron, no volcar filas.
   const nuevas = difs.filter((d) => d.clase === 'NUEVA');
+  const noOfrecidas = difs.filter((d) => d.clase === 'NO_OFRECIDA');
+
   console.log('');
   console.log(SEP);
   console.log(`  DIFERENCIAS NUEVAS: ${nuevas.length}  —  bloquean el borrado de las copias`);
   console.log(SEP);
+
   if (nuevas.length === 0) {
-    console.log('  Ninguna. Todas las diferencias encontradas estaban pre-registradas.');
+    console.log('  Ninguna en combinaciones que se ofrecen.');
   } else {
-    console.log('  banda        item talla     campo                nuevo  viejo   dif  nuevo=Excel?');
-    for (const d of nuevas) {
-      const ex =
-        d.campo === 'costoBruto'
-          ? d.fila.excel.costoBruto
-          : d.campo === 'costoAntesImpuestos'
-          ? d.fila.excel.costoAntesImpuestos
-          : d.campo === 'costoTotal'
-          ? d.fila.excel.costoTotal
-          : null;
-      const coincide =
-        ex === null ? 'sin dato' : Math.abs(d.nuevo - ex) <= TOL ? 'SI' : 'no';
+    // Matriz campo x banda: donde se concentran.
+    console.log('');
+    console.log('  DONDE SE CONCENTRAN  (filas: campo, columnas: banda)');
+    console.log(`  ${'campo'.padEnd(22)}${BANDAS.map((b) => b.slice(0, 11).padStart(13)).join('')}${'total'.padStart(9)}`);
+    for (const campo of CAMPOS) {
+      const porBanda = BANDAS.map((b) => nuevas.filter((d) => d.campo === campo && d.banda === b).length);
+      const tot = porBanda.reduce((a, b) => a + b, 0);
+      if (tot === 0) continue;
       console.log(
-        `  ${d.banda.padEnd(12)} ${String(d.fila.item).padStart(3)} ${d.fila.tallaCodigo.padEnd(8)} ` +
-        `${d.campo.padEnd(20)} ${fmt(d.nuevo)} ${fmt(d.viejo)} ${fmt(d.delta)}  ${coincide}`
+        `  ${campo.padEnd(22)}${porBanda.map((n) => String(n).padStart(13)).join('')}${String(tot).padStart(9)}`
       );
+    }
+
+    // Un bloque por cluster (banda, campo).
+    for (const banda of BANDAS) {
+      for (const campo of CAMPOS) {
+        const grupo = nuevas.filter((d) => d.campo === campo && d.banda === banda);
+        if (grupo.length === 0) continue;
+
+        console.log('');
+        console.log(`  ${'-'.repeat(74)}`);
+        console.log(`  ${banda} / ${campo}  —  ${grupo.length} diferencias`);
+
+        // Lo decisivo: contra el Excel, quien tiene razon.
+        let nuevoGana = 0, viejoGana = 0, ninguno = 0, sinExcel = 0;
+        for (const d of grupo) {
+          const ex = valorExcel(d.fila, d.campo);
+          if (ex === null || ex === 0) { sinExcel++; continue; }
+          const cn = Math.abs(d.nuevo - ex) <= TOL;
+          const cv = Math.abs(d.viejo - ex) <= TOL;
+          if (cn && !cv) nuevoGana++;
+          else if (cv && !cn) viejoGana++;
+          else ninguno++;
+        }
+        if (sinExcel < grupo.length) {
+          console.log(
+            `    contra el Excel:  el nuevo coincide en ${nuevoGana},  el viejo en ${viejoGana},  ` +
+            `ninguno en ${ninguno}` + (sinExcel ? `,  sin dato en ${sinExcel}` : '')
+          );
+        } else {
+          console.log(`    El Excel no tiene este concepto, solo trae los tres totales. No hay arbitro.`);
+        }
+
+        // Patrones sistematicos.
+        const deltas = grupo.map((d) => d.delta);
+        const min = Math.min(...deltas), max = Math.max(...deltas);
+        const viejoEnCero = grupo.filter((d) => Math.abs(d.viejo) <= TOL).length;
+        const nuevoEnCero = grupo.filter((d) => Math.abs(d.nuevo) <= TOL).length;
+        console.log(`    dif de ${min.toFixed(2)} a ${max.toFixed(2)} Bs, todas ${min > 0 ? 'el nuevo es mayor' : max < 0 ? 'el viejo es mayor' : 'con signo mezclado'}`);
+        if (Math.abs(max - min) <= 0.02) {
+          console.log(`    -> DELTA CONSTANTE de ${min.toFixed(2)} Bs en las ${grupo.length}. Apunta a una sola causa.`);
+        }
+        if (viejoEnCero === grupo.length) {
+          console.log(`    -> El viejo devuelve 0 en TODAS. El viejo no calcula este campo en estos casos.`);
+        } else if (viejoEnCero > 0) {
+          console.log(`    -> El viejo devuelve 0 en ${viejoEnCero} de ${grupo.length}.`);
+        }
+        if (nuevoEnCero === grupo.length) {
+          console.log(`    -> El nuevo devuelve 0 en TODAS.`);
+        } else if (nuevoEnCero > 0) {
+          console.log(`    -> El nuevo devuelve 0 en ${nuevoEnCero} de ${grupo.length}.`);
+        }
+        const items = [...new Set(grupo.map((d) => d.fila.item))].sort((a, b) => a - b);
+        console.log(`    items afectados (${items.length}): ${items.join(', ')}`);
+
+        // Ejemplos.
+        const ejemplos = [...grupo].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, TOP);
+        console.log(`    item talla      nuevo  viejo    dif   excel`);
+        for (const d of ejemplos) {
+          const ex = valorExcel(d.fila, d.campo);
+          console.log(
+            `    ${String(d.fila.item).padStart(4)} ${d.fila.tallaCodigo.padEnd(8)} ` +
+            `${fmt(d.nuevo)} ${fmt(d.viejo)} ${fmt(d.delta)} ${fmt(ex)}`
+          );
+        }
+      }
+    }
+  }
+
+  // ---------- Reporte: combinaciones que no se ofrecen ----------
+  console.log('');
+  console.log(SEP);
+  console.log(`  EN COMBINACIONES QUE NO SE OFRECEN: ${noOfrecidas.length}  —  no bloquean`);
+  console.log(SEP);
+  console.log('  Por la regla acordada, sin precio de venta vigente la prenda no se ofrece en esa');
+  console.log('  talla, asi que la combinacion no existe y un descuadre ahi no decide nada.');
+  if (noOfrecidas.length > 0) {
+    const filasAfectadas = new Set(noOfrecidas.map((d) => `${d.fila.item}_${d.fila.tallaCodigo}`));
+    console.log(`  Afecta ${filasAfectadas.size} combinaciones (de las ${filas.filter((f) => !f.seOfrece).length} que no se ofrecen).`);
+    for (const campo of CAMPOS) {
+      const n = noOfrecidas.filter((d) => d.campo === campo).length;
+      if (n) console.log(`    ${campo.padEnd(22)} ${String(n).padStart(5)}`);
     }
   }
 
@@ -515,7 +619,8 @@ async function main() {
   console.log(`  Filas comparadas:        ${filas.length}`);
   console.log(`  Comparaciones de campo:  ${comparaciones}`);
   console.log(`  Iguales (dentro de ${TOL.toFixed(2)}): ${comparaciones - difs.length}`);
-  console.log(`  Esperadas:               ${difs.length - nuevas.length}`);
+  console.log(`  Esperadas:               ${difs.filter((d) => d.clase === 'ESPERADA').length}`);
+  console.log(`  En combinaciones que no se ofrecen: ${noOfrecidas.length}`);
   console.log(`  NUEVAS:                  ${nuevas.length}`);
   console.log('');
   for (const banda of BANDAS) {
