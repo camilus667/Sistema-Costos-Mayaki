@@ -43,7 +43,6 @@
 import fs from 'fs';
 import path from 'path';
 import * as XLSX from 'xlsx';
-import { eq } from 'drizzle-orm';
 import { getDb, saveDbToDisk } from '../database/sqljs';
 import { productos, accesorios, detalleAccesorio } from '../database/schema';
 
@@ -62,6 +61,10 @@ const redondear = (n: number): number => Math.round(n * 100) / 100;
 /**
  * Clave de comparacion de nombres de accesorio.
  *
+ * Se llama `normalizar` y no `clave` a proposito: una variable de loop llamada
+ * `clave` tapaba a la funcion y el bundler la renombraba, con lo que la llamada
+ * terminaba ejecutandose sobre un string. Error de runtime real, ya corregido.
+ *
  * Hace falta porque la hoja no es consistente consigo misma: el encabezado de
  * la matriz dice "Ojal Grande" y la Tabla Auxiliar dice "Ojal grande", con g
  * minuscula. La base se sembro desde la Tabla Auxiliar, asi que comparar por
@@ -73,7 +76,7 @@ const redondear = (n: number): number => Math.round(n * 100) / 100;
  * mostrando el accesorio con costo 0.00 Bs. El total de la columna 41 si lo
  * incluye, asi que el desglose por linea no suma su propio total.
  */
-function clave(nombre: string): string {
+function normalizar(nombre: string): string {
   return String(nombre || '').trim().toLowerCase();
 }
 
@@ -177,7 +180,7 @@ async function main() {
     if (!r || !r[0]) continue;
     const nombre = String(r[0]).trim();
     const cu = Number(r[5]) || 0;
-    if (nombre) costoUnitarioExcel.set(clave(nombre), cu);
+    if (nombre) costoUnitarioExcel.set(normalizar(nombre), cu);
   }
 
   // --- Matriz item x accesorio (valores en Bs) ---
@@ -229,7 +232,7 @@ async function main() {
   for (const p of prods) prodPorItem.set(Number(p.itemNumero), p);
 
   const accPorNombre = new Map<string, any>();
-  for (const a of accs) accPorNombre.set(clave(a.descripcion), a);
+  for (const a of accs) accPorNombre.set(normalizar(a.descripcion), a);
 
   console.log(`Prendas en base: ${prods.length}   Accesorios en base: ${accs.length}`);
 
@@ -241,15 +244,15 @@ async function main() {
   const itemNoEnBase = new Set<number>();
   const derivadoPorItem = new Map<number, number>();
 
-  for (const [clave, bs] of costoCelda.entries()) {
-    const sep = clave.indexOf('|');
-    const item = Number(clave.slice(0, sep));
-    const nombre = clave.slice(sep + 1);
+  for (const [celdaClave, bs] of costoCelda.entries()) {
+    const sep = celdaClave.indexOf('|');
+    const item = Number(celdaClave.slice(0, sep));
+    const nombre = celdaClave.slice(sep + 1);
 
     const prod = prodPorItem.get(item);
     if (!prod) { itemNoEnBase.add(item); continue; }
 
-    const acc = accPorNombre.get(clave(nombre));
+    const acc = accPorNombre.get(normalizar(nombre));
     if (!acc) { accesorioNoEnBase.add(nombre); continue; }
 
     // Se registra cuando la coincidencia necesito normalizacion, para poder
@@ -259,7 +262,7 @@ async function main() {
     }
 
     // El costo unitario de la base es la fuente; el del Excel es el respaldo.
-    const cu = Number(acc.costoUnitario) || costoUnitarioExcel.get(clave(nombre)) || 0;
+    const cu = Number(acc.costoUnitario) || costoUnitarioExcel.get(normalizar(nombre)) || 0;
 
     if (cu <= 0) {
       // Sin costo unitario la cantidad no se puede derivar. No se inventa un 1.
