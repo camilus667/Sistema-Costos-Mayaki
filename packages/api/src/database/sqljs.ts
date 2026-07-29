@@ -140,6 +140,16 @@ CREATE TABLE IF NOT EXISTS "costo_indirecto" (
  "concepto" text NOT NULL,
  "monto_mensual" real NOT NULL
 );
+CREATE TABLE IF NOT EXISTS "precio_adquisicion" (
+ "id" text PRIMARY KEY NOT NULL,
+ "producto_id" text NOT NULL,
+ "talla_id" text NOT NULL,
+ "precio_bs" real NOT NULL,
+ "proveedor" text,
+ "con_factura" integer DEFAULT false NOT NULL,
+ "vigente_desde" text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+ "vigente_hasta" text
+);
 CREATE TABLE IF NOT EXISTS "precio_venta" (
  "id" text PRIMARY KEY NOT NULL,
  "producto_id" text NOT NULL,
@@ -240,6 +250,11 @@ export async function getDb() {
   try { dbInstance.run('ALTER TABLE "producto" ADD COLUMN "tela_id" TEXT;'); } catch (e) {}
   try { dbInstance.run('ALTER TABLE "tela" ADD COLUMN "orden" INTEGER DEFAULT 0;'); } catch (e) {}
 
+  // Modo de costeo de la prenda. Va como ALTER y no en el CREATE TABLE porque
+  // las tablas se crean con IF NOT EXISTS: en una base ya existente el CREATE no
+  // se vuelve a ejecutar y la columna nunca apareceria.
+  try { dbInstance.run("ALTER TABLE \"producto\" ADD COLUMN \"modo_costeo\" TEXT DEFAULT 'confeccion';"); } catch (e) {}
+
   // Integridad de la asignacion de accesorios a prendas (detalle_acc).
   // Las tablas se crean con "CREATE TABLE IF NOT EXISTS", asi que agregar la
   // restriccion al DDL no afectaria a bases ya existentes. Un indice unico si
@@ -253,6 +268,15 @@ export async function getDb() {
   }
   try { dbInstance.run('CREATE INDEX IF NOT EXISTS "idx_detalle_acc_producto" ON "detalle_acc" ("producto_id");'); } catch (e) {}
   try { dbInstance.run('CREATE INDEX IF NOT EXISTS "idx_detalle_acc_accesorio" ON "detalle_acc" ("accesorio_id");'); } catch (e) {}
+
+  // Integridad de los precios de adquisicion: una prenda no puede tener dos
+  // precios para la misma talla con la misma fecha de vigencia.
+  try {
+    dbInstance.run('CREATE UNIQUE INDEX IF NOT EXISTS "idx_precio_adq_prod_talla_desde" ON "precio_adquisicion" ("producto_id", "talla_id", "vigente_desde");');
+  } catch (e) {
+    console.warn('⚠️ No se pudo crear el indice unico de precio_adquisicion. Probablemente haya precios duplicados para la misma prenda, talla y fecha. Revisar.', e);
+  }
+  try { dbInstance.run('CREATE INDEX IF NOT EXISTS "idx_precio_adq_producto" ON "precio_adquisicion" ("producto_id");'); } catch (e) {}
 
   dbDrizzle = drizzle(dbInstance, { schema: schemaModule });
 
