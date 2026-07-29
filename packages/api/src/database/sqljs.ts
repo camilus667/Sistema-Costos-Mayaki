@@ -4,14 +4,45 @@ import * as schemaModule from './schema';
 import { seedData } from '../scripts/seed';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 export const schema = schemaModule;
 
 let dbInstance = null;
 let dbDrizzle = null;
 
+/**
+ * Ruta del archivo de base de datos.
+ *
+ * Antes esto era `path.resolve(process.cwd(), 'sistema_inventario.db')`, o sea que
+ * la base que se abria DEPENDIA del directorio desde el que se corriera el
+ * comando. Y como `getDb()` crea y siembra la base cuando el archivo no existe,
+ * correr cualquier script desde la raiz del monorepo fabricaba una base nueva
+ * ahi, sembrada del Excel y SIN las 228 lineas de detalle_acc ni los 28 precios
+ * de adquisicion, porque esos vinieron de importadores y no del sembrado.
+ *
+ * Efecto: un script corrido desde el directorio equivocado calculaba contra datos
+ * incompletos y devolvia numeros plausibles pero falsos, sin ninguna senal. Es la
+ * misma familia de problema que el falso verde del arnes de paridad: no falla,
+ * responde mal.
+ *
+ * Ahora la ruta se resuelve contra la ubicacion de ESTE archivo, asi que es la
+ * misma sin importar desde donde se ejecute. `SISTEMA_DB_PATH` permite apuntar a
+ * una copia para experimentar sin tocar la base real.
+ */
 export function getDbFilePath() {
-  return path.resolve(process.cwd(), 'sistema_inventario.db');
+  if (process.env.SISTEMA_DB_PATH) {
+    return path.resolve(process.env.SISTEMA_DB_PATH);
+  }
+  try {
+    // Este archivo vive en packages/api/src/database/, la base en packages/api/.
+    const aqui = path.dirname(fileURLToPath(import.meta.url));
+    return path.resolve(aqui, '..', '..', 'sistema_inventario.db');
+  } catch (e) {
+    // Si el bundler no deja usar import.meta.url, se vuelve al comportamiento
+    // anterior en vez de romper. Las rutas de Workers usan D1 y nunca llegan aca.
+    return path.resolve(process.cwd(), 'sistema_inventario.db');
+  }
 }
 
 export function saveDbToDisk() {
