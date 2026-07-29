@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { eq, asc, or, isNull } from 'drizzle-orm';
 import { telas } from '../database/schema';
+import { usosEnOtrosColegios } from '../services/resolucion.service';
 
 const api = new Hono();
 
@@ -115,6 +116,26 @@ api.put('/:id', async (c) => {
     return c.json({ success: false, error: 'Tela no encontrada' }, 404);
   }
 
+  // CAMBIO DE AMBITO de la tela. Antes updateValues no incluia colegioId en absoluto,
+  // asi que cambiar el ambito de una tela era imposible desde la API.
+  //
+  // Solo se chequea cuando se ANGOSTA. Ampliarlo es seguro: nadie pierde acceso.
+  const ambitoNuevo = body.colegioId === undefined ? undefined : (body.colegioId || null);
+  if (ambitoNuevo && ambitoNuevo !== existing.colegioId) {
+    const usos = await usosEnOtrosColegios(db, 'tela', id, ambitoNuevo);
+    if (usos.length > 0) {
+      const detalle = usos.map((u: any) => `item ${u.itemNumero} ${u.descripcion}`).join(', ');
+      return c.json({
+        success: false,
+        error:
+          `No se puede volver esta tela exclusiva de un colegio: la usan ${usos.length} ` +
+          `prenda(s) de otro colegio (${detalle}). El motor seguiria costeandolas con esta ` +
+          `tela mientras el selector dejaria de ofrecerla. Primero hay que cambiarles la tela.`,
+        usos,
+      }, 409);
+    }
+  }
+
   const anchoMts = body.anchoMts !== undefined ? Number(body.anchoMts) : existing.anchoMts;
   const unid = body.unid !== undefined ? String(body.unid).toLowerCase() : existing.unid;
   const densidadGm2 = body.densidadGm2 !== undefined ? Number(body.densidadGm2) : existing.densidadGm2;
@@ -126,7 +147,7 @@ api.put('/:id', async (c) => {
   const precioBsKg = unid === 'metro' ? precioCompra * rendimiento : precioCompra;
   const precioBsG = precioBsKg / 1000;
 
-  const updateValues = {
+  const updateValues: any = {
     descripcion: body.descripcion || existing.descripcion,
     anchoMts: parseFloat(anchoMts.toFixed(2)),
     unid: unid,
@@ -138,6 +159,12 @@ api.put('/:id', async (c) => {
     precioBsG: parseFloat(precioBsG.toFixed(4)),
     precioUnitario: parseFloat(precioBsG.toFixed(4)),
   };
+
+  // El ambito se aplica solo si vino en el cuerpo, para que un PUT que edita el precio
+  // no arrastre el colegio sin querer.
+  if (ambitoNuevo !== undefined) {
+    updateValues.colegioId = ambitoNuevo;
+  }
 
   const [updatedTela] = await db
     .update(telas)

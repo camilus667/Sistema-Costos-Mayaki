@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { eq, asc, or, isNull } from 'drizzle-orm';
 import { accesorios } from '../database/schema';
+import { usosEnOtrosColegios } from '../services/resolucion.service';
 
 const api = new Hono();
 
@@ -123,6 +124,26 @@ api.put('/:id', zValidator('json', crearAccesorioSchema.partial()), async (c) =>
   const [existente] = await db.select().from(accesorios).where(eq(accesorios.id, id)).limit(1);
   if (!existente) {
     return c.json({ success: false, error: 'Accesorio no encontrado' }, 404);
+  }
+
+  // CAMBIO DE AMBITO. Solo se chequea cuando el ambito se ANGOSTA: pasar a exclusivo de
+  // un colegio, o de un colegio a otro. Ampliarlo —volverlo de la empresa— siempre es
+  // seguro, porque nadie pierde acceso.
+  const ambitoNuevo = body.colegioId === undefined ? undefined : (body.colegioId || null);
+  if (ambitoNuevo && ambitoNuevo !== existente.colegioId) {
+    const usos = await usosEnOtrosColegios(db, 'accesorio', id, ambitoNuevo);
+    if (usos.length > 0) {
+      const detalle = usos.map((u: any) => `item ${u.itemNumero} ${u.descripcion}`).join(', ');
+      return c.json({
+        success: false,
+        error:
+          `No se puede volver este insumo exclusivo de un colegio: lo usan ${usos.length} ` +
+          `prenda(s) de otro colegio (${detalle}). Si se hiciera exclusivo, el motor ` +
+          `seguiria cobrandolo en esas prendas pero la pantalla dejaria de ofrecerlo, y el ` +
+          `dato quedaria vivo e invisible. Primero hay que quitarlo de esas recetas.`,
+        usos,
+      }, 409);
+    }
   }
 
   // Los dos insumos de la division, tomando lo que llego y cayendo a lo guardado.

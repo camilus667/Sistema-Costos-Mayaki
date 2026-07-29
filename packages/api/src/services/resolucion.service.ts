@@ -14,8 +14,8 @@
  * dos de las copias estaban mal. Una funcion con una sola casa no se desincroniza.
  */
 
-import { and, eq } from 'drizzle-orm';
-import { productos } from '../database/schema';
+import { and, eq, ne } from 'drizzle-orm';
+import { productos, detalleAccesorio } from '../database/schema';
 
 /**
  * Genera un id con el mismo formato que el default del schema
@@ -77,4 +77,47 @@ export async function resolverPrendaPorItem(
     };
   }
   return { prenda: candidatas[0], estado: 200, error: null };
+}
+
+/**
+ * Usos de un insumo o una tela por prendas de OTROS colegios.
+ *
+ * POR QUE HACE FALTA. Volver un item exclusivo de un colegio cuando otro lo esta usando
+ * deja ese uso HUERFANO de la peor forma posible: el motor de costeo resuelve por id y
+ * no mira colegio, asi que sigue cobrando el insumo con normalidad, mientras el selector
+ * de la pantalla deja de ofrecerlo. El dato queda vivo e invisible, que es exactamente
+ * la clase de inconsistencia silenciosa que este refactor viene eliminando.
+ *
+ * Con esto, el endpoint puede rechazar el cambio y decir QUIEN lo esta usando, en vez de
+ * dejar que el usuario descubra el problema tres meses despues cuando un costo no cuadre.
+ */
+export async function usosEnOtrosColegios(
+  db: any,
+  tipo: 'accesorio' | 'tela',
+  itemId: string,
+  colegioNuevo: string
+): Promise<Array<{ colegioId: string; itemNumero: number; descripcion: string }>> {
+  if (tipo === 'accesorio') {
+    return await db
+      .select({
+        colegioId: productos.colegioId,
+        itemNumero: productos.itemNumero,
+        descripcion: productos.descripcion,
+      })
+      .from(detalleAccesorio)
+      .innerJoin(productos, eq(detalleAccesorio.productoId, productos.id))
+      .where(and(
+        eq(detalleAccesorio.accesorioId, itemId),
+        ne(productos.colegioId, colegioNuevo)
+      ));
+  }
+
+  return await db
+    .select({
+      colegioId: productos.colegioId,
+      itemNumero: productos.itemNumero,
+      descripcion: productos.descripcion,
+    })
+    .from(productos)
+    .where(and(eq(productos.telaId, itemId), ne(productos.colegioId, colegioNuevo)));
 }

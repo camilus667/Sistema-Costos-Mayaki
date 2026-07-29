@@ -374,14 +374,15 @@
                 <thead>
                   <tr>
                     <th style="width:80px; text-align:center;">Orden</th>
-                    <th style="text-align:left; padding-left:0.75rem; font-size:0.9rem; min-width:550px;">Nombre /
+                    <th style="text-align:left; padding-left:0.75rem; font-size:0.9rem; min-width:480px;">Nombre /
                       Descripción de la Tela</th>
+                    <th style="width:150px; text-align:center;">Ámbito</th>
                     <th style="width:80px; text-align:center;">Activo</th>
                   </tr>
                 </thead>
                 <tbody id="tb-admin-telas-body">
                   <tr>
-                    <td colspan="3" style="text-align:center; padding:2rem;">Cargando telas...</td>
+                    <td colspan="4" style="text-align:center; padding:2rem;">Cargando telas...</td>
                   </tr>
                 </tbody>
               </table>
@@ -458,7 +459,7 @@
                     <th style="width:100px; text-align:center;">Cant. x ud</th>
                     <th style="width:120px; text-align:right;">Costo ud, Bs</th>
                     <th style="width:130px; text-align:right;">Costo unitario</th>
-                    <th style="width:110px; text-align:center;">Ámbito</th>
+                    <th style="width:150px; text-align:center;">Ámbito</th>
                   </tr>
                 </thead>
                 <tbody id="tb-admin-insumos-body">
@@ -2266,12 +2267,16 @@
 
     async function cargarCatalogoEmpresa() {
       try {
-        const [rt, rl] = await Promise.all([fetch('/api/telas'), fetch('/api/tallas')]);
-        const [jt, jl] = await Promise.all([rt.json(), rl.json()]);
+        const [rt, rl, rc] = await Promise.all([
+          fetch('/api/telas'), fetch('/api/tallas'), fetch('/api/colegios')
+        ]);
+        const [jt, jl, jc] = await Promise.all([rt.json(), rl.json(), rc.json()]);
         catalogoEmpresa = {
           telas: jt.success ? (jt.data || []) : [],
           tallas: jl.success ? (jl.data || []) : [],
         };
+        // Los colegios se necesitan para los selectores de ambito de Telas e Insumos.
+        colegiosDisponibles = jc.success ? (jc.data || []) : [];
         renderAdminTelas();
         renderAdminTallas();
       } catch (e) {
@@ -2773,12 +2778,10 @@
             <button class="btn-move" onclick="moverTelaDown(${idx})" ${idx === telas.length - 1 ? 'disabled style="opacity:0.3;"' : ''}>▼</button>
           </td>
           <td style="padding: 0.35rem 0.5rem;">
-            <div style="display:flex; align-items:center; gap:0.5rem;">
-              <input type="text" id="at-desc-${t.id}" class="cell-editable-sm" style="flex:1; font-weight:600; font-size:0.92rem; padding:0.4rem 0.65rem; color:#f8fafc;" value="${t.descripcion}">
-              ${t.colegioId
-                ? '<span title="Exclusiva de este colegio" style="background:#78350f; color:#fbbf24; padding:0.15rem 0.5rem; border-radius:4px; font-size:0.68rem; font-weight:700; white-space:nowrap;">colegio</span>'
-                : '<span title="Del catalogo de la empresa: la comparten todos los colegios" style="background:#064e3b; color:#34d399; padding:0.15rem 0.5rem; border-radius:4px; font-size:0.68rem; font-weight:700; white-space:nowrap;">empresa</span>'}
-            </div>
+            <input type="text" id="at-desc-${t.id}" class="cell-editable-sm" style="width:100%; font-weight:600; font-size:0.92rem; padding:0.4rem 0.65rem; color:#f8fafc;" value="${escAttr(t.descripcion)}">
+          </td>
+          <td style="padding: 0.35rem 0.35rem;">
+            ${selectAmbito('tela', t.id, t.colegioId)}
           </td>
           <td style="text-align:center;">
             <input type="checkbox" id="at-act-${t.id}" ${t.activo !== false ? 'checked' : ''}>
@@ -2830,10 +2833,6 @@
         }
 
         tbody.innerHTML = lista.map(a => {
-          const propio = !!a.colegioId;
-          const badge = propio
-            ? '<span style="background:#78350f; color:#fbbf24; padding:0.15rem 0.5rem; border-radius:4px; font-size:0.68rem; font-weight:700;">colegio</span>'
-            : '<span style="background:#064e3b; color:#34d399; padding:0.15rem 0.5rem; border-radius:4px; font-size:0.68rem; font-weight:700;">empresa</span>';
           return `
           <tr id="fila-insumo-${a.id}">
             <td style="padding:0.3rem 0.5rem;">
@@ -2857,7 +2856,7 @@
                 value="${Number(a.costoUdCompra || 0)}" onchange="guardarInsumo('${a.id}')">
             </td>
             <td id="ai-unit-${a.id}" style="text-align:right; font-weight:700; color:#38bdf8;">${Number(a.costoUnitario || 0).toFixed(4)}</td>
-            <td style="text-align:center;">${badge}</td>
+            <td style="padding:0.3rem 0.35rem;">${selectAmbito('accesorio', a.id, a.colegioId)}</td>
           </tr>`;
         }).join('');
       } catch (e) {
@@ -2958,6 +2957,95 @@
         await cargarInsumosAdmin();
       } catch (e) {
         alert('Error al crear el insumo: ' + e);
+      }
+    }
+
+    /**
+     * Lista de colegios, para los selectores de ambito. Se carga con el catalogo de la
+     * empresa porque las dos pestañas que la usan —Telas e Insumos— son de la empresa.
+     */
+    let colegiosDisponibles = [];
+
+    /**
+     * El selector de ambito de una fila. Opcion vacia = de la empresa (colegio_id NULL).
+     *
+     * Se usa el mismo control en Telas y en Insumos: el ambito es el mismo concepto en
+     * las dos tablas, y dos controles distintos para el mismo concepto es como empezo la
+     * historia de las cuatro copias de la formula de costeo.
+     */
+    function selectAmbito(tipo, id, colegioIdActual) {
+      const opciones = [
+        `<option value="" ${!colegioIdActual ? 'selected' : ''}>empresa</option>`,
+      ].concat(
+        colegiosDisponibles.map(c =>
+          `<option value="${escAttr(c.id)}" ${colegioIdActual === c.id ? 'selected' : ''}>${escAttr(c.nombre)}</option>`
+        )
+      ).join('');
+
+      const color = colegioIdActual ? '#fbbf24' : '#34d399';
+      return `<select id="amb-${tipo}-${id}" class="cell-editable-sm"
+        style="width:100%; text-align:center; font-size:0.75rem; font-weight:700; color:${color};"
+        onchange="cambiarAmbito('${tipo}', '${id}')"
+        title="empresa = lo comparten todos los colegios">${opciones}</select>`;
+    }
+
+    /**
+     * Cambia el ambito de una tela o un insumo.
+     *
+     * El servidor RECHAZA con 409 si el item pasaria a ser exclusivo de un colegio
+     * mientras prendas de otro colegio lo usan, y devuelve cuales. Ese caso no se puede
+     * permitir en silencio: el motor de costeo resuelve por id y no mira colegio, asi que
+     * seguiria cobrando el insumo en esas prendas mientras el selector deja de ofrecerlo.
+     * El dato quedaria vivo e invisible.
+     */
+    async function cambiarAmbito(tipo, id) {
+      const sel = document.getElementById('amb-' + tipo + '-' + id);
+      if (!sel) return;
+      const valor = sel.value;
+      const colegioId = valor || null;
+      const ruta = tipo === 'tela' ? '/api/telas/' : '/api/accesorios/';
+      const queEs = tipo === 'tela' ? 'la tela' : 'el insumo';
+
+      if (colegioId) {
+        const nombre = (colegiosDisponibles.find(c => c.id === colegioId) || {}).nombre || 'ese colegio';
+        if (!confirm(
+          `¿Volver ${queEs} exclusivo de ${nombre}?\n\n` +
+          `Los demás colegios dejan de poder usarlo. Si alguna prenda de otro colegio ya lo ` +
+          `usa, el cambio se va a rechazar y te va a decir cuáles.`
+        )) {
+          await recargarAmbitos(tipo);
+          return;
+        }
+      }
+
+      try {
+        const res = await fetch(ruta + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ colegioId })
+        });
+        const json = await res.json();
+
+        if (!json.success) {
+          alert('No se pudo cambiar el ámbito:\n\n' + (json.error || 'error desconocido'));
+          await recargarAmbitos(tipo);
+          return;
+        }
+
+        await recargarAmbitos(tipo);
+        await refrescarCosteoTrasReceta();
+      } catch (e) {
+        alert('Error al cambiar el ámbito: ' + e);
+        await recargarAmbitos(tipo);
+      }
+    }
+
+    /** Recarga la tabla que corresponde, para que lo que se ve sea lo que hay en la base. */
+    async function recargarAmbitos(tipo) {
+      if (tipo === 'tela') {
+        await cargarCatalogoEmpresa();
+      } else {
+        await cargarInsumosAdmin();
       }
     }
 
