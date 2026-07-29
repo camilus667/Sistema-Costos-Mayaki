@@ -1,9 +1,17 @@
 /**
  * Importador: receta de accesorios desde CAMBRIDGE.xlsx hacia `detalle_acc`
  *
- * Uso:
- *   npx tsx packages/api/src/scripts/importarRecetaAccesorios.ts            # simulacion, no escribe
- *   npx tsx packages/api/src/scripts/importarRecetaAccesorios.ts --aplicar  # escribe y guarda
+ * Uso — IMPORTANTE: se corre DESDE packages/api, no desde la raiz del repo:
+ *   cd packages/api
+ *   npx tsx src/scripts/importarRecetaAccesorios.ts            # simulacion, no escribe
+ *   npx tsx src/scripts/importarRecetaAccesorios.ts --aplicar  # escribe y guarda
+ *
+ * El directorio de trabajo importa. sqljs.ts resuelve la base con
+ * path.resolve(process.cwd(), 'sistema_inventario.db') y el archivo real vive en
+ * packages/api. Corriendo desde la raiz del repo se crearia una base nueva y
+ * vacia ahi, se sembraria del Excel, se insertaria la receta en ESA, y la base
+ * real quedaria intacta sin que nada avise. Abajo hay una validacion que aborta
+ * si detecta ese caso.
  *
  * Por defecto NO escribe nada: imprime el reporte para revisar y recien con
  * --aplicar inserta.
@@ -195,6 +203,27 @@ async function main() {
   const db: any = await getDb();
   const prods = await db.select().from(productos);
   const accs = await db.select().from(accesorios);
+
+  // Guarda contra directorio de trabajo equivocado.
+  //
+  // getDb() resuelve la ruta con process.cwd(). Si no encuentra el archivo, NO
+  // falla: crea una base nueva, la siembra del Excel y sigue como si nada. Sin
+  // esta validacion, correr el script desde la raiz del repo insertaria la
+  // receta en una base paralela recien creada mientras la real, en
+  // packages/api, queda sin tocar.
+  if (prods.length === 0 || accs.length === 0) {
+    console.error('');
+    console.error('ABORTA: la base que se abrio no tiene prendas o no tiene accesorios.');
+    console.error(`  ruta abierta: ${path.resolve(process.cwd(), 'sistema_inventario.db')}`);
+    console.error(`  prendas: ${prods.length}   accesorios: ${accs.length}`);
+    console.error('');
+    console.error('Casi con seguridad el directorio de trabajo esta mal. Correr asi:');
+    console.error('');
+    console.error('  cd packages/api');
+    console.error('  npx tsx src/scripts/importarRecetaAccesorios.ts');
+    console.error('');
+    process.exit(1);
+  }
 
   const prodPorItem = new Map<number, any>();
   for (const p of prods) prodPorItem.set(Number(p.itemNumero), p);
