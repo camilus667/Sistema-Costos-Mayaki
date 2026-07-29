@@ -337,6 +337,112 @@ async function main() {
           : 'Valor inesperado.')
   );
 
+  // ==========================================================================
+  // Agregado con el commit que repunto la matriz de accesorios a detalle_acc.
+  //
+  // Ni la reja de paridad ni los chequeos de arriba tocan este endpoint, asi que la
+  // afirmacion central de ese commit —"se mueven exactamente tres celdas, el Ojal de
+  // los items 16, 17 y 18, de 0,00 a 1,60"— quedaba sin verificar. Es el mismo hueco
+  // que dejo pasar el bug de los filtros de colegio.ts: lo encontro el usuario
+  // mirando la pantalla.
+  console.log('');
+  console.log(SEP);
+  console.log('  5. MATRIZ DE ACCESORIOS  —  la receta ahora vive en detalle_acc');
+  console.log(SEP);
+
+  const matriz = await http('GET', `/api/inputs/accesorios-matriz?colegioId=${encodeURIComponent(colegioId)}`);
+  anotar(
+    'la matriz declara que su fuente es detalle_acc',
+    matriz.json?.fuente === 'detalle_acc',
+    `fuente = ${JSON.stringify(matriz.json?.fuente)}. ` +
+      (matriz.json?.fuente === undefined ? 'Viene undefined: el server no tiene el codigo nuevo, reinicialo.' : 'Correcto.')
+  );
+
+  // El Ojal de la Falda plisada. El motor cobraba 1,60 Bs (2 unidades x 0,80) y la
+  // pantalla mostraba 0,00, porque la columna del Excel se llama "Ojal Grande" y el
+  // accesorio de la base "Ojal grande". Con las columnas saliendo del catalogo, esa
+  // discrepancia de grafias no puede existir.
+  const fila16 = (matriz.json?.data || []).find((f: any) => Number(f.itemNumero) === 16);
+  const colOjal = fila16
+    ? Object.keys(fila16.accesorios || {}).find((k) => k.toLowerCase() === 'ojal grande')
+    : undefined;
+  const costoOjal = colOjal ? Number(fila16.accesorios[colOjal]) : -1;
+  anotar(
+    'el Ojal grande de la Falda plisada muestra 1,60 y no 0,00',
+    Math.abs(costoOjal - 1.6) < 0.005,
+    `columna "${colOjal}" = ${costoOjal} Bs. ` +
+      (costoOjal === 0
+        ? 'Sigue en cero: la union por nombre no se elimino.'
+        : costoOjal < 0
+          ? 'No hay ninguna columna llamada "Ojal grande" en la respuesta.'
+          : 'Correcto: la pantalla muestra lo que el motor cobra.')
+  );
+
+  // Escritura. Antes esto escribia en un Map de modulo y se perdia al reiniciar.
+  const sondaAcc = await filasDesdeDisco(`
+    SELECT p.item_numero, a.descripcion, d.cantidad_uso
+    FROM detalle_acc d
+    JOIN producto p ON p.id = d.producto_id
+    JOIN accesorio a ON a.id = d.accesorio_id
+    ORDER BY p.item_numero, a.descripcion
+    LIMIT 1;
+  `);
+
+  if (sondaAcc.length === 0) {
+    anotar('la cantidad de accesorio llega al disco', false, 'No hay ninguna linea en detalle_acc para usar de sonda.');
+  } else {
+    const [itemAcc, nombreAcc, cantOriginal] = sondaAcc[0];
+    const cantSonda = Math.round((Number(cantOriginal) + 3) * 100) / 100;
+    const leerCant = () =>
+      unoDesdeDisco(`
+        SELECT d.cantidad_uso FROM detalle_acc d
+        JOIN producto p ON p.id = d.producto_id
+        JOIN accesorio a ON a.id = d.accesorio_id
+        WHERE p.item_numero = ${Number(itemAcc)} AND a.descripcion = '${esc(String(nombreAcc))}';
+      `);
+
+    console.log(`  Sonda: item ${itemAcc}, "${nombreAcc}", cantidad ${cantOriginal} -> ${cantSonda}`);
+
+    const putAcc = await http('PUT', '/api/inputs/accesorios-matriz-celda', {
+      itemNumero: Number(itemAcc),
+      accesorioNombre: String(nombreAcc),
+      cantidad: cantSonda,
+    });
+    const enDiscoAcc = Number(await leerCant());
+    anotar(
+      'la cantidad de accesorio llega al DISCO, no a un Map',
+      putAcc.status === 200 && Math.abs(enDiscoAcc - cantSonda) < 0.005,
+      `PUT devolvio ${putAcc.status}; en disco quedo ${enDiscoAcc} y se esperaba ${cantSonda}. ` +
+        (Math.abs(enDiscoAcc - Number(cantOriginal)) < 0.005
+          ? 'El disco tiene el valor viejo: se sigue escribiendo en memoria.'
+          : 'Correcto: la edicion entra a detalle_acc, o sea que el costeo la ve.')
+    );
+
+    const vueltaAcc = await http('PUT', '/api/inputs/accesorios-matriz-celda', {
+      itemNumero: Number(itemAcc),
+      accesorioNombre: String(nombreAcc),
+      cantidad: Number(cantOriginal),
+    });
+    const restauradoAcc = Number(await leerCant());
+    anotar(
+      'la cantidad original de accesorio queda restaurada',
+      vueltaAcc.status === 200 && Math.abs(restauradoAcc - Number(cantOriginal)) < 0.005,
+      `en disco quedo ${restauradoAcc}, original ${cantOriginal}.`
+    );
+
+    const accFantasma = await http('PUT', '/api/inputs/accesorios-matriz-celda', {
+      itemNumero: Number(itemAcc),
+      accesorioNombre: MARCA,
+      cantidad: 1,
+    });
+    anotar(
+      'un accesorio inexistente devuelve 404, no success',
+      accFantasma.status === 404 && accFantasma.json?.success === false,
+      `status ${accFantasma.status}, success ${JSON.stringify(accFantasma.json?.success)}. ` +
+        'Antes cualquier nombre entraba al Map sin chequear nada.'
+    );
+  }
+
   // ---------------------------------------------------------------- limpieza
   console.log('');
   console.log(SEP);

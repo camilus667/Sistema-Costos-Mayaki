@@ -141,8 +141,8 @@ async function main() {
 
   const nombresExcel = new Set(accHeaders.map((h) => String(h).trim()));
   const accsSinHeader = accs
-    .map((a) => String(a.descripcion).trim())
-    .filter((d) => !nombresExcel.has(d));
+    .map((a: any) => String(a.descripcion).trim())
+    .filter((d: string) => !nombresExcel.has(d));
 
   if (headersSinAcc.length === 0) {
     console.log('  Todas las columnas del Excel cruzan con un accesorio de la base.');
