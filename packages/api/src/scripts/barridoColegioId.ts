@@ -237,7 +237,35 @@ function main() {
     const texto = fs.readFileSync(path.join(dirRutas, archivo), 'utf8');
     const lineas = texto.split('\n');
 
+    /**
+     * Limites del handler que contiene una linea. El filtro por colegio NO vive al lado del
+     * `.from(...)`: el patron idiomatico de este proyecto acumula condiciones en un arreglo
+     * al principio del handler y las aplica con un solo and(...) al final. En precio.ts hay
+     * cuarenta lineas entre las dos cosas.
+     */
+    const limiteHandler = (i: number): string => {
+      const esBorde = (s: string) =>
+        /api\.(get|post|put|patch|delete)\(/.test(s) || /^(export\s+)?(async\s+)?function\s/.test(s);
+      let desde = 0;
+      for (let k = i; k >= 0; k--) if (esBorde(lineas[k])) { desde = k; break; }
+      let hasta = lineas.length;
+      for (let k = i + 1; k < lineas.length; k++) if (esBorde(lineas[k])) { hasta = k; break; }
+      return lineas.slice(desde, hasta).join('\n');
+    };
+
+    /** La sentencia: del `.from(` hasta el `;` que la cierra, con tope por si no aparece. */
+    const sentenciaDesde = (i: number): string => {
+      const fin = Math.min(lineas.length, i + 16);
+      const acc: string[] = [];
+      for (let k = i; k < fin; k++) {
+        acc.push(lineas[k]);
+        if (lineas[k].includes(';')) break;
+      }
+      return acc.join('\n');
+    };
+
     lineas.forEach((l, i) => {
+      if (esComentario(l)) return;
       const m = l.match(/\.from\((\w+)\)/);
       if (!m) return;
       const tabla = m[1];
@@ -245,16 +273,32 @@ function main() {
       const esDerivada = DERIVADAS.includes(tabla);
       if (!esTenant && !esDerivada) return;
 
-      // La sentencia puede seguir en las lineas de abajo: se mira una ventana.
-      const ventana = lineas.slice(Math.max(0, i - 2), i + 6).join(' ');
-      const filtraColegio = /colegioId/.test(ventana);
-      const porId = /eq\(\w+\.id,/.test(ventana);
-      const uneProducto = /innerJoin\(\s*productos|leftJoin\(\s*productos|from\(productos\)/.test(ventana);
+      const sentencia = sentenciaDesde(i);
+      const handler = limiteHandler(i);
 
+      // El JOIN es una propiedad de la SENTENCIA: o esta en la consulta o no esta.
+      const uneProducto = /innerJoin\(\s*productos|leftJoin\(\s*productos|from\(productos\)/.test(sentencia);
+      // El FILTRO por colegio es una propiedad del HANDLER, por lo dicho arriba. Y se busca
+      // `productos.colegioId` y no `colegioId` a secas: la palabra sola aparece en cualquier
+      // handler que reciba el parametro, incluso si no lo usa —que fue justamente uno de los
+      // bugs de export.ts, tres parametros declarados y nunca aplicados.
+      const filtraColegio = /productos\.colegioId|tabla\.colegioId/.test(handler);
+      const porId = /eq\(\w+\.id\s*,/.test(sentencia);
+      const porPrenda = /eq\(\w+\.productoId\s*,/.test(sentencia);
+
+      // ORDEN DE LAS RAMAS, que es donde estaba el error. La version anterior preguntaba
+      // primero por el filtro sobre una ventana de ocho lineas; cuando el filtro quedaba
+      // afuera y el join adentro, la consulta no entraba en "DERIVADA sin join" y caia al
+      // else, o sea "SIN filtrar" — la clase que significa que no filtra NADA. Asi es como
+      // esta seccion terminaba denunciando como fuga precisamente el codigo de la Fase 6 que
+      // acababa de arreglarla, y eso vale mas que un detalle: esta lista es la que se usa
+      // para planear la fase siguiente. Un inventario que no distingue lo arreglado de lo
+      // pendiente no sirve para planear nada, y encima entrena a ignorarlo.
       let clase: string;
-      if (filtraColegio) clase = 'filtra por colegio';
-      else if (porId) clase = 'por id, sin validar dueno';
+      if (esDerivada && !uneProducto && porPrenda) clase = 'DERIVADA acotada a una prenda: correcto';
       else if (esDerivada && !uneProducto) clase = 'DERIVADA sin join a producto: no acotable';
+      else if (filtraColegio) clase = 'filtra por colegio';
+      else if (porId) clase = 'por id, sin validar dueno';
       else clase = 'SIN filtrar';
 
       accesos.push({ archivo: `routes/${archivo}`, linea: i + 1, tabla, clase, txt: l.trim().slice(0, 92) });
@@ -267,10 +311,14 @@ function main() {
     porClase.get(a.clase)!.push(a);
   }
 
+  // De lo mas grave a lo que ya esta bien. Las dos ultimas clases NO son pendientes: se
+  // listan para que el total cierre y para poder ver de un golpe cuanto del sistema ya
+  // esta acotado. Un inventario que solo muestra lo malo no deja medir el progreso.
   const orden = [
     'DERIVADA sin join a producto: no acotable',
     'SIN filtrar',
     'por id, sin validar dueno',
+    'DERIVADA acotada a una prenda: correcto',
     'filtra por colegio',
   ];
 
@@ -294,6 +342,11 @@ function main() {
   console.log('    "SIN filtrar" sobre una lista es una fuga; sobre un lookup puntual no.');
   console.log('    "por id, sin validar dueno" importa mas al ESCRIBIR que al leer: quien');
   console.log('    conozca un id ajeno puede modificar datos de otro colegio.');
+  console.log('    "DERIVADA acotada a una prenda" NO es pendiente: la consulta filtra por');
+  console.log('    producto_id, y una prenda pertenece a un solo colegio, asi que ya esta');
+  console.log('    acotada por transitividad. Se lista para que el total cierre.');
+  console.log('    "filtra por colegio" tampoco: esta resuelto y se muestra para poder ver');
+  console.log('    cuanto del sistema ya esta acotado, no solo lo que falta.');
   console.log('  Este bloque no hace fallar el barrido: las secciones A y B si.');
 
   // ---------------------------------------------------------------- reporte
