@@ -36,9 +36,9 @@ const api = new Hono();
  * - `pesoGramos`, `precioTelaUnitario` y `rendimientoTela` pasan a opcionales.
  *   Eran obligatorios y positivos, asi que era IMPOSIBLE simular una prenda
  *   adquirida (no lleva peso) o usar el camino de precioBsG.
- * - `factorComplejidad` deja de ser `.int()`. La columna del schema sigue siendo
- *   integer, asi que 1,5 todavia no se puede persistir, pero al menos el
- *   simulador deja probarlo. Cambiar la columna es Fase 4.
+ * - `factorComplejidad` deja de ser `.int()`. La columna del schema paso a real
+ *   en la Fase 4, asi que 1,5 ya se persiste. SQLite tiene tipado dinamico y la
+ *   afinidad INTEGER ya guardaba 1.5 como REAL, asi que no hizo falta migrar datos.
  * - Se saca el `.default(8)` de la merma. Era el tercer lugar con el 8
  *   hardcodeado, justo el que el motor elimino a proposito para que el default
  *   viva solo en el schema de la base y en configuracion_sistema. Si no viene, el
@@ -455,6 +455,10 @@ api.get('/matriz-prenda/:productoId', async (c) => {
         costoManoObra: existe ? resultado.costoManoObra : 0,
         costoBruto: existe ? resultado.costoBruto : 0,
         costoFijosVariable: existe ? resultado.costoFijosVariable : 0,
+        // FASE 4: el indirecto ya no viaja disfrazado de costo fijo. Prorrateado
+        // sobre volumen ANUAL y proporcional al factorComplejidad, normalizado
+        // para que lo absorbido iguale el pool.
+        costoIndirecto: existe ? resultado.costoIndirecto : 0,
         costoUnitarioNeto: existe ? resultado.costoUnitarioNeto : 0,
         precioVenta: meta.precioVentaBs,
         ingresoNetoConFactura: existe ? resultado.ingresoNetoConFactura : null,

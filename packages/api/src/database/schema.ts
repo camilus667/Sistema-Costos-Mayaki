@@ -78,7 +78,7 @@ export const productos = sqliteTable('producto', {
    */
   modoCosteo: text('modo_costeo', { enum: ['confeccion', 'adquirido'] })
     .default('confeccion').notNull(),
-  factorComplejidad: integer('factor_complejidad').default(1),
+  factorComplejidad: real('factor_complejidad').default(1),
   costoFijo: real('costo_fijo').default(0),
   planchadoExtra: real('planchado_extra').default(0),
   colocacionBotones: real('colocacion_botones').default(0),

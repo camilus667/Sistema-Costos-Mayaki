@@ -121,6 +121,20 @@ export interface ContextoCosteo {
   /** Fraccion, no porcentaje. Ver `tasaIvaComoFraccion`. */
   tasaIvaFraccion: number;
   totalIndirectosMensual: number;
+  /** FASE 4. Pool anual = mensual x 12. La captura sigue siendo mensual. */
+  poolIndirectoAnual: number;
+  volumenAnual: number;
+  /** Promedio simple del factor entre las prendas del lote. Ver nota de normalizacion. */
+  factorPromedio: number;
+  /**
+   * Bs de indirecto por cada punto de factorComplejidad. Normalizada para que la
+   * suma absorbida iguale el pool. Ver la nota en `cargarContextoCosteo`.
+   */
+  tasaPorPuntoFactor: number;
+  /**
+   * La tarifa del modelo VIEJO, `indirectosMes / (volumenMes x 10)`. Se conserva
+   * solo para poder medir cuanto se absorbia antes; no se usa para costear.
+   */
   tarifaPuntoComplejidad: number;
 
   productos: any[];
@@ -339,17 +353,66 @@ export async function cargarContextoCosteo(
     avisosGlobales.push('No se pudieron leer los costos indirectos. Se costea con indirectos en 0.');
   }
 
-  // PRESERVADO A PROPOSITO: el `* 10` es un numero magico sin documentar, al
-  // parecer una escala de puntos de complejidad de 1 a 10. Aparece identico en
-  // inputs.ts (fijos-x-prenda y desglose-inteligente-producto) y en calculo.ts.
-  // Se replica tal cual para lograr paridad. Documentarlo o eliminarlo es Fase 4.
+  // ---------- FASE 4: absorcion de indirectos ----------
+  //
+  // El modelo viejo hacia `indirectosMes / (volumenMes * 10)` y multiplicaba por
+  // el factorComplejidad. Ese `* 10` era un numero magico sin documentar, y su
+  // efecto real es que el sistema absorbia solo factor/10 del pool: con factores
+  // de 1 a 3 se cargaba entre el 10% y el 30% de los indirectos y el resto no lo
+  // pagaba ninguna prenda. Sobre 21.480 Bs/mes son del orden de 180.000 Bs al año
+  // de costos reales que quedaban fuera del costeo.
+  //
+  // Ahora la tasa se NORMALIZA para que lo absorbido iguale el pool:
+  //
+  //   tasaPorPuntoFactor = poolAnual / (volumenAnual x factorPromedio)
+  //   indirectoUnitario  = tasaPorPuntoFactor x factor(prenda)
+  //
+  // Asi una prenda con el doble de factor absorbe el doble, y la suma sobre la
+  // produccion anual da exactamente el pool. Una asignacion que no suma el pool
+  // no es una asignacion, es un ajuste a ojo.
+  //
+  // SIMPLIFICACION DECLARADA: el factor promedio es el promedio SIMPLE entre las
+  // prendas del lote, no ponderado por unidades producidas, porque el sistema no
+  // guarda produccion por prenda. Si la mezcla real esta sesgada hacia prendas de
+  // factor alto o bajo, la absorcion se desvia del pool en esa proporcion. Se
+  // cierra el dia que haya volumen por prenda.
   const volumenMes = num(sysConfig.volumenMensualProduccion);
+  const poolIndirectoAnual = totalIndirectosMensual * 12;
+  const volumenAnual = num(sysConfig.volumenAnualProduccion) > 0
+    ? num(sysConfig.volumenAnualProduccion)
+    : volumenMes * 12;
+
+  const factores = listaProductos
+    .map((p: any) => (num(p.factorComplejidad) > 0 ? num(p.factorComplejidad) : 1));
+  const factorPromedio = factores.length > 0
+    ? factores.reduce((a: number, b: number) => a + b, 0) / factores.length
+    : 1;
+
+  const tasaPorPuntoFactor = volumenAnual > 0 && factorPromedio > 0
+    ? poolIndirectoAnual / (volumenAnual * factorPromedio)
+    : 0;
+
+  // Solo para poder medir el cambio. No se usa para costear.
   const tarifaPuntoComplejidad = volumenMes > 0 ? totalIndirectosMensual / (volumenMes * 10) : 0;
+
+  if (tasaPorPuntoFactor > 0 && tarifaPuntoComplejidad > 0) {
+    const absorbidoAntes = tarifaPuntoComplejidad * factorPromedio;
+    const absorbidoAhora = tasaPorPuntoFactor * factorPromedio;
+    avisosGlobales.push(
+      `Indirectos: antes se absorbia ${absorbidoAntes.toFixed(2)} Bs por prenda promedio ` +
+      `(${((absorbidoAntes / absorbidoAhora) * 100).toFixed(0)}% del pool); ahora se absorbe ` +
+      `${absorbidoAhora.toFixed(2)} Bs, que es el 100%. Factor promedio ${factorPromedio.toFixed(2)}.`
+    );
+  }
 
   return {
     sysConfig,
     tasaIvaFraccion,
     totalIndirectosMensual,
+    poolIndirectoAnual,
+    volumenAnual,
+    factorPromedio,
+    tasaPorPuntoFactor,
     tarifaPuntoComplejidad,
     productos: listaProductos,
     tallasPorId,
@@ -476,13 +539,20 @@ export function ensamblarInputs(
     );
   }
 
-  // ---------- fijos ----------
-  // MODELO VIGENTE, replicado para paridad: los fijos por prenda son
-  // `factorComplejidad x tarifaPuntoComplejidad`, y los indirectos van en 0.
-  // O sea el pool de indirectos entra por la via de los fijos, no como linea
-  // propia. En el motor eso se expresa como costoFijo = tarifa, y el motor la
-  // multiplica por el factor. `indirectosXprenda` era y sigue siendo 0.
+  // ---------- fijos e indirectos ----------
+  //
+  // FASE 4. El indirecto ahora va en `costoIndirectoUnitario`, que es su lugar,
+  // en vez de entrar disfrazado de costo fijo. Antes el pool se colaba por la via
+  // de `costoFijo` y `indirectosXprenda` quedaba siempre en 0, lo que hacia
+  // parecer que el sistema no prorrateaba indirectos cuando en realidad los
+  // prorrateaba mal.
+  //
+  // `costoFijo` queda en 0 a proposito. Las columnas costo_fijo, planchado_extra,
+  // colocacion_botones y operaciones_extra existen en `producto` y ninguna
+  // pantalla las suma; se siguen exponiendo en meta.columnasFijasNoContadas. Si
+  // se cuentan o no es una decision pendiente del usuario.
   const factorComplejidad = num(producto.factorComplejidad) > 0 ? num(producto.factorComplejidad) : 1;
+  const indirectoUnitario = ctx.tasaPorPuntoFactor * factorComplejidad;
 
   const colFijas = {
     costoFijo: num(producto.costoFijo),
@@ -518,9 +588,13 @@ export function ensamblarInputs(
     costoAccesorios: subtotalAccesoriosBs,
     costoManoObra: costoManoObraBs,
     factorComplejidad,
-    costoFijo: ctx.tarifaPuntoComplejidad,
+    costoFijo: 0,
 
-    costoIndirectoUnitario: undefined,
+    // Prorrateado sobre volumen ANUAL y proporcional al factor, normalizado para
+    // que la suma absorbida iguale el pool. Se pasa ya calculado a proposito: el
+    // motor avisa cuando recibe el par mensual, porque ese camino es el que hace
+    // que la misma prenda cueste distinto segun el mes.
+    costoIndirectoUnitario: indirectoUnitario,
     costoIndirectoMensual: undefined,
     produccionTotalMes: undefined,
 

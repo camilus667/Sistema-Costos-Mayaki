@@ -342,9 +342,15 @@ function ctxDePrueba(over: Partial<ContextoCosteo> = {}): ContextoCosteo {
       tallaDefecto: '16/34',
       impuestosActivos: false,
       descuentoSinFactura: 0.1,
+      volumenAnualProduccion: 21600,
     },
     tasaIvaFraccion: 0.13,
     totalIndirectosMensual: 21480,
+    poolIndirectoAnual: 21480 * 12,
+    volumenAnual: 21600,
+    factorPromedio: 2,
+    // 257.760 / (21.600 x 2) = 5,9667 Bs por punto de factor
+    tasaPorPuntoFactor: (21480 * 12) / (21600 * 2),
     tarifaPuntoComplejidad: 1.1933,
     productos: [],
     tallasPorId: new Map(),
@@ -391,11 +397,33 @@ describe('ensamblarInputs', () => {
     expect(meta.faltantes.join(' ')).toContain('mano de obra');
   });
 
-  it('el fijo por prenda es la tarifa de puntos, y el factor lo multiplica el motor', () => {
+  it('FASE 4: el indirecto va en su propio campo, no disfrazado de costo fijo', () => {
+    // Antes el pool de indirectos se colaba por la via de costoFijo y
+    // costoIndirectoUnitario quedaba en undefined, lo que hacia parecer que el
+    // sistema no prorrateaba indirectos cuando en realidad los prorrateaba mal.
     const { inputs } = ensamblarInputs(ctxDePrueba(), PROD, TALLA);
-    expect(inputs.costoFijo).toBe(1.1933);
+    expect(inputs.costoFijo).toBe(0);
     expect(inputs.factorComplejidad).toBe(3);
-    expect(inputs.costoIndirectoUnitario).toBeUndefined();
+    // tasaPorPuntoFactor 5,9667 x factor 3
+    expect(inputs.costoIndirectoUnitario).toBeCloseTo(17.9, 1);
+  });
+
+  it('FASE 4: el indirecto es proporcional al factorComplejidad', () => {
+    const ctx = ctxDePrueba();
+    const f1 = ensamblarInputs(ctx, { ...PROD, factorComplejidad: 1 }, TALLA);
+    const f3 = ensamblarInputs(ctx, { ...PROD, factorComplejidad: 3 }, TALLA);
+    expect(f3.inputs.costoIndirectoUnitario! / f1.inputs.costoIndirectoUnitario!).toBeCloseTo(3, 5);
+  });
+
+  it('FASE 4: una prenda con el factor promedio absorbe el pool por unidad', () => {
+    // La normalizacion es lo que hace que la asignacion SUME el pool. Una prenda
+    // con factor igual al promedio tiene que absorber exactamente
+    // poolAnual / volumenAnual. Sin normalizar, el modelo viejo absorbia
+    // factor/10 de eso: con factores de 1 a 3, entre el 10% y el 30%.
+    const ctx = ctxDePrueba();
+    const { inputs } = ensamblarInputs(ctx, { ...PROD, factorComplejidad: ctx.factorPromedio }, TALLA);
+    expect(inputs.costoIndirectoUnitario).toBeCloseTo(ctx.poolIndirectoAnual / ctx.volumenAnual, 4);
+    expect(inputs.costoIndirectoUnitario).toBeCloseTo(11.9333, 3);
   });
 
   it('seOfrece sale de precio_venta, no del peso ni de la mano de obra', () => {

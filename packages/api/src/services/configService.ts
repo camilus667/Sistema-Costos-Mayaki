@@ -22,6 +22,23 @@ export interface SystemConfig {
    * 0.10 en Cambridge. Los precios de `precio_venta` son precios CON factura.
    */
   descuentoSinFactura: number;
+
+  /**
+   * FASE 4. Volumen ANUAL de produccion, el denominador de los indirectos.
+   *
+   * Antes el denominador era la produccion del MES, y eso hacia que la misma
+   * prenda costara distinto segun cuando se produjo: en temporada baja el
+   * indirecto unitario se dispara y en pico se colapsa. En uniformes escolares,
+   * donde febrero y marzo concentran casi todo, no es un detalle.
+   *
+   * La captura de los costos indirectos sigue siendo mensual, que es como el
+   * usuario trabaja. Lo unico que cambia es el denominador, y eso es MENOS
+   * trabajo: una tasa que se fija una vez al año en vez de recalcularse cada mes.
+   *
+   * Default = volumen mensual x 12, para que la tasa no cambie de valor el dia
+   * que se adopta el metodo anual. Reemplazar por el conteo real cuando se tenga.
+   */
+  volumenAnualProduccion: number;
 }
 
 export async function getSystemConfig(db: any): Promise<SystemConfig> {
@@ -51,6 +68,14 @@ export async function getSystemConfig(db: any): Promise<SystemConfig> {
     ? (Number(map.get('descuento_sin_factura')) || 0)
     : 0.1;
 
+  // Default deliberado: mensual x 12. Con eso la tasa de indirectos da
+  // exactamente el mismo numero que el metodo mensual, asi que adoptar el
+  // denominador anual no mueve ningun costo el primer dia. Verificado:
+  // (21480 x 12) / (1800 x 12) = 11.9333 = 21480 / 1800.
+  const volumenAnualProduccion = map.has('volumen_anual_produccion')
+    ? (Number(map.get('volumen_anual_produccion')) || 0)
+    : volumenMensualProduccion * 12;
+
   return {
     tasaIva,
     factorIva: 1 + (tasaIva / 100),
@@ -59,6 +84,7 @@ export async function getSystemConfig(db: any): Promise<SystemConfig> {
     tallaDefecto,
     impuestosActivos,
     descuentoSinFactura,
+    volumenAnualProduccion,
   };
 }
 

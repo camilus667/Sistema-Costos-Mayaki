@@ -40,6 +40,11 @@ api.put('/configuracion', async (c) => {
     await setSystemConfig(db, 'descuento_sin_factura', String(body.descuentoSinFactura));
   }
 
+  // FASE 4. El denominador anual de los indirectos.
+  if (body.volumenAnualProduccion !== undefined) {
+    await setSystemConfig(db, 'volumen_anual_produccion', String(body.volumenAnualProduccion));
+  }
+
   return c.json({ success: true, message: 'Configuración general del sistema actualizada exitosamente' });
 });
 
