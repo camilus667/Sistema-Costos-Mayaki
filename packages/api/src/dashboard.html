@@ -36,7 +36,7 @@
         <option value="all">TODOS LOS COLEGIOS</option>
       </select>
       <button class="btn-icon-admin" onclick="switchTab('admin-colegio')"
-        title="Centro de Configuración y Administración del Colegio">⚙️ Configuración</button>
+        title="Configuración de la empresa y de cada colegio">⚙️ Configuración</button>
       <div class="status-badge">
         <div class="status-dot"></div>
         <span id="env-status">sql.js / D1 Activo</span>
@@ -51,7 +51,7 @@
     <button class="tab-btn" onclick="switchTab('costeo-individual')">Costeo Individual</button>
     <button class="tab-btn" onclick="switchTab('matriz-tallas')">Costeo Multitalla</button>
     <button class="tab-btn" onclick="switchTab('inventario')">Inventario por Colegio</button>
-    <button class="tab-btn" onclick="switchTab('admin-colegio')">⚙️ Configuración del Colegio</button>
+    <button class="tab-btn" onclick="switchTab('admin-colegio')">⚙️ Configuración</button>
   </nav>
 
   <main>
@@ -317,17 +317,18 @@
               style="background:#10b98122; color:#34d399; border-color:#05966944; font-size:0.85rem; padding:0.25rem 0.65rem;">CAMBRIDGE</span>
           </div>
 
-          <div class="admin-tabs-bar" style="border-bottom:none; margin:0; padding:0;">
+          <div class="admin-tabs-bar" style="border-bottom:none; margin:0; padding:0; display:flex; align-items:center; gap:0.35rem; flex-wrap:wrap;">
+            <span style="font-size:0.62rem; font-weight:800; color:#34d399; letter-spacing:1px; padding:0 0.35rem;">DE LA EMPRESA</span>
             <button class="admin-tab-btn active" id="btn-atab-telas" onclick="switchAdminTab('telas')">🧵 Telas</button>
-            <button class="admin-tab-btn" id="btn-atab-prendas" onclick="switchAdminTab('prendas')">👔 Prendas &
-              Reordenamiento</button>
-            <button class="admin-tab-btn" id="btn-atab-insumos" onclick="switchAdminTab('insumos')">🧵 Insumos</button>
-            <button class="admin-tab-btn" id="btn-atab-tallas" onclick="switchAdminTab('tallas')">📏 Tallas
-              Habilitadas</button>
-            <button class="admin-tab-btn" id="btn-atab-colegios" onclick="switchAdminTab('colegios')">🏛️ Perfil &
-              Nuevos Colegios</button>
-            <button class="admin-tab-btn" id="btn-atab-sistema" onclick="switchAdminTab('sistema')">⚙️ Parámetros del
-              Sistema</button>
+            <button class="admin-tab-btn" id="btn-atab-insumos" onclick="switchAdminTab('insumos')">🧷 Insumos</button>
+            <button class="admin-tab-btn" id="btn-atab-tallas" onclick="switchAdminTab('tallas')">📏 Tallas</button>
+            <button class="admin-tab-btn" id="btn-atab-sistema" onclick="switchAdminTab('sistema')">⚙️ Parámetros</button>
+
+            <span style="width:1px; height:22px; background:#334155; margin:0 0.5rem;"></span>
+
+            <span style="font-size:0.62rem; font-weight:800; color:#93c5fd; letter-spacing:1px; padding:0 0.35rem;">DEL COLEGIO</span>
+            <button class="admin-tab-btn" id="btn-atab-prendas" onclick="switchAdminTab('prendas')">👔 Prendas &amp; Recetas</button>
+            <button class="admin-tab-btn" id="btn-atab-colegios" onclick="switchAdminTab('colegios')">🏛️ Perfil &amp; Colegios</button>
           </div>
         </div>
 
@@ -380,7 +381,7 @@
                 </thead>
                 <tbody id="tb-admin-telas-body">
                   <tr>
-                    <td colspan="3" style="text-align:center; padding:2rem;">Cargando telas del colegio...</td>
+                    <td colspan="3" style="text-align:center; padding:2rem;">Cargando telas...</td>
                   </tr>
                 </tbody>
               </table>
@@ -599,7 +600,7 @@
                 </thead>
                 <tbody id="tb-admin-prendas-body">
                   <tr>
-                    <td colspan="6" style="text-align:center; padding:2rem;">Cargando catálogo de prendas...</td>
+                    <td colspan="7" style="text-align:center; padding:2rem;">Cargando prendas del colegio...</td>
                   </tr>
                 </tbody>
               </table>
@@ -793,38 +794,11 @@
       }
     }
 
-    async function cargarConfigAdminColegio() {
-      const select = document.getElementById('global-colegio-select');
-
-      if (!colegioFiltroActual || colegioFiltroActual === 'all') {
-        let foundRealSchool = null;
-        for (let opt of select.options) {
-          if (opt.value && opt.value !== 'all') {
-            foundRealSchool = opt.value;
-            select.value = opt.value;
-            break;
-          }
-        }
-        if (foundRealSchool) {
-          colegioFiltroActual = foundRealSchool;
-        } else {
-          alert('⚠️ Selecciona un colegio específico para abrir la configuración.');
-          return;
-        }
-      }
-
-      try {
-        const res = await fetch('/api/colegios/' + colegioFiltroActual + '/config');
-        const json = await res.json();
-        if (json.success) {
-          adminConfigData = json;
-          renderAdminTelas();
-          renderAdminPrendas();
-          renderAdminTallas();
-          renderAdminPerfilColegio();
-        }
-      } catch (e) { console.error('Error al cargar config admin:', e); }
-    }
+    // La definicion vieja de cargarConfigAdminColegio vivia aca y estaba MUERTA: habia dos
+    // en el archivo y en JavaScript gana la ultima. Irónicamente esta resolvia bien el caso
+    // del selector en TODOS (buscaba el primer colegio real), y la que corria hacia return
+    // en silencio. Se borra, y la version viva —mas abajo— toma la parte buena.
+    function cargarConfigAdminColegioObsoleta() { /* eliminada, ver la version viva */ }
 
     function fmtNum(val) {
       return (val || 0).toLocaleString('en-US');
@@ -2191,7 +2165,10 @@
 
     let adminConfigData = null;
 
+    let adminTabActual = 'telas';
+
     function switchAdminTab(tabName) {
+      adminTabActual = tabName;
       document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
       const activeBtn = document.getElementById('btn-atab-' + tabName);
       if (activeBtn) activeBtn.classList.add('active');
@@ -2211,6 +2188,7 @@
 
       if (tabName === 'sistema') cargarConfigSistemaAdmin();
       if (tabName === 'insumos') cargarInsumosAdmin();
+      actualizarAlcanceConfig(tabName);
     }
 
     async function cargarConfigSistemaAdmin() {
@@ -2276,8 +2254,54 @@
       }
     }
 
+    /**
+     * Catalogo de la EMPRESA. No depende de ningun colegio.
+     *
+     * Antes las telas y las tallas se leian de adminConfigData, que es la respuesta de
+     * /api/colegios/:id/config. O sea que datos de la empresa heredaban una dependencia
+     * de colegio que no tienen, y con el selector en TODOS LOS COLEGIOS el cargador
+     * salia en la primera linea y las tablas quedaban en "Cargando..." para siempre.
+     */
+    let catalogoEmpresa = { telas: [], tallas: [] };
+
+    async function cargarCatalogoEmpresa() {
+      try {
+        const [rt, rl] = await Promise.all([fetch('/api/telas'), fetch('/api/tallas')]);
+        const [jt, jl] = await Promise.all([rt.json(), rl.json()]);
+        catalogoEmpresa = {
+          telas: jt.success ? (jt.data || []) : [],
+          tallas: jl.success ? (jl.data || []) : [],
+        };
+        renderAdminTelas();
+        renderAdminTallas();
+      } catch (e) {
+        console.error('Error al cargar el catalogo de la empresa:', e);
+      }
+    }
+
+    /**
+     * Carga la Configuracion. Dos alcances, y el de la empresa NO espera al colegio.
+     *
+     * HABIA DOS DEFINICIONES DE ESTA FUNCION en el archivo, y en JavaScript gana la
+     * ultima. La primera —muerta— resolvia bien el caso del selector en TODOS: buscaba
+     * el primer colegio real y lo elegia, o avisaba si no habia ninguno. La segunda
+     * —la que corria— hacia `return` en silencio. El buen comportamiento estaba escrito
+     * y no se ejecutaba nunca, y por eso la pantalla se quedaba cargando.
+     */
     async function cargarConfigAdminColegio() {
-      if (!colegioFiltroActual || colegioFiltroActual === 'all') return;
+      // Lo de la empresa, siempre. No necesita colegio y no debe esperarlo.
+      await cargarCatalogoEmpresa();
+      cargarInsumosAdmin();
+      cargarConfigSistemaAdmin();
+
+      // Y lo del colegio, solo si hay uno elegido.
+      const hayColegio = !!(colegioFiltroActual && colegioFiltroActual !== 'all');
+      if (!hayColegio) {
+        adminConfigData = null;
+        renderSinColegio();
+        actualizarAlcanceConfig(adminTabActual);
+        return;
+      }
 
       try {
         const res = await fetch('/api/colegios/' + colegioFiltroActual + '/config');
@@ -2285,12 +2309,65 @@
         if (json.success) {
           adminConfigData = json;
           renderAdminPrendas();
-          renderAdminTelas();
-          renderAdminTallas();
           renderAdminPerfilColegio();
-          cargarConfigSistemaAdmin();
         }
-      } catch (e) { console.error('Error al cargar config admin:', e); }
+      } catch (e) {
+        console.error('Error al cargar la configuracion del colegio:', e);
+      }
+      actualizarAlcanceConfig(adminTabActual);
+    }
+
+    /** Las pestañas del colegio, cuando no hay colegio elegido, lo DICEN. */
+    function renderSinColegio() {
+      const aviso = `
+        <tr><td colspan="7" style="text-align:center; padding:2.5rem; color:#94a3b8;">
+          <div style="font-size:0.95rem; font-weight:600; color:#f59e0b; margin-bottom:0.4rem;">
+            Elegí un colegio para ver sus prendas
+          </div>
+          <div style="font-size:0.8rem;">
+            Las prendas son de cada colegio. Arriba a la derecha, en "Colegio Activo",
+            está el selector: hoy dice TODOS LOS COLEGIOS.
+          </div>
+        </td></tr>`;
+      const tbody = document.getElementById('tb-admin-prendas-body');
+      if (tbody) tbody.innerHTML = aviso;
+    }
+
+    /**
+     * El badge de alcance dice la verdad sobre la pestaña en la que estas.
+     *
+     * Antes lo escribia renderAdminPrendas con `col.nombre || 'CAMBRIDGE'`, o sea un
+     * literal hardcodeado. Con el selector en TODOS LOS COLEGIOS la pantalla mostraba
+     * CAMBRIDGE igual: cuatro afirmaciones distintas sobre el alcance a la vez (el
+     * selector decia TODOS, la pestaña de nav decia "del Colegio", el badge decia
+     * CAMBRIDGE y la tabla decia "telas del colegio").
+     */
+    const TABS_DE_LA_EMPRESA = ['telas', 'insumos', 'tallas', 'sistema'];
+
+    function actualizarAlcanceConfig(tabName) {
+      const badge = document.getElementById('modal-colegio-name-badge');
+      if (!badge) return;
+
+      if (TABS_DE_LA_EMPRESA.includes(tabName)) {
+        badge.textContent = 'TODA LA EMPRESA';
+        badge.style.background = '#064e3b';
+        badge.style.color = '#34d399';
+        badge.title = 'Estos datos los comparten todos los colegios';
+        return;
+      }
+
+      const nombre = adminConfigData && adminConfigData.colegio && adminConfigData.colegio.nombre;
+      if (nombre) {
+        badge.textContent = String(nombre).toUpperCase();
+        badge.style.background = '#1e3a8a';
+        badge.style.color = '#93c5fd';
+        badge.title = 'Estos datos son solo de este colegio';
+      } else {
+        badge.textContent = 'SIN COLEGIO ELEGIDO';
+        badge.style.background = '#78350f';
+        badge.style.color = '#fbbf24';
+        badge.title = 'Elegí un colegio en el selector de arriba';
+      }
     }
 
     let draggedIndex = null;
@@ -2334,8 +2411,8 @@
         prods.forEach((p, i) => p.orden = i + 1);
         renderAdminPrendas();
       } else if (type === 'tela') {
-        if (!adminConfigData || !adminConfigData.telas) return;
-        const telas = adminConfigData.telas;
+        if (!catalogoEmpresa.telas || catalogoEmpresa.telas.length === 0) return;
+        const telas = catalogoEmpresa.telas;
         const itemToMove = telas.splice(draggedIndex, 1)[0];
         telas.splice(targetIndex, 0, itemToMove);
         telas.forEach((t, i) => t.orden = i + 1);
@@ -2354,10 +2431,12 @@
     function renderAdminPrendas() {
       if (!adminConfigData) return;
       const prods = adminConfigData.productos || [];
-      const telas = adminConfigData.telas || [];
-      const col = adminConfigData.colegio || {};
+      // Las telas del selector salen del catalogo de la empresa.
+      const telas = catalogoEmpresa.telas || [];
 
-      document.getElementById('modal-colegio-name-badge').textContent = col.nombre || 'CAMBRIDGE';
+      // El badge lo pone actualizarAlcanceConfig, que dice la verdad segun la pestaña.
+      // Antes se escribia aca con `col.nombre || 'CAMBRIDGE'`: un literal hardcodeado que
+      // hacia que la pantalla dijera CAMBRIDGE incluso con el selector en TODOS.
 
       const selectNpTela = document.getElementById('np-tela');
       // Sin promedios inventados: si la prenda no lleva tela, se costea con tela en 0
@@ -2675,8 +2754,8 @@
     }
 
     function renderAdminTelas() {
-      if (!adminConfigData) return;
-      const telas = adminConfigData.telas || [];
+      // Del catalogo de la EMPRESA, no de la respuesta del colegio.
+      const telas = catalogoEmpresa.telas || [];
 
       const tbody = document.getElementById('tb-admin-telas-body');
       if (!tbody) return;
@@ -2883,8 +2962,8 @@
     }
 
     function moverTelaUp(idx) {
-      if (idx <= 0 || !adminConfigData || !adminConfigData.telas) return;
-      const telas = adminConfigData.telas;
+      if (idx <= 0 || !catalogoEmpresa.telas) return;
+      const telas = catalogoEmpresa.telas;
       const temp = telas[idx];
       telas[idx] = telas[idx - 1];
       telas[idx - 1] = temp;
@@ -2895,8 +2974,8 @@
     }
 
     function moverTelaDown(idx) {
-      if (!adminConfigData || !adminConfigData.telas || idx >= adminConfigData.telas.length - 1) return;
-      const telas = adminConfigData.telas;
+      if (!catalogoEmpresa.telas || idx >= catalogoEmpresa.telas.length - 1) return;
+      const telas = catalogoEmpresa.telas;
       const temp = telas[idx];
       telas[idx] = telas[idx + 1];
       telas[idx + 1] = temp;
@@ -2907,8 +2986,14 @@
     }
 
     async function guardarConfigTelasAdmin() {
-      if (!adminConfigData || !adminConfigData.telas) return;
-      const payload = adminConfigData.telas.map((t, i) => ({
+      // Antes esto era `if (!adminConfigData || ...) return;`, asi que con el selector en
+      // TODOS LOS COLEGIOS el boton Guardar no hacia nada y no decia nada. Las telas son
+      // de la empresa: no hay razon para que guardarlas dependa de un colegio.
+      if (!catalogoEmpresa.telas || catalogoEmpresa.telas.length === 0) {
+        alert('No hay telas cargadas para guardar.');
+        return;
+      }
+      const payload = catalogoEmpresa.telas.map((t, i) => ({
         id: t.id,
         orden: i + 1,
         descripcion: document.getElementById('at-desc-' + t.id).value.trim(),
@@ -2973,9 +3058,10 @@
     }
 
     function renderAdminTallas() {
-      if (!adminConfigData || !adminConfigData.tallas) return;
       const container = document.getElementById('container-admin-tallas');
-      container.innerHTML = adminConfigData.tallas.map(t => `
+      if (!container) return;
+      // Las tallas son vocabulario de la empresa: las 16 tienen colegio_id NULL.
+      container.innerHTML = (catalogoEmpresa.tallas || []).map(t => `
         <div style="background:#1e293b; padding:0.75rem; border-radius:8px; border:1px solid #334155; display:flex; align-items:center; justify-content:space-between;">
           <div>
             <strong style="color:#f8fafc; display:block; font-size:0.9rem;">${t.codigo}</strong>
@@ -2987,8 +3073,11 @@
     }
 
     async function guardarTallasAdmin() {
-      if (!adminConfigData || !adminConfigData.tallas) return;
-      const payload = adminConfigData.tallas.map(t => ({
+      if (!catalogoEmpresa.tallas || catalogoEmpresa.tallas.length === 0) {
+        alert('No hay tallas cargadas para guardar.');
+        return;
+      }
+      const payload = catalogoEmpresa.tallas.map(t => ({
         id: t.id,
         activo: document.getElementById('atalla-act-' + t.id).checked
       }));
