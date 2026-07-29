@@ -260,6 +260,37 @@ async function main() {
   );
 
   // ==========================================================================
+  // Agregado despues de que este bug se escapara a las DOS rejas: la de paridad
+  // no pide este endpoint, y la primera version de esta verificacion tampoco. El
+  // filtro de /config devolvia 1 tela de 12 y CERO tallas de 16, asi que la
+  // pantalla de Configuracion salia con la lista de tallas vacia.
+  console.log('');
+  console.log(SEP);
+  console.log('  3b. PANTALLA DE CONFIGURACION  —  el endpoint que la alimenta');
+  console.log(SEP);
+
+  const tallasEnBase = Number(await unoDesdeDisco('SELECT COUNT(*) FROM talla;'));
+  const cfg = await http('GET', `/api/colegios/${encodeURIComponent(colegioId)}/config`);
+  const nCfgTelas = Array.isArray(cfg.json?.telas) ? cfg.json.telas.length : -1;
+  const nCfgTallas = Array.isArray(cfg.json?.tallas) ? cfg.json.tallas.length : -1;
+
+  anotar(
+    'GET /api/colegios/:id/config trae TODAS las telas visibles',
+    nCfgTelas === telasEnBase,
+    `devolvio ${nCfgTelas} telas, en la base hay ${telasEnBase}. ` +
+      (nCfgTelas === 1 ? 'Devolvio solo el tartan: el filtro sigue sin el IS NULL.' : 'Correcto.')
+  );
+
+  anotar(
+    'GET /api/colegios/:id/config trae TODAS las tallas',
+    nCfgTallas === tallasEnBase,
+    `devolvio ${nCfgTallas} tallas, en la base hay ${tallasEnBase}. ` +
+      (nCfgTallas === 0
+        ? 'CERO: es el bug que dejaba la pestaña de tallas vacia.'
+        : 'Correcto: la lista de tallas de la pantalla no sale vacia.')
+  );
+
+  // ==========================================================================
   console.log('');
   console.log(SEP);
   console.log("  4. CREACION  —  el literal 'default-colegio' y el colegio obligatorio");
