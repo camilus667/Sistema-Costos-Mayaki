@@ -32,6 +32,14 @@ api.put('/configuracion', async (c) => {
   if (mermaPorcentajeEstandar !== undefined) await setSystemConfig(db, 'merma_porcentaje_estandar', String(mermaPorcentajeEstandar));
   if (tallaDefecto !== undefined) await setSystemConfig(db, 'talla_defecto', String(tallaDefecto));
 
+  // FASE 3. El check de impuestos y el descuento sin factura.
+  if (body.impuestosActivos !== undefined) {
+    await setSystemConfig(db, 'impuestos_activos', body.impuestosActivos ? 'true' : 'false');
+  }
+  if (body.descuentoSinFactura !== undefined) {
+    await setSystemConfig(db, 'descuento_sin_factura', String(body.descuentoSinFactura));
+  }
+
   return c.json({ success: true, message: 'Configuración general del sistema actualizada exitosamente' });
 });
 

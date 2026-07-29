@@ -527,6 +527,10 @@ export function ensamblarInputs(
     precioVenta: precioVentaBs,
     // Fraccion, ya convertida. Ver `tasaIvaComoFraccion`.
     tasaIva: ctx.tasaIvaFraccion,
+
+    // FASE 3. Solo afectan el lado del precio; el costo neto nunca lleva IVA.
+    impuestosActivos: ctx.sysConfig.impuestosActivos,
+    descuentoSinFactura: ctx.sysConfig.descuentoSinFactura,
   };
 
   const meta: MetaCosteo = {

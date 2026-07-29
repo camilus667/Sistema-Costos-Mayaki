@@ -80,6 +80,26 @@ export interface CalculoInputs {
 
   precioVenta?: number | null;
   tasaIva?: number;
+
+  // ------------------------------------------------------------------------
+  // FASE 3 — impuestos. ADITIVO: nada de esto altera los campos existentes.
+  // ------------------------------------------------------------------------
+
+  /**
+   * Si los impuestos se consideran del lado del PRECIO. Default false, decidido
+   * con el usuario el 28-jul-2026.
+   *
+   * Nunca toca el lado del costo. `costoUnitarioNeto` se calcula siempre sin IVA,
+   * porque el IVA de compras es credito fiscal recuperable en el regimen general
+   * boliviano: meterlo al costo lo sobreestima ~13% y subestima el margen.
+   */
+  impuestosActivos?: boolean;
+
+  /**
+   * Descuento que se aplica cuando la venta va SIN factura. 0.10 en Cambridge.
+   * Los precios de `precio_venta` son precios de lista CON factura.
+   */
+  descuentoSinFactura?: number;
 }
 
 export interface CalculoResultado {
@@ -95,6 +115,40 @@ export interface CalculoResultado {
   costoTotal: number;
   utilidadNeta: number | null;
   margenPorcentaje: number | null;
+
+  // ------------------------------------------------------------------------
+  // FASE 3 — la vista correcta. Convive con los campos de arriba durante la
+  // transicion; `costoTotal`, `iva`, `utilidadNeta` y `margenPorcentaje` siguen
+  // devolviendo exactamente lo mismo que antes para no mover ninguna pantalla.
+  // ------------------------------------------------------------------------
+
+  /**
+   * El costo unitario de verdad: SIN IVA. Es identico a `costoAntesImpuestos`, y
+   * existe con nombre propio porque ese nombre miente — sugiere que falta sumarle
+   * un impuesto, cuando en realidad ya es el costo completo. El IVA de compras es
+   * credito fiscal recuperable, no costo.
+   */
+  costoUnitarioNeto: number;
+
+  /**
+   * Lo que queda en el bolsillo por canal, sobre el precio de lista.
+   *
+   * El IVA boliviano es "por dentro": el 13% se calcula sobre el precio bruto. Con
+   * factura, de 100 Bs entran 100 y se deben 13 de debito fiscal, quedan 87. Sin
+   * factura se descuenta el 10%, entran 90 y no se debe nada, quedan 90.
+   *
+   * A primera vista sin factura gana por 3 Bs. Pero eso ignora el credito fiscal:
+   * la venta facturada permite usar el credito de las compras facturadas, que en
+   * la venta sin factura queda inutilizable. El descuento del 10% esta calibrado
+   * casi al punto de indiferencia, y que canal conviene depende de que proporcion
+   * de las COMPRAS esta facturada — dato que el sistema todavia no guarda.
+   *
+   * Con `impuestosActivos` en false, los dos son el precio de lista sin ajustar.
+   */
+  ingresoNetoConFactura: number | null;
+  ingresoNetoSinFactura: number | null;
+  margenConFactura: number | null;
+  margenSinFactura: number | null;
   /**
    * Condiciones que antes se resolvian devolviendo 0 en silencio. No se lanza
    * excepcion porque hoy la ausencia de peso significa dos cosas distintas en
@@ -234,6 +288,48 @@ export function calcularCostoTotal(inputs: CalculoInputs): CalculoResultado {
     margenPorcentaje = out(un.div(pv).times(100));
   }
 
+  // ---------- FASE 3: la vista correcta ----------
+  //
+  // El costo neto es `costoAntesImpuestos` sin mas: el IVA de compras es credito
+  // fiscal recuperable y no pertenece al costo. `costoTotal`, que le suma el 13%,
+  // queda arriba solo para que ninguna pantalla se mueva durante la transicion.
+  const costoUnitarioNeto = costoAntesImpuestos;
+
+  let ingresoNetoConFactura: number | null = null;
+  let ingresoNetoSinFactura: number | null = null;
+  let margenConFactura: number | null = null;
+  let margenSinFactura: number | null = null;
+
+  if (inputs.precioVenta != null && inputs.precioVenta > 0) {
+    const pv = D(inputs.precioVenta);
+    const impuestos = inputs.impuestosActivos === true;
+    const descuento =
+      inputs.descuentoSinFactura != null ? D(inputs.descuentoSinFactura) : new Decimal(0);
+
+    // Con factura: el debito fiscal va POR DENTRO del precio, el 13% se calcula
+    // sobre el bruto. De 100 quedan 87, no 88,50. Con el check apagado no se
+    // descuenta nada y el ingreso es el precio de lista.
+    const netoCon = impuestos ? pv.times(new Decimal(1).minus(tasa)) : pv;
+
+    // Sin factura: descuento comercial y sin debito fiscal. El descuento se aplica
+    // aunque el check de impuestos este apagado, porque es un descuento de precio,
+    // no un impuesto: si no facturas, resignas ese 10% de ingreso igual.
+    const netoSin = pv.times(new Decimal(1).minus(descuento));
+
+    // NOTA sobre el denominador: estos margenes se calculan sobre el ingreso
+    // efectivamente cobrado, no sobre el precio de lista. Difiere a proposito del
+    // `margenPorcentaje` de arriba, que divide por el precio bruto. Medir el
+    // margen contra plata que nunca entra al bolsillo sobreestima la rentabilidad.
+    ingresoNetoConFactura = out(netoCon);
+    ingresoNetoSinFactura = out(netoSin);
+    margenConFactura = netoCon.isZero()
+      ? null
+      : out(netoCon.minus(costoUnitarioNeto).div(netoCon).times(100));
+    margenSinFactura = netoSin.isZero()
+      ? null
+      : out(netoSin.minus(costoUnitarioNeto).div(netoSin).times(100));
+  }
+
   return {
     pesoConMerma: out(pesoConMerma),
     costoTela: out(costoTela),
@@ -247,6 +343,12 @@ export function calcularCostoTotal(inputs: CalculoInputs): CalculoResultado {
     costoTotal: out(costoTotal),
     utilidadNeta,
     margenPorcentaje,
+
+    costoUnitarioNeto: out(costoUnitarioNeto),
+    ingresoNetoConFactura,
+    ingresoNetoSinFactura,
+    margenConFactura,
+    margenSinFactura,
     diagnostico: {
       sinBaseDeTela,
       sinPrecioDeTela,

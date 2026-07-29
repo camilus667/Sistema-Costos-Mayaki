@@ -467,3 +467,114 @@ describe('ensamblarInputs', () => {
     expect(meta.faltantes.join(' ')).toContain('adquisicion');
   });
 });
+
+// ---------------------------------------------------------------------------
+// FASE 3 — impuestos y canal de venta
+// ---------------------------------------------------------------------------
+
+/** Caso de numeros redondos: costo 50, precio de lista 100, IVA 13%, descuento 10%. */
+const CANAL: CalculoInputs = {
+  costoManoObra: 50,
+  precioVenta: 100,
+  tasaIva: 0.13,
+  descuentoSinFactura: 0.1,
+};
+
+describe('Fase 3 — el costo neto no lleva IVA', () => {
+  it('costoUnitarioNeto es el costo sin IVA, identico a costoAntesImpuestos', () => {
+    const r = calcularCostoTotal(CANAL);
+    expect(r.costoUnitarioNeto).toBe(50);
+    expect(r.costoUnitarioNeto).toBe(r.costoAntesImpuestos);
+  });
+
+  it('el costoTotal viejo sobreestima el costo un 13%', () => {
+    // El IVA de compras es credito fiscal recuperable en el regimen general
+    // boliviano. Meterlo al costo lo infla y subestima el margen, lo que puede
+    // llevar a rechazar negocio rentable o a sobre-preciar.
+    const r = calcularCostoTotal(CANAL);
+    expect(r.costoTotal).toBe(56.5);
+    expect(r.costoTotal - r.costoUnitarioNeto).toBe(6.5);
+  });
+
+  it('ADITIVO: los campos viejos no se movieron ni un centavo', () => {
+    // Garantia de que la Fase 3 se puede desplegar sin que ninguna pantalla
+    // cambie de numero. La reja de paridad tiene que seguir en cero diferencias.
+    const r = calcularCostoTotal(CANAL);
+    expect(r.costoAntesImpuestos).toBe(50);
+    expect(r.iva).toBe(6.5);
+    expect(r.costoTotal).toBe(56.5);
+    expect(r.utilidadNeta).toBe(43.5);
+    expect(r.margenPorcentaje).toBe(43.5);
+  });
+});
+
+describe('Fase 3 — ingreso neto por canal', () => {
+  it('con el check apagado, el ingreso con factura es el precio de lista', () => {
+    // Default OFF, decidido con el usuario el 28-jul-2026.
+    const r = calcularCostoTotal({ ...CANAL, impuestosActivos: false });
+    expect(r.ingresoNetoConFactura).toBe(100);
+  });
+
+  it('con el check prendido, el IVA va POR DENTRO: de 100 quedan 87, no 88,50', () => {
+    // El 13% boliviano se calcula sobre el precio bruto, no se le suma. Dividir
+    // por 1,13 daria 88,50 y sobreestimaria el ingreso en 1,50 por cada 100.
+    const r = calcularCostoTotal({ ...CANAL, impuestosActivos: true });
+    expect(r.ingresoNetoConFactura).toBe(87);
+    expect(r.ingresoNetoConFactura).not.toBe(88.5);
+  });
+
+  it('el descuento sin factura se aplica aunque el check este apagado', () => {
+    // Es un descuento de precio, no un impuesto: si no facturas resignas ese 10%
+    // de ingreso igual, independientemente de como se modelen los impuestos.
+    expect(calcularCostoTotal({ ...CANAL, impuestosActivos: false }).ingresoNetoSinFactura).toBe(90);
+    expect(calcularCostoTotal({ ...CANAL, impuestosActivos: true }).ingresoNetoSinFactura).toBe(90);
+  });
+
+  it('sin factura entra MAS plata que con factura, por 3 Bs sobre 100', () => {
+    // Y esa es la trampa: la comparacion parece favorecer no facturar, pero
+    // ignora el credito fiscal de las compras, que solo se aprovecha contra el
+    // debito fiscal de las ventas facturadas. El descuento del 10% esta calibrado
+    // casi al punto de indiferencia.
+    const r = calcularCostoTotal({ ...CANAL, impuestosActivos: true });
+    expect(r.ingresoNetoSinFactura! - r.ingresoNetoConFactura!).toBe(3);
+  });
+
+  it('los margenes se miden sobre el ingreso cobrado, no sobre el precio de lista', () => {
+    const r = calcularCostoTotal({ ...CANAL, impuestosActivos: true });
+    // (87 - 50) / 87 y (90 - 50) / 90
+    expect(r.margenConFactura).toBe(42.53);
+    expect(r.margenSinFactura).toBe(44.44);
+  });
+
+  it('el margen que reporta el sistema hoy cae ENTRE los dos reales', () => {
+    // Los dos errores se compensan parcialmente: el motor infla el costo con IVA
+    // (subestima el margen) y a la vez no netea el precio (lo sobreestima). Por eso
+    // nada parecia roto. Este test fija la magnitud de ese enmascaramiento.
+    const r = calcularCostoTotal({ ...CANAL, impuestosActivos: true });
+    expect(r.margenPorcentaje).toBe(43.5);
+    expect(r.margenPorcentaje!).toBeGreaterThan(r.margenConFactura!);
+    expect(r.margenPorcentaje!).toBeLessThan(r.margenSinFactura!);
+  });
+
+  it('sin precio de venta, los cuatro campos de canal son null', () => {
+    const r = calcularCostoTotal({ costoManoObra: 50, impuestosActivos: true });
+    expect(r.ingresoNetoConFactura).toBeNull();
+    expect(r.ingresoNetoSinFactura).toBeNull();
+    expect(r.margenConFactura).toBeNull();
+    expect(r.margenSinFactura).toBeNull();
+  });
+});
+
+describe('Fase 3 — defaults de configuracion', () => {
+  it('impuestos apagados y descuento 0,10 cuando la base no responde', () => {
+    // getSystemConfig atrapa el error de la consulta y devuelve los defaults, asi
+    // que un db que falla sirve para verificarlos sin base.
+    const dbRoto = { select: () => { throw new Error('sin base'); } };
+    return import('../configService').then(async (m) => {
+      const cfg = await m.getSystemConfig(dbRoto);
+      expect(cfg.impuestosActivos).toBe(false);
+      expect(cfg.descuentoSinFactura).toBe(0.1);
+      expect(cfg.tasaIva).toBe(13);
+    });
+  });
+});
