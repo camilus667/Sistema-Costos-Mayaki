@@ -24,7 +24,26 @@ api.get('/configuracion', async (c) => {
 // PUT /api/inputs/configuracion - Actualizar configuración general del sistema en DB
 api.put('/configuracion', async (c) => {
   const db = (c as any).db;
-  const body = await c.req.json();
+
+  // Sin este try/catch, un cuerpo malformado daba "Internal Server Error" crudo,
+  // sin decir que estaba mal. Lo destapo un curl con las comillas comidas por
+  // PowerShell: el 500 no distinguia entre "tu JSON esta roto" y "el servidor
+  // fallo", que son dos problemas con dos soluciones distintas.
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch (e) {
+    return c.json(
+      {
+        success: false,
+        error:
+          'El cuerpo de la peticion tiene que ser JSON valido. En PowerShell conviene ' +
+          'Invoke-RestMethod con -Body entre comillas simples, porque curl con comillas ' +
+          'escapadas se rompe.',
+      },
+      400
+    );
+  }
   const { tasaIva, volumenMensualProduccion, mermaPorcentajeEstandar, tallaDefecto } = body;
 
   if (tasaIva !== undefined) await setSystemConfig(db, 'tasa_iva', String(tasaIva));
@@ -52,7 +71,14 @@ api.put('/configuracion', async (c) => {
     );
   }
 
-  return c.json({ success: true, message: 'Configuración general del sistema actualizada exitosamente' });
+  // Se devuelve la configuracion resultante, no solo un mensaje de exito. Asi la
+  // respuesta misma confirma que el valor quedo guardado, en vez de obligar a un
+  // GET aparte para verificarlo.
+  return c.json({
+    success: true,
+    message: 'Configuración general del sistema actualizada exitosamente',
+    data: await getSystemConfig(db),
+  });
 });
 
 let inputsExcelCache: any = null;
