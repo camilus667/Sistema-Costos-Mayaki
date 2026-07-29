@@ -205,9 +205,13 @@ api.post('/calcular', zValidator('json', calcularSchema), async (c) => {
 // Ahora delega en el motor y el Excel deja de participar del costeo.
 //
 // El shape se conserva campo por campo: el dashboard lee
-// `json.data[].tallas[codigo].{costoBruto,precioVenta,costoAntesImp,costoTotal,
-// utilidadNeta,margenPorcentaje,inventarioUnidades,costoInventario,
+// `json.data[].tallas[codigo].{costoBruto,precioVenta,costoUnitarioNeto,
+// ingresoNetoConFactura,ingresoNetoSinFactura,utilidadConFactura,utilidadSinFactura,
+// margenConFactura,margenSinFactura,inventarioUnidades,costoInventario,
 // precioInventario}` y `json.tallas[].codigo`.
+//
+// FASE 3: desaparecieron costoAntesImp, costoTotal, utilidadNeta y margenPorcentaje.
+// El costo ya no lleva IVA y el margen se parte por canal de venta.
 api.get('/matriz-consolidada', async (c) => {
   try {
     const db = (c as any).db;

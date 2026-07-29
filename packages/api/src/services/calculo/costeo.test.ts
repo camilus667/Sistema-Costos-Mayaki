@@ -340,6 +340,8 @@ function ctxDePrueba(over: Partial<ContextoCosteo> = {}): ContextoCosteo {
       volumenMensualProduccion: 1800,
       mermaPorcentajeEstandar: 8,
       tallaDefecto: '16/34',
+      impuestosActivos: false,
+      descuentoSinFactura: 0.1,
     },
     tasaIvaFraccion: 0.13,
     totalIndirectosMensual: 21480,

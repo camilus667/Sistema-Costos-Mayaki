@@ -322,9 +322,9 @@ export function calcularCostoTotal(inputs: CalculoInputs): CalculoResultado {
     const netoSin = pv.times(new Decimal(1).minus(descuento));
 
     // NOTA sobre el denominador: estos margenes se calculan sobre el ingreso
-    // efectivamente cobrado, no sobre el precio de lista. Difiere a proposito del
-    // `margenPorcentaje` de arriba, que divide por el precio bruto. Medir el
-    // margen contra plata que nunca entra al bolsillo sobreestima la rentabilidad.
+    // efectivamente cobrado, no sobre el precio de lista. El `margenPorcentaje`
+    // que existia antes dividia por el precio bruto, y eso sobreestima la
+    // rentabilidad: mide el margen contra plata que nunca entra al bolsillo.
     ingresoNetoConFactura = out(netoCon);
     ingresoNetoSinFactura = out(netoSin);
     utilidadConFactura = out(netoCon.minus(costoUnitarioNeto));
@@ -345,8 +345,6 @@ export function calcularCostoTotal(inputs: CalculoInputs): CalculoResultado {
     costoBruto: out(costoBruto),
     costoFijosVariable: out(costoFijosVariable),
     costoIndirecto: out(costoIndirecto),
-    costoAntesImpuestos: out(costoAntesImpuestos),
-    iva: out(iva),
     costoUnitarioNeto: out(costoUnitarioNeto),
     ingresoNetoConFactura,
     ingresoNetoSinFactura,
