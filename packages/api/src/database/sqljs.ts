@@ -240,6 +240,20 @@ export async function getDb() {
   try { dbInstance.run('ALTER TABLE "producto" ADD COLUMN "tela_id" TEXT;'); } catch (e) {}
   try { dbInstance.run('ALTER TABLE "tela" ADD COLUMN "orden" INTEGER DEFAULT 0;'); } catch (e) {}
 
+  // Integridad de la asignacion de accesorios a prendas (detalle_acc).
+  // Las tablas se crean con "CREATE TABLE IF NOT EXISTS", asi que agregar la
+  // restriccion al DDL no afectaria a bases ya existentes. Un indice unico si
+  // se puede crear sobre una tabla que ya existe, y por eso va aparte.
+  try {
+    dbInstance.run('CREATE UNIQUE INDEX IF NOT EXISTS "idx_detalle_acc_prod_acc" ON "detalle_acc" ("producto_id", "accesorio_id");');
+  } catch (e) {
+    // No se silencia: si falla es porque ya hay lineas duplicadas y el costo de
+    // esas prendas esta inflado. Hay que resolverlas a mano antes de continuar.
+    console.warn('⚠️ No se pudo crear el indice unico de detalle_acc. Probablemente existan asignaciones duplicadas (producto_id + accesorio_id) que inflan el costo. Revisar antes de seguir.', e);
+  }
+  try { dbInstance.run('CREATE INDEX IF NOT EXISTS "idx_detalle_acc_producto" ON "detalle_acc" ("producto_id");'); } catch (e) {}
+  try { dbInstance.run('CREATE INDEX IF NOT EXISTS "idx_detalle_acc_accesorio" ON "detalle_acc" ("accesorio_id");'); } catch (e) {}
+
   dbDrizzle = drizzle(dbInstance, { schema: schemaModule });
 
   let rowCount = 0;
