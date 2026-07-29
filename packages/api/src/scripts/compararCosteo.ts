@@ -341,10 +341,21 @@ async function main() {
   const hCA = leerHoja('CostoAntesImp');
   const hCT = leerHoja('CostoTotal');
 
+  // Se detecta que implementacion esta viva de verdad. Sin esto, un server sin
+  // reiniciar o un git pull faltante dan un verde enganoso: el arnes compara
+  // contra el codigo viejo, no encuentra nada movido, y reporta la reja en verde
+  // cuando en realidad no verifico nada. Paso una vez.
+  const huellas: Record<Banda, 'unificada' | 'heredada' | 'sin datos'> = {
+    consolidada: 'sin datos',
+    prenda: 'sin datos',
+    desglose: 'sin datos',
+  };
+
   // ---------- VIEJO: matriz-consolidada ----------
   const viejoConsolidada = new Map<string, Partial<Record<Campo, number>>>();
   try {
     const j = await traer(`/api/calculo/matriz-consolidada?colegioId=${encodeURIComponent(colegioId)}`);
+    huellas.consolidada = j.implementacion === 'unificada' ? 'unificada' : 'heredada';
     for (const row of j.data || []) {
       for (const [codigo, v] of Object.entries<any>(row.tallas || {})) {
         viejoConsolidada.set(`${row.itemNumero}_${codigo}`, {
@@ -362,17 +373,6 @@ async function main() {
   }
 
   // ---------- VIEJO: matriz-prenda ----------
-  //
-  // Se detecta que implementacion esta viva de verdad. Sin esto, un server sin
-  // reiniciar o un git pull faltante dan un verde enganoso: el arnes compara
-  // contra el codigo viejo, no encuentra nada movido, y reporta la reja en verde
-  // cuando en realidad no verifico nada. Paso una vez.
-  const huellas: Record<Banda, 'unificada' | 'heredada' | 'sin datos'> = {
-    consolidada: 'sin datos',
-    prenda: 'sin datos',
-    desglose: 'sin datos',
-  };
-
   const viejoPrenda = new Map<string, Partial<Record<Campo, number>>>();
   for (const p of ctx.productos) {
     try {
@@ -413,6 +413,10 @@ async function main() {
         `/api/inputs/desglose-inteligente-producto?colegioId=${encodeURIComponent(colegioId)}` +
         `&tallaId=${encodeURIComponent(t.id)}`
       );
+      // `seOfrece` solo existe en la version unificada.
+      if (huellas.desglose === 'sin datos' && (j.data || []).length > 0) {
+        huellas.desglose = j.data[0]?.seOfrece !== undefined ? 'unificada' : 'heredada';
+      }
       for (const p of j.data || []) {
         const cod = p?.tallaActual?.codigo;
         if (!cod || cod !== t.codigo) continue; // devolvio otra talla, no comparable

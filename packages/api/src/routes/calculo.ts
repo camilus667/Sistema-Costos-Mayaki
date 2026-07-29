@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { eq, and, asc } from 'drizzle-orm';
 import { calcularCostoTotal } from '../services/calculo/costoTotal.service';
-import { costearPrendaTodasLasTallas } from '../services/calculo/costeoInputs.service';
-import { productos, tallas, pesoMateriaPrima, manoObra, telas, preciosVenta, detalleAccesorio, accesorios, inventario, costosIndirectos } from '../database/schema';
+import { costearLote, costearPrendaTodasLasTallas } from '../services/calculo/costeoInputs.service';
+import { productos, tallas, preciosVenta, inventario } from '../database/schema';
 import XLSX from 'xlsx';
 import { findExcelPath } from '../scripts/seed';
 import { saveDbToDisk } from '../database/sqljs';
@@ -130,124 +130,122 @@ api.post('/calcular', zValidator('json', calcularSchema), async (c) => {
   return c.json({ success: true, data: resultado });
 });
 
-import { getSystemConfig } from '../services/configService';
 
-// GET /api/calculo/matriz-consolidada - Replicando las 9 pestañas del Excel con cálculo 100% dinámico DB
+// GET /api/calculo/matriz-consolidada - Grilla completa de prendas x tallas
+//
+// UNIFICADO (Fase 2). Antes esta ruta casi no calculaba: leia los totales ya
+// hechos del Excel (`costoBruto`, `costoAntesImp`, `costoTotal`) y solo caia en un
+// calculo propio cuando el Excel callaba. Ademas despejaba el costo de tela por
+// resta y derivaba el costo fijo como `excelCa - cb`, o sea heredaba de la
+// planilla un fijo por prenda que no tiene por que coincidir con el que sale del
+// pool de indirectos.
+//
+// Consecuencia: la base de datos no era autoritativa. Editar un peso o un precio
+// de tela no movia la grilla mientras el Excel tuviera un valor para esa celda.
+//
+// El usuario fallo el 29-jul-2026 que gana el numero nuevo (causa 2 del arnes).
+// Ahora delega en el motor y el Excel deja de participar del costeo.
+//
+// El shape se conserva campo por campo: el dashboard lee
+// `json.data[].tallas[codigo].{costoBruto,precioVenta,costoAntesImp,costoTotal,
+// utilidadNeta,margenPorcentaje,inventarioUnidades,costoInventario,
+// precioInventario}` y `json.tallas[].codigo`.
 api.get('/matriz-consolidada', async (c) => {
-  const db = (c as any).db;
-  const colegioId = c.req.query('colegioId');
-  const sysConfig = await getSystemConfig(db);
-
-  let prodQuery = db.select().from(productos);
-  if (colegioId && colegioId !== 'all') {
-    prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
-  }
-  const allProds = await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero));
-  const allTallas = await db.select().from(tallas).orderBy(asc(tallas.orden));
-
-  let pesos: any[] = [];
-  let moList: any[] = [];
-  let precios: any[] = [];
-  let invList: any[] = [];
   try {
-    pesos = await db.select().from(pesoMateriaPrima);
-    moList = await db.select().from(manoObra);
-    precios = await db.select().from(preciosVenta);
-    invList = await db.select().from(inventario);
-  } catch (e) {}
+    const db = (c as any).db;
+    const colegioIdRaw = c.req.query('colegioId');
+    const colegioId = colegioIdRaw && colegioIdRaw !== 'all' ? colegioIdRaw : undefined;
 
-  const pesoMap = new Map<string, any>();
-  pesos.forEach((p: any) => pesoMap.set(`${p.productoId}_${p.tallaId}`, p));
+    const { ctx, filas } = await costearLote(db, { colegioId });
 
-  const moMap = new Map<string, number>();
-  moList.forEach((m: any) => moMap.set(`${m.productoId}_${m.tallaId}`, m.costoBs));
+    // El inventario no es un concepto de costeo, se consulta aparte.
+    let invList: any[] = [];
+    try {
+      invList = await db.select().from(inventario);
+    } catch (e) {}
+    const invMap = new Map<string, number>();
+    invList.forEach((i: any) => invMap.set(`${i.productoId}_${i.tallaId}`, i.cantidad));
 
-  const precioMap = new Map<string, number>();
-  precios.forEach((pr: any) => precioMap.set(`${pr.productoId}_${pr.tallaId}`, pr.precioBs));
+    // PRESERVADO A PROPOSITO: la lista de tallas se trae global, sin filtro de
+    // colegio, igual que antes. Es la cabecera de columnas de la grilla, y
+    // filtrarla cambiaria la forma de la tabla. Corresponde a la Fase 6.
+    const allTallas = await db.select().from(tallas).orderBy(asc(tallas.orden));
 
-  const invMap = new Map<string, number>();
-  invList.forEach((inv: any) => invMap.set(`${inv.productoId}_${inv.tallaId}`, inv.cantidad));
+    const porProducto = new Map<string, any[]>();
+    for (const f of filas) {
+      const arr = porProducto.get(f.meta.productoId) || [];
+      arr.push(f);
+      porProducto.set(f.meta.productoId, arr);
+    }
 
-  // Dynamic tarifa calculation from costosIndirectos DB & System Config
-  let indirectosList: any[] = [];
-  try { indirectosList = await db.select().from(costosIndirectos); } catch (e) {}
-  const totalIndirectos = indirectosList.reduce((acc: number, ci: any) => acc + (Number(ci.montoMensual) || 0), 0);
-  const prendasProducidasMes = sysConfig.volumenMensualProduccion;
-  const tarifaPunto = prendasProducidasMes > 0 ? (totalIndirectos / (prendasProducidasMes * 10)) : 0;
-
-  const excelData = loadExcelMatrices();
-
-  const gridData = allProds.map((prod: any) => {
-    const rowObj: any = {
-      productoId: prod.id,
-      itemNumero: prod.itemNumero,
-      descripcion: prod.descripcion,
-      tallas: {}
-    };
-
-    const costoAcc = excelData ? (excelData.itemAccMap.get(prod.itemNumero) || 0) : 0;
-
-    allTallas.forEach((talla: any) => {
-      const key = `${prod.itemNumero}_${talla.codigo}`;
-      const pRec = pesoMap.get(`${prod.id}_${talla.id}`);
-      const moValDb = moMap.get(`${prod.id}_${talla.id}`);
-      const pvValDb = precioMap.get(`${prod.id}_${talla.id}`);
-      const invValDb = invMap.get(`${prod.id}_${talla.id}`);
-
-      let costoMO = moValDb ?? 0;
-
-      const pesoConMerma = pRec?.pesoGramos || (pRec?.pesoExactoGramos ? pRec.pesoExactoGramos * (1 + sysConfig.mermaPorcentajeEstandar / 100) : 0);
-      let costoTela = 0;
-
-      const excelCb = excelData ? (excelData.costoBruto.get(key) || 0) : 0;
-      let cb = 0;
-      if (excelCb > 0) {
-        cb = excelCb;
-        if (costoMO > 0 && costoAcc > 0) {
-          costoTela = Math.max(0, cb - costoMO - costoAcc);
-        }
-      } else {
-        cb = costoTela + costoAcc + costoMO;
-      }
-
-      const excelCa = excelData ? (excelData.costoAntesImp.get(key) || 0) : 0;
-      const dynamicCostoFijo = (prod.factorComplejidad || 0) * tarifaPunto;
-      const fijosXprendaVal = excelCa > 0 ? (excelCa - cb) : dynamicCostoFijo;
-
-      const ca = cb > 0 ? (cb + fijosXprendaVal) : 0;
-      const excelCt = excelData ? (excelData.costoTotal.get(key) || 0) : 0;
-      const ct = ca > 0 ? parseFloat((ca * sysConfig.factorIva).toFixed(2)) : (excelCt > 0 ? excelCt : 0);
-
-      const pv = pvValDb !== undefined && pvValDb !== null && pvValDb > 0 ? pvValDb : (excelData ? (excelData.precioVenta.get(key) || 0) : 0);
-
-      const un = pv > 0 && ct > 0 ? (pv - ct) : 0;
-      const mg = pv > 0 && un !== 0 ? (un / pv) * 100 : 0;
-
-      const inv = invValDb !== undefined && invValDb !== null ? invValDb : (excelData ? (excelData.inventarioUnidades.get(key) || 0) : 0);
-      const ci = inv * ct;
-      const pi = inv * (pv > 0 ? pv : ct);
-
-      rowObj.tallas[talla.codigo] = {
-        costoBruto: parseFloat(cb.toFixed(2)),
-        precioVenta: parseFloat(pv.toFixed(2)),
-        costoAntesImp: parseFloat(ca.toFixed(2)),
-        costoTotal: parseFloat(ct.toFixed(2)),
-        utilidadNeta: parseFloat(un.toFixed(2)),
-        margenPorcentaje: parseFloat(mg.toFixed(2)),
-        inventarioUnidades: inv,
-        costoInventario: parseFloat(ci.toFixed(2)),
-        precioInventario: parseFloat(pi.toFixed(2)),
-      };
+    // Celda de una combinacion que no se ofrece. Se devuelve en cero, con el
+    // inventario si lo hubiera, para conservar el mismo juego de claves que
+    // antes: el dashboard recorre todas las tallas de la cabecera.
+    const celdaVacia = () => ({
+      costoBruto: 0,
+      precioVenta: 0,
+      costoAntesImp: 0,
+      costoTotal: 0,
+      utilidadNeta: 0,
+      margenPorcentaje: 0,
+      inventarioUnidades: 0,
+      costoInventario: 0,
+      precioInventario: 0,
+      seOfrece: false,
     });
 
-    return rowObj;
-  });
+    const gridData = ctx.productos.map((prod: any) => {
+      const rowObj: any = {
+        productoId: prod.id,
+        itemNumero: prod.itemNumero,
+        descripcion: prod.descripcion,
+        tallas: {},
+      };
 
-  return c.json({
-    success: true,
-    tallas: allTallas.map((t: any) => ({ id: t.id, codigo: t.codigo, orden: t.orden })),
-    data: gridData,
-  });
+      const porTalla = new Map<string, any>();
+      for (const f of porProducto.get(prod.id) || []) porTalla.set(f.meta.tallaId, f);
+
+      for (const talla of allTallas) {
+        const inv = invMap.get(`${prod.id}_${talla.id}`) ?? 0;
+        const f = porTalla.get(talla.id);
+
+        // Regla decidida: sin precio de venta vigente la prenda no se ofrece en
+        // esa talla, asi que no se le prorratea costo fijo a algo que no existe.
+        if (!f || !f.meta.seOfrece) {
+          rowObj.tallas[talla.codigo] = { ...celdaVacia(), inventarioUnidades: inv };
+          continue;
+        }
+
+        const r = f.resultado;
+        const pv = f.meta.precioVentaBs ?? 0;
+        rowObj.tallas[talla.codigo] = {
+          costoBruto: r.costoBruto,
+          precioVenta: r2(pv),
+          costoAntesImp: r.costoAntesImpuestos,
+          costoTotal: r.costoTotal,
+          utilidadNeta: r.utilidadNeta ?? 0,
+          margenPorcentaje: r.margenPorcentaje ?? 0,
+          inventarioUnidades: inv,
+          costoInventario: r2(inv * r.costoTotal),
+          precioInventario: r2(inv * (pv > 0 ? pv : r.costoTotal)),
+          seOfrece: true,
+        };
+      }
+
+      return rowObj;
+    });
+
+    return c.json({
+      success: true,
+      tallas: allTallas.map((t: any) => ({ id: t.id, codigo: t.codigo, orden: t.orden })),
+      // Huella para el arnes de paridad: distingue esta version de la heredada.
+      implementacion: 'unificada',
+      data: gridData,
+    });
+  } catch (e: any) {
+    console.error('matriz-consolidada:', e);
+    return c.json({ success: false, error: e?.message || String(e) }, 500);
+  }
 });
 
 // PUT /api/calculo/precio-venta - Actualizar PrecioDeVenta directamente en la matriz

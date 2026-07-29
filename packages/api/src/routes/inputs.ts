@@ -5,6 +5,12 @@ import * as XLSX from 'xlsx';
 import { findExcelPath } from '../scripts/seed';
 import { saveDbToDisk } from '../database/sqljs';
 import { getSystemConfig, setSystemConfig } from '../services/configService';
+import { cargarContextoCosteo, ensamblarInputs } from '../services/calculo/costeoInputs.service';
+import { calcularCostoTotal } from '../services/calculo/costoTotal.service';
+
+/** Redondeo de presentacion. El motor ya redondea sus propias salidas. */
+const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
+const r4 = (n: number) => Math.round((Number(n) || 0) * 10000) / 10000;
 
 const api = new Hono();
 
@@ -353,7 +359,7 @@ api.get('/accesorios-matriz', async (c) => {
 
   const auxInfoMap = new Map<string, any>();
   const tablaAux = inputs ? inputs.tablaAuxiliarRows : [];
-  
+
   let dbAccs: any[] = [];
   try {
     dbAccs = await db.select().from(accesorios);
@@ -695,7 +701,7 @@ api.put('/peso-mat-prima', async (c) => {
     const [tallaObj] = await db.select().from(tallas).where(and(eq(tallas.colegioId, prod.colegioId), eq(tallas.codigo, tallaCodigo))).limit(1);
     if (tallaObj) {
       const mermaPct = typeof mermaPorcentaje === 'number' ? Number(mermaPorcentaje) : 8;
-      
+
       let pExacto = 0;
       let pConMerma = 0;
 
@@ -725,323 +731,181 @@ api.put('/peso-mat-prima', async (c) => {
   }
 });
 
-// GET /api/inputs/desglose-inteligente-producto - Matriz inteligente de costos por producto+talla
+// GET /api/inputs/desglose-inteligente-producto - Desglose de costos por producto+talla
+//
+// UNIFICADO (Fase 2). Antes este endpoint tenia su propia copia de la formula,
+// distinta de la del motor en tres cosas:
+//   1. Sacaba las CANTIDADES de accesorios del Excel por division inversa
+//      (costoDeLaCelda / costoUnitario), en vez de leer detalle_acc.
+//   2. Cuando no encontraba fila de mano de obra promediaba las tallas, y si
+//      tampoco habia usaba 15,00 Bs hardcodeados.
+//   3. Calculaba ivaBs y precioFinalConIvaBs por dos caminos independientes
+//      (tasaIva/100 y factorIva), asi que costoAntesImpuestos + ivaBs podia no
+//      dar precioFinalConIvaBs por 0,01 de redondeo.
+// Y no tenia noción de modoCosteo ni de precio_adquisicion, asi que devolvia
+// 7,84 Bs para la Chompa y el Chaleco donde el Excel dice hasta 147,84: un
+// subcosteo de 45 a 158 Bs por prenda. El usuario fallo el 29-jul-2026 que gana
+// el numero nuevo (causa 1 del arnes de paridad).
+//
+// Ahora delega en el motor. Los tres problemas desaparecen por construccion: los
+// accesorios salen de detalle_acc, no se fabrica nada, y el IVA sale de un solo
+// resultado coherente.
+//
+// El shape de la respuesta se conserva campo por campo, porque dashboard.html lee
+// estos nombres directo. Se agregan seOfrece y diagnostico, aditivos.
+//
 // Query params:
 //   colegioId: filtro de colegio (o 'all')
-//   tallaId:   (opcional) filtra el costo para esa talla específica
-//              Si se omite, devuelve la primera talla disponible de cada producto
+//   tallaId:   (opcional) talla para la que se costea. Si se omite, se aplica la
+//              cadena de fallback de siempre, conservada tal cual.
 api.get('/desglose-inteligente-producto', async (c) => {
-  const db = (c as any).db;
-  const colegioId = c.req.query('colegioId');
-  const tallaIdParam = c.req.query('tallaId') || null;
+  try {
+    const db = (c as any).db;
+    const colegioIdRaw = c.req.query('colegioId');
+    const colegioId = colegioIdRaw && colegioIdRaw !== 'all' ? colegioIdRaw : undefined;
+    const tallaIdParam = c.req.query('tallaId') || null;
 
-  let prodQuery = db.select().from(productos);
-  if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
-  const allProds = await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero));
+    const ctx = await cargarContextoCosteo(db, { colegioId });
+    const sysConfig = ctx.sysConfig;
 
-  const telasList   = await db.select().from(telas);
-  const accList     = await db.select().from(accesorios);
-  const moList      = await db.select().from(manoObra);
-  const indirectosList = await db.select().from(costosIndirectos);
-  const pesoList    = await db.select().from(pesoMateriaPrima);
-  const tallasList  = await db.select().from(tallas);
+    const data = ctx.productos.map((p: any) => {
+      const tallasColegio = ctx.tallasPorColegio.get(p.colegioId) || [];
 
-  const telaMap = new Map<string, any>();
-  telasList.forEach((t: any) => telaMap.set(t.id, t));
-
-  const tallaMap = new Map<string, any>();
-  tallasList.forEach((t: any) => tallaMap.set(t.id, t));
-
-  // Mapa: productoId -> [ { tallaId, pesoGramos, ... } ]
-  const pesoByProd = new Map<string, any[]>();
-  pesoList.forEach((r: any) => {
-    if (!pesoByProd.has(r.productoId)) pesoByProd.set(r.productoId, []);
-    pesoByProd.get(r.productoId)!.push(r);
-  });
-
-  // Mapa rápido: `productoId|tallaId` -> pesoGramos
-  const pesoPorProdTalla = new Map<string, number>();
-  pesoList.forEach((r: any) => {
-    const key = `${r.productoId}|${r.tallaId}`;
-    pesoPorProdTalla.set(key, r.pesoGramos ?? r.pesoConMerma ?? 0);
-  });
-
-  // Tallas activas del colegio (para poblar siempre el dropdown aunque no haya peso)
-  const tallasActivasColegio = tallasList
-    .filter((t: any) => t.activo !== false && (!colegioId || colegioId === 'all' || t.colegioId === colegioId))
-    .sort((a: any, b: any) => a.orden - b.orden);
-
-  // Mapa: productoId -> [ { tallaId, costoBs } ]
-  const moByProd = new Map<string, any[]>();
-  moList.forEach((m: any) => {
-    if (!moByProd.has(m.productoId)) moByProd.set(m.productoId, []);
-    moByProd.get(m.productoId)!.push(m);
-  });
-
-  const inputs = loadExcelInputs();
-  const accRows = inputs ? inputs.accRows : [];
-  const accHeaders = inputs ? inputs.accHeaders : [];
-
-  const auxMap = new Map<string, any>();
-  const auxRows = inputs ? inputs.tablaAuxiliarRows : [];
-  auxRows.forEach((r: any) => {
-    const code = Number(r[1]);
-    if (code > 0) {
-      const cantUd = Number(r[3]) || 1;
-      const costoUd = Number(r[4]) || Number(r[5]) || 0;
-      const costoUnit = Number(r[5]) || (cantUd > 0 ? costoUd / cantUd : 0);
-      auxMap.set(String(code), {
-        unidadCompra: r[2] ? String(r[2]).trim() : 'unidad',
-        costoUnitarioBs: parseFloat(costoUnit.toFixed(4))
+      // tallasDisponibles: todas las tallas activas del colegio, con el peso real
+      // si existe o null si no. El dashboard arma el selector con este arreglo.
+      const tallasDisponibles = tallasColegio.map((t: any) => {
+        const fila = ctx.pesoPorClave.get(`${p.id}_${t.id}`);
+        const pesoVal = fila ? (fila.pesoGramos ?? fila.pesoConMerma ?? 0) : null;
+        return {
+          tallaId: t.id,
+          codigo: t.codigo,
+          nombre: t.nombre,
+          orden: t.orden,
+          pesoGramos: pesoVal,
+          tienePesoReal: pesoVal !== null && pesoVal > 0,
+        };
       });
-    }
-  });
 
-  const itemAccUsageMap = new Map<number, Map<string, number>>();
-  if (accRows && accRows.length > 0) {
-    const auxHeaderIdx = accRows.findIndex((r: any) => r && r.some((c: any) => String(c).includes('UNIDAD DE COMPRA') || String(c).includes('COSTO Unitario')));
-    const matrixRows = accRows.slice(2, auxHeaderIdx !== -1 ? auxHeaderIdx : 30);
-
-    const parseItemNumbers = (val: any): number[] => {
-      if (typeof val === 'number') return [val];
-      const str = String(val).trim();
-      if (str.includes('-')) {
-        const parts = str.split('-').map((p: string) => parseInt(p.trim())).filter((p: number) => !isNaN(p));
-        if (parts.length === 2) {
-          const nums = [];
-          for (let i = parts[0]; i <= parts[1]; i++) nums.push(i);
-          return nums;
-        }
+      // Cadena de fallback de talla, conservada tal cual: el parametro, luego
+      // talla_defecto de configuracion, luego '16/34' hardcodeado, luego la
+      // primera con peso real, luego la primera activa.
+      let sel: any = null;
+      if (tallaIdParam) {
+        sel = tallasDisponibles.find((t: any) => t.tallaId === tallaIdParam) || null;
       }
-      const num = parseInt(str);
-      return !isNaN(num) ? [num] : [];
-    };
-
-    matrixRows.forEach((r: any) => {
-      if (r && r[1] !== undefined) {
-        const itemNums = parseItemNumbers(r[1]);
-        itemNums.forEach((itemNum) => {
-          if (itemNum > 0) {
-            if (!itemAccUsageMap.has(itemNum)) itemAccUsageMap.set(itemNum, new Map<string, number>());
-            const mapForProduct = itemAccUsageMap.get(itemNum)!;
-            accHeaders.forEach((h: string, idx: number) => {
-              const qty = Number(r[2 + idx]) || 0;
-              if (qty > 0) mapForProduct.set(h, qty);
-            });
-          }
-        });
+      if (!sel) {
+        const pref = String(sysConfig.tallaDefecto || '').trim().toLowerCase();
+        sel =
+          tallasDisponibles.find((t: any) => String(t.codigo).trim().toLowerCase() === pref) ||
+          tallasDisponibles.find((t: any) => String(t.codigo).trim() === '16/34') ||
+          tallasDisponibles.find((t: any) => t.tienePesoReal) ||
+          tallasDisponibles[0] ||
+          null;
       }
-    });
-  }
 
-  const sysConfig = await getSystemConfig(db);
+      const tallaObj = sel ? ctx.tallasPorId.get(sel.tallaId) : null;
 
-  let totalIndirectosMensual = indirectosList.reduce((acc: number, curr: any) => acc + (Number(curr.montoMensual) || 0), 0);
-  const prendasProducidasMes = sysConfig.volumenMensualProduccion;
-  const tarifaPuntoComplejidad = prendasProducidasMes > 0 ? (totalIndirectosMensual / (prendasProducidasMes * 10)) : 0;
+      // Prenda sin ninguna talla activa. Se devuelve el mismo shape en cero en
+      // vez de omitir la fila, para no romper el recorrido del dashboard.
+      if (!tallaObj) {
+        return {
+          productoId: p.id,
+          itemNumero: p.itemNumero,
+          descripcion: p.descripcion,
+          tallasDisponibles,
+          tallaActual: null,
+          tela: { nombre: 'Sin tela asignada', precioBsGramo: 0, pesoGramos: 0, costoTelaBs: 0 },
+          accesoriosIntervinientes: [],
+          subtotalAccesoriosBs: 0,
+          manoDeObra: { costoCorte: 0, costoConfeccion: 0, totalManoObraBs: 0 },
+          fijosEIndirectos: {
+            factorComplejidad: p.factorComplejidad || 1,
+            tarifaPuntoComplejidad: r4(ctx.tarifaPuntoComplejidad),
+            fijosXprenda: 0,
+            indirectosXprenda: 0,
+            totalFijosBs: 0,
+          },
+          costoDirectoTotalBs: 0,
+          costoAntesImpuestosBs: 0,
+          ivaBs: 0,
+          costoTotalProduccionBs: 0,
+          precioFinalConIvaBs: 0,
+          seOfrece: false,
+          diagnostico: { faltantes: ['La prenda no tiene ninguna talla activa en el colegio.'] },
+        };
+      }
 
-  const data = allProds.map((p: any) => {
-    const telaObj = p.telaId ? telaMap.get(p.telaId) : null;
-    const precioTelaBsG = telaObj ? (telaObj.precioBsG || (telaObj.precioCompra > 0 ? telaObj.precioCompra / 1000 : 0) || 0) : 0;
-    const nombreTela = telaObj ? telaObj.descripcion : 'Sin tela asignada';
+      const { inputs, meta } = ensamblarInputs(ctx, p, tallaObj);
+      const res = calcularCostoTotal(inputs);
 
-    // tallasDisponibles = TODAS las tallas activas del colegio, con peso real si existe o null si no
-    const pesosDeEsteProd = pesoByProd.get(p.id) || [];
-    const pesosPorTallaMap = new Map<string, number>();
-    pesosDeEsteProd.forEach((row: any) => {
-      pesosPorTallaMap.set(row.tallaId, row.pesoGramos ?? row.pesoConMerma ?? 0);
-    });
-
-    const tallasDisponibles = tallasActivasColegio.map((tallaObj: any) => {
-      const pesoVal = pesosPorTallaMap.has(tallaObj.id) ? pesosPorTallaMap.get(tallaObj.id)! : null;
       return {
-        tallaId: tallaObj.id,
-        codigo: tallaObj.codigo,
-        nombre: tallaObj.nombre,
-        orden: tallaObj.orden,
-        pesoGramos: pesoVal,
-        tienePesoReal: pesoVal !== null && pesoVal > 0,
+        productoId: p.id,
+        itemNumero: p.itemNumero,
+        descripcion: p.descripcion,
+        tallasDisponibles,
+        tallaActual: { tallaId: sel.tallaId, codigo: sel.codigo, nombre: sel.nombre },
+        tela: {
+          nombre: meta.telaNombre || 'Sin tela asignada',
+          precioBsGramo: meta.precioBsG ?? 0,
+          pesoGramos: meta.pesoGramos,
+          costoTelaBs: res.costoTela,
+        },
+        // Ahora salen de detalle_acc unido al catalogo. Antes la cantidad se
+        // despejaba dividiendo el costo de la celda del Excel por el costo
+        // unitario, y cuando el costo unitario era 0 se asumia cantidad 1: es
+        // como "Ojal Grande" terminaba mostrandose en 0,00 Bs.
+        accesoriosIntervinientes: meta.lineasAccesorios.map((l) => ({
+          nombre: l.nombre,
+          unidadCompra: l.unidadCompra,
+          costoUnitarioBs: l.costoUnitarioBs,
+          cantidad: l.cantidad,
+          costoTotalBs: l.costoTotalBs,
+        })),
+        subtotalAccesoriosBs: res.costoAccesorios,
+        manoDeObra: {
+          // costoCorte siempre fue 0 en este endpoint. Se mantiene para no
+          // cambiar el shape; la mano de obra a destajo no se desagrega.
+          costoCorte: 0,
+          costoConfeccion: res.costoManoObra,
+          totalManoObraBs: res.costoManoObra,
+        },
+        fijosEIndirectos: {
+          factorComplejidad: meta.factorComplejidad,
+          tarifaPuntoComplejidad: r4(meta.tarifaPuntoComplejidad),
+          fijosXprenda: res.costoFijosVariable,
+          // Siempre fue 0 y sigue siendo 0: en el modelo vigente el pool de
+          // indirectos entra por la via de los fijos, no como linea propia.
+          // Se corrige en la Fase 4.
+          indirectosXprenda: res.costoIndirecto,
+          totalFijosBs: r2(res.costoFijosVariable + res.costoIndirecto),
+        },
+        costoDirectoTotalBs: res.costoBruto,
+        costoAntesImpuestosBs: res.costoAntesImpuestos,
+        // ivaBs y precioFinalConIvaBs ahora vienen del MISMO resultado, asi que
+        // costoAntesImpuestos + ivaBs da exactamente precioFinalConIvaBs. Antes
+        // se calculaban por dos caminos independientes y podian diferir en 0,01.
+        ivaBs: res.iva,
+        costoTotalProduccionBs: res.costoTotal,
+        precioFinalConIvaBs: res.costoTotal,
+
+        // Aditivos. Lo que antes se resolvia devolviendo 0 en silencio.
+        seOfrece: meta.seOfrece,
+        diagnostico: {
+          ...res.diagnostico,
+          modoCosteo: meta.modoCosteo,
+          telaVinculada: meta.telaVinculada,
+          tieneManoObra: meta.tieneManoObra,
+          faltantes: meta.faltantes,
+          inconsistencias: meta.inconsistencias,
+        },
       };
     });
 
-    let tallaSeleccionada: any = null;
-    if (tallaIdParam) {
-      tallaSeleccionada = tallasDisponibles.find((t: any) => t.tallaId === tallaIdParam) || null;
-    }
-    if (!tallaSeleccionada) {
-      const prefCode = sysConfig.tallaDefecto.trim().toLowerCase();
-      tallaSeleccionada =
-        tallasDisponibles.find((t: any) => String(t.codigo).trim().toLowerCase() === prefCode) ||
-        tallasDisponibles.find((t: any) => String(t.codigo).trim() === '16/34') ||
-        tallasDisponibles.find((t: any) => t.tienePesoReal) ||
-        tallasDisponibles[0] || null;
-    }
-
-    const pesoGramos = tallaSeleccionada ? (tallaSeleccionada.pesoGramos || 0) : 0;
-    const costoTelaBs = parseFloat((pesoGramos * precioTelaBsG).toFixed(2));
-
-    const accCostMap = new Map<string, number>();
-    if (accRows && accRows.length > 0) {
-      const auxHeaderIdx = accRows.findIndex((r: any) => r && r.some((c: any) => String(c).includes('UNIDAD DE COMPRA') || String(c).includes('COSTO Unitario')));
-      const matrixRows = accRows.slice(2, auxHeaderIdx !== -1 ? auxHeaderIdx : 30);
-
-      const parseItemNumbers = (val: any): number[] => {
-        if (typeof val === 'number') return [val];
-        const str = String(val).trim();
-        if (str.includes('-')) {
-          const parts = str.split('-').map((p: string) => parseInt(p.trim())).filter((p: number) => !isNaN(p));
-          if (parts.length === 2) {
-            const nums = [];
-            for (let i = parts[0]; i <= parts[1]; i++) nums.push(i);
-            return nums;
-          }
-        }
-        const num = parseInt(str);
-        return !isNaN(num) ? [num] : [];
-      };
-
-      matrixRows.forEach((r: any) => {
-        if (r && r[1] !== undefined) {
-          const itemNums = parseItemNumbers(r[1]);
-          itemNums.forEach((itemNum) => {
-            if (itemNum > 0) {
-              accHeaders.forEach((h: string, idx: number) => {
-                const val = Number(r[2 + idx]) || 0;
-                accCostMap.set(`${itemNum}_${h}`, val);
-              });
-            }
-          });
-        }
-      });
-    }
-
-    const accesoriosIntervinientes: any[] = [];
-    let subtotalAccesoriosBs = 0;
-
-    const auxInfoMapDesglose = new Map<string, any>();
-    if (accList && accList.length > 0) {
-      accList.forEach((a: any) => {
-        const name = a.descripcion.trim();
-        auxInfoMapDesglose.set(name, {
-          unidadCompra: a.unidadCompra || 'unidad',
-          costoUnitarioBs: parseFloat((a.costoUnitario || 0).toFixed(4))
-        });
-      });
-    }
-
-    const headerListDesglose = accHeaders.length > 0 ? accHeaders : (accList.map((a: any) => a.descripcion.trim()));
-
-    headerListDesglose.forEach((accHeaderName: string) => {
-      const cellKey = `${p.itemNumero}_${accHeaderName}`;
-      const auxInfo = auxInfoMapDesglose.get(accHeaderName) || {};
-
-      let costoUnitarioBs = auxInfo.costoUnitarioBs;
-      if (costoUnitarioBs === undefined || costoUnitarioBs === null) {
-        const matchedAcc = accList.find((a: any) => a.descripcion.trim() === accHeaderName || a.codigo === accHeaderName);
-        costoUnitarioBs = matchedAcc ? matchedAcc.costoUnitario : 0;
-      }
-      costoUnitarioBs = parseFloat((costoUnitarioBs || 0).toFixed(4));
-
-      const unidadCompra = auxInfo.unidadCompra || (accList.find((a: any) => a.descripcion.trim() === accHeaderName)?.unidadCompra) || 'unidad';
-
-      let qty = 0;
-      if (overriddenCellQtyMap.has(cellKey)) {
-        qty = overriddenCellQtyMap.get(cellKey)!;
-      } else {
-        const costBs = accCostMap.get(cellKey) || 0;
-        if (costBs > 0) {
-          if (costoUnitarioBs > 0) {
-            qty = parseFloat((costBs / costoUnitarioBs).toFixed(2));
-          } else {
-            qty = 1;
-          }
-        }
-      }
-
-      if (qty > 0) {
-        const costoTotalBs = parseFloat((qty * costoUnitarioBs).toFixed(2));
-        subtotalAccesoriosBs += costoTotalBs;
-        accesoriosIntervinientes.push({
-          nombre: accHeaderName,
-          unidadCompra,
-          costoUnitarioBs,
-          cantidad: qty,
-          costoTotalBs
-        });
-      }
-    });
-
-    subtotalAccesoriosBs = parseFloat(subtotalAccesoriosBs.toFixed(2));
-
-    const moParaEsteProd = moByProd.get(p.id) || [];
-    let totalManoObraBs = 0;
-    let costoCorte = 0;
-    let costoConfeccion = 0;
-
-    if (tallaSeleccionada) {
-      const moRow = moParaEsteProd.find((m: any) => m.tallaId === tallaSeleccionada.tallaId);
-      if (moRow && typeof moRow.costoBs === 'number' && !isNaN(moRow.costoBs)) {
-        totalManoObraBs = parseFloat(moRow.costoBs.toFixed(2));
-        costoCorte = 0;
-        costoConfeccion = totalManoObraBs;
-      } else {
-        const valores = moParaEsteProd.map((m: any) => m.costoBs).filter((v: any) => typeof v === 'number' && !isNaN(v));
-        totalManoObraBs = valores.length > 0
-          ? parseFloat((valores.reduce((a: number, b: number) => a + b, 0) / valores.length).toFixed(2))
-          : 0;
-        costoConfeccion = totalManoObraBs;
-      }
-    } else {
-      totalManoObraBs = 15.0;
-      costoConfeccion = 15.0;
-    }
-
-    const factorComp = p.factorComplejidad || 1;
-    const costoFijoCalculado = parseFloat((factorComp * tarifaPuntoComplejidad).toFixed(2));
-    const totalFijosBs = costoFijoCalculado;
-
-    const costoDirectoTotalBs = parseFloat((costoTelaBs + subtotalAccesoriosBs + totalManoObraBs).toFixed(2));
-    const costoAntesImpuestosBs = parseFloat((costoDirectoTotalBs + totalFijosBs).toFixed(2));
-    const ivaBs = parseFloat((costoAntesImpuestosBs * (sysConfig.tasaIva / 100)).toFixed(2));
-    const precioFinalConIvaBs = parseFloat((costoAntesImpuestosBs * sysConfig.factorIva).toFixed(2));
-
-    return {
-      productoId: p.id,
-      itemNumero: p.itemNumero,
-      descripcion: p.descripcion,
-      tallasDisponibles,
-      tallaActual: tallaSeleccionada
-        ? { tallaId: tallaSeleccionada.tallaId, codigo: tallaSeleccionada.codigo, nombre: tallaSeleccionada.nombre }
-        : null,
-      tela: {
-        nombre: nombreTela,
-        precioBsGramo: precioTelaBsG,
-        pesoGramos,
-        costoTelaBs,
-      },
-      accesoriosIntervinientes,
-      subtotalAccesoriosBs,
-      manoDeObra: {
-        costoCorte,
-        costoConfeccion,
-        totalManoObraBs,
-      },
-      fijosEIndirectos: {
-        factorComplejidad: factorComp,
-        tarifaPuntoComplejidad: parseFloat(tarifaPuntoComplejidad.toFixed(4)),
-        fijosXprenda: costoFijoCalculado,
-        indirectosXprenda: 0,
-        totalFijosBs,
-      },
-      costoDirectoTotalBs,
-      costoAntesImpuestosBs,
-      ivaBs,
-      costoTotalProduccionBs: precioFinalConIvaBs,
-      precioFinalConIvaBs,
-    };
-  });
-
-  return c.json({ success: true, data });
+    return c.json({ success: true, data });
+  } catch (e: any) {
+    console.error('desglose-inteligente-producto:', e);
+    return c.json({ success: false, error: e?.message || String(e) }, 500);
+  }
 });
 
 export default api;
