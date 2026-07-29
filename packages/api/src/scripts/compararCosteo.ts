@@ -362,10 +362,25 @@ async function main() {
   }
 
   // ---------- VIEJO: matriz-prenda ----------
+  //
+  // Se detecta que implementacion esta viva de verdad. Sin esto, un server sin
+  // reiniciar o un git pull faltante dan un verde enganoso: el arnes compara
+  // contra el codigo viejo, no encuentra nada movido, y reporta la reja en verde
+  // cuando en realidad no verifico nada. Paso una vez.
+  const huellas: Record<Banda, 'unificada' | 'heredada' | 'sin datos'> = {
+    consolidada: 'sin datos',
+    prenda: 'sin datos',
+    desglose: 'sin datos',
+  };
+
   const viejoPrenda = new Map<string, Partial<Record<Campo, number>>>();
   for (const p of ctx.productos) {
     try {
       const j = await traer(`/api/calculo/matriz-prenda/${encodeURIComponent(p.id)}`);
+      // `seOfrece` solo existe en la version unificada.
+      if (huellas.prenda === 'sin datos' && (j.data || []).length > 0) {
+        huellas.prenda = j.data[0]?.seOfrece !== undefined ? 'unificada' : 'heredada';
+      }
       for (const d of j.data || []) {
         viejoPrenda.set(`${num(p.itemNumero)}_${d.tallaCodigo}`, {
           costoTela: num(d.costoTela),
@@ -764,12 +779,27 @@ async function main() {
     const nB = dB.filter((d) => d.clase === 'NUEVA');
     console.log(`  ${banda.padEnd(12)} ${String(dB.length).padStart(4)} difs, ${nB.length} nuevas`);
   }
+  // ---------- Que implementacion se comparo de verdad ----------
   console.log('');
-  console.log(
-    nuevas.length === 0
-      ? '  Sin diferencias nuevas. La reja esta en verde.'
-      : '  Hay diferencias nuevas. No se borra ninguna copia hasta explicarlas una por una.'
-  );
+  console.log('  IMPLEMENTACION VIVA EN EL SERVER');
+  for (const b of BANDAS) {
+    console.log(`    ${b.padEnd(14)} ${huellas[b]}`);
+  }
+  const heredadas = BANDAS.filter((b) => huellas[b] === 'heredada');
+
+  console.log('');
+  if (nuevas.length === 0 && heredadas.length === BANDAS.length) {
+    console.log('  Sin diferencias nuevas, pero las tres bandas siguen con la implementacion');
+    console.log('  HEREDADA. No se verifico ningun reemplazo: si esperabas ver resueltas, falta');
+    console.log('  reiniciar el server o traer los commits (git pull).');
+  } else if (nuevas.length === 0 && heredadas.length > 0) {
+    console.log(`  Sin diferencias nuevas. Ojo: ${heredadas.join(', ')} sigue heredada, asi que`);
+    console.log('  el verde no cubre esa banda todavia.');
+  } else if (nuevas.length === 0) {
+    console.log('  Sin diferencias nuevas y las bandas reemplazadas estan unificadas. Reja en verde.');
+  } else {
+    console.log('  Hay diferencias nuevas. No se borra ninguna copia hasta explicarlas una por una.');
+  }
 
   // ---------- Aprobar baseline ----------
   if (APROBAR) {
