@@ -14,7 +14,22 @@ turbo
 
 # Artefactos generados. No van al repo.
 paridad.csv
+catalogo.csv
 *.db.bak
+
+# RESPALDOS CON TIMESTAMP de los scripts que escriben.
+#
+# verificarEscrituras.ts, limpiarHuerfanas.ts y la migracion de la Fase 5 copian la base
+# antes de tocarla, con la fecha en el nombre. Es la disciplina correcta y no se toca. Pero
+# esos archivos NO los cubria ninguna regla de aca: `*.db.bak` no matchea
+# `sistema_inventario.antes-de-verificar-2026-07-29T10-39-46-855Z.db`, asi que aparecian como
+# untracked y un `git add -A` distraido metia 600 KB de respaldo por cada corrida.
+#
+# Se detecto con ocho de estos archivos ya acumulados en una sola jornada.
+#
+# Las dos formas del nombre, porque los scripts no las escriben igual:
+sistema_inventario.antes-*
+sistema_inventario.db.antes-*
 
 # Bases fantasma. `getDbFilePath()` resolvia contra process.cwd(), asi que correr
 # cualquier script desde la raiz del monorepo CREABA y sembraba una base nueva
