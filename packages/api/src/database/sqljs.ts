@@ -45,6 +45,24 @@ export function getDbFilePath() {
   }
 }
 
+/**
+ * Instancia CRUDA de sql.js, no la de Drizzle.
+ *
+ * Hace falta para DDL. Drizzle no sabe recrear tablas, y en SQLite cambiar un
+ * NOT NULL o quitar una columna exige recrear: no hay ALTER que lo haga. Un
+ * comentario en copiarPesos.ts dice que se intento raw SQL por otra via y fallo,
+ * asi que esto lo expone de forma explicita en vez de depender de internals de
+ * Drizzle.
+ *
+ * Solo para scripts de migracion. Las rutas usan Drizzle.
+ */
+export function getRawDb() {
+  if (!dbInstance) {
+    throw new Error('La base no esta abierta todavia. Llamar getDb() antes de getRawDb().');
+  }
+  return dbInstance;
+}
+
 export function saveDbToDisk() {
   if (dbInstance) {
     try {
