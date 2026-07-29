@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
-import { eq, asc } from 'drizzle-orm';
-import { colegios, productos, telas, tallas, pesoMateriaPrima, inventario } from '../database/schema';
+import { eq, asc, or, isNull } from 'drizzle-orm';
+import { colegios, productos, telas, tallas } from '../database/schema';
 import { saveDbToDisk } from '../database/sqljs';
+import { crearPrendaConTallas } from '../services/crearPrenda.service';
 
 const api = new Hono();
 
@@ -19,7 +20,7 @@ const crearColegioSchema = z.object({
 api.get('/', async (c) => {
   const db = (c as any).db;
   const allColegios = await db.select().from(colegios).orderBy(asc(colegios.nombre));
-  
+
   return c.json({
     success: true,
     data: allColegios,
@@ -30,17 +31,17 @@ api.get('/', async (c) => {
 api.get('/:id', async (c) => {
   const db = (c as any).db;
   const id = c.req.param('id');
-  
+
   const [colegio] = await db
     .select()
     .from(colegios)
     .where(eq(colegios.id, id))
     .limit(1);
-  
+
   if (!colegio) {
     return c.json({ success: false, error: 'Colegio no encontrado' }, 404);
   }
-  
+
   return c.json({
     success: true,
     data: colegio,
@@ -51,9 +52,9 @@ api.get('/:id', async (c) => {
 api.post('/', zValidator('json', crearColegioSchema), async (c) => {
   const db = (c as any).db;
   const body = c.req.valid('json');
-  
+
   const [newColegio] = await db.insert(colegios).values(body).returning();
-  
+
   return c.json({
     success: true,
     data: newColegio,
@@ -66,17 +67,17 @@ api.put('/:id', zValidator('json', crearColegioSchema.partial()), async (c) => {
   const db = (c as any).db;
   const id = c.req.param('id');
   const body = c.req.valid('json');
-  
+
   const [updatedColegio] = await db
     .update(colegios)
     .set(body)
     .where(eq(colegios.id, id))
     .returning();
-  
+
   if (!updatedColegio) {
     return c.json({ success: false, error: 'Colegio no encontrado' }, 404);
   }
-  
+
   return c.json({
     success: true,
     data: updatedColegio,
@@ -88,16 +89,16 @@ api.put('/:id', zValidator('json', crearColegioSchema.partial()), async (c) => {
 api.delete('/:id', async (c) => {
   const db = (c as any).db;
   const id = c.req.param('id');
-  
+
   const [deletedColegio] = await db
     .delete(colegios)
     .where(eq(colegios.id, id))
     .returning();
-  
+
   if (!deletedColegio) {
     return c.json({ success: false, error: 'Colegio no encontrado' }, 404);
   }
-  
+
   return c.json({
     success: true,
     message: 'Colegio eliminado exitosamente',
@@ -108,23 +109,23 @@ api.delete('/:id', async (c) => {
 api.patch('/:id/toggle', async (c) => {
   const db = (c as any).db;
   const id = c.req.param('id');
-  
+
   const [colegio] = await db
     .select()
     .from(colegios)
     .where(eq(colegios.id, id))
     .limit(1);
-  
+
   if (!colegio) {
     return c.json({ success: false, error: 'Colegio no encontrado' }, 404);
   }
-  
+
   const [updatedColegio] = await db
     .update(colegios)
     .set({ activo: !colegio.activo })
     .where(eq(colegios.id, id))
     .returning();
-  
+
   return c.json({
     success: true,
     data: updatedColegio,
@@ -141,8 +142,18 @@ api.get('/:id/config', async (c) => {
   if (!col) return c.json({ success: false, error: 'Colegio no encontrado' }, 404);
 
   const prods = await db.select().from(productos).where(eq(productos.colegioId, id)).orderBy(asc(productos.orden), asc(productos.itemNumero));
-  const tList = await db.select().from(telas).where(eq(telas.colegioId, id)).orderBy(asc(telas.orden), asc(telas.descripcion));
-  const taList = await db.select().from(tallas).where(eq(tallas.colegioId, id)).orderBy(asc(tallas.orden));
+
+  // FASE 5, tercera vez que aparece este patron: `= colegio OR IS NULL`, nunca
+  // `= colegio` a secas. Con las telas y tallas compartidas (colegio_id NULL) el
+  // filtro viejo devolvia 1 tela de 12 y CERO tallas de 16, asi que la pantalla de
+  // Configuracion mostraba la lista de tallas vacia y el selector de tela de cada
+  // prenda ofrecia una sola opcion: el tartan, la unica que conservo colegio. Las
+  // prendas nunca perdieron su tela_id — el <select> no encontraba la opcion
+  // correspondiente y el navegador mostraba la primera.
+  //
+  // `productos` SI se filtra con eq: las prendas son del colegio y siguen siendolo.
+  const tList = await db.select().from(telas).where(or(eq(telas.colegioId, id), isNull(telas.colegioId))).orderBy(asc(telas.orden), asc(telas.descripcion));
+  const taList = await db.select().from(tallas).where(or(eq(tallas.colegioId, id), isNull(tallas.colegioId))).orderBy(asc(tallas.orden));
 
   return c.json({
     success: true,
@@ -200,47 +211,47 @@ api.put('/:id/config-prendas', async (c) => {
 });
 
 // POST /api/colegios/:id/prendas - Dar de alta nueva prenda
+//
+// LA LOGICA ESTA EN crearPrenda.service.ts, por la misma razon que el resto de este
+// refactor: habia DOS endpoints que crean prendas —este y POST /api/productos— y hacian
+// cosas distintas. Este validaba que el colegio existiera y creaba las filas por talla; el
+// otro no hacia ninguna de las dos, asi que podia crear una prenda huerfana y sin tallas.
+// Arreglar uno dejaba el otro atras, y asi es como el agujero de la huerfana sobrevivio a
+// su propia correccion en eb7293d.
+//
+// Lo que hacia este bloque a mano vive ahora en el servicio, con dos mejoras: el item sale
+// del MAXIMO + 1 y no de contar filas —contar repite un item si hubo borrados, y un item
+// repetido dentro del colegio hace que el lookup por item devuelva 409— y la merma sale de
+// configuracion_sistema en vez del 8 escrito a mano, que era el cuarto lugar con ese
+// literal.
 api.post('/:id/prendas', async (c) => {
   const db = (c as any).db;
   const colegioId = c.req.param('id');
   const body = await c.req.json();
 
-  const existingProds = await db.select().from(productos).where(eq(productos.colegioId, colegioId));
-  const nextItemNum = body.itemNumero || (existingProds.length + 1);
-  const nextOrden = body.orden || nextItemNum;
-
-  const [newProd] = await db.insert(productos).values({
+  const r = await crearPrendaConTallas(db, {
     colegioId,
-    itemNumero: nextItemNum,
-    orden: nextOrden,
-    descripcion: body.descripcion || 'Nueva Prenda',
-    telaId: body.telaId || null,
-    factorComplejidad: body.factorComplejidad || 1,
-    activo: true,
-  }).returning();
+    itemNumero: body.itemNumero,
+    orden: body.orden,
+    descripcion: body.descripcion,
+    telaId: body.telaId ?? null,
+    factorComplejidad: body.factorComplejidad,
+    modoCosteo: body.modoCosteo,
+  });
 
-  const allTallas = await db.select().from(tallas).where(eq(tallas.colegioId, colegioId));
-  for (const t of allTallas) {
-    await db.insert(pesoMateriaPrima).values({
-      productoId: newProd.id,
-      tallaId: t.id,
-      pesoExactoGramos: 0,
-      pesoGramos: 0,
-      mermaPorcentaje: 8,
-      pesoConMerma: 0,
-    });
-    await db.insert(inventario).values({
-      productoId: newProd.id,
-      tallaId: t.id,
-      cantidad: 0,
-      costoUnitario: 0,
-      costoTotal: 0,
-    });
+  if (!r.ok) {
+    return c.json({ success: false, error: r.error }, r.estado as any);
   }
 
   saveDbToDisk();
 
-  return c.json({ success: true, data: newProd, message: 'Prenda creada exitosamente' });
+  return c.json({
+    success: true,
+    data: r.prenda,
+    tallas: r.tallas,
+    avisos: r.avisos,
+    message: 'Prenda creada exitosamente',
+  });
 });
 
 // PUT /api/colegios/:id/tallas-config - Activar/desactivar tallas del colegio

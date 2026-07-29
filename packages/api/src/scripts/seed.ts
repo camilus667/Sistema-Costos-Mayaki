@@ -178,7 +178,7 @@ export async function seedData(db: any) {
           const densidadGm2 = Number(row[5]) || 200;
           const pesoMtLineal = Number(row[6]) || (anchoMts * densidadGm2);
           const precioCompra = Number(row[7]) || 0;
-          
+
           let precioBsKg = Number(row[8]);
           if (!precioBsKg || isNaN(precioBsKg)) {
             precioBsKg = unid === 'metro' ? precioCompra * rendimiento : precioCompra;
@@ -232,13 +232,13 @@ export async function seedData(db: any) {
   const existingPeso = await db.select().from(schema.pesoMateriaPrima);
   if (existingPeso.length === 0 && workbook.Sheets['PesoMatPrima']) {
     const pesoRows = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets['PesoMatPrima'], { header: 1 });
-    
+
     // Buscar el porcentaje de merma inicial (fila 61: ['Merma', 8])
     const mermaRow = pesoRows.find(r => r && String(r[0]).trim().toUpperCase() === 'MERMA');
     const mermaPct = mermaRow && typeof mermaRow[1] === 'number' ? Number(mermaRow[1]) : 8;
 
     const sinMermaHeaderIdx = pesoRows.findIndex(r => r && String(r[0]).toUpperCase().includes('ESTIMADO'));
-    
+
     const topRows = pesoRows.slice(2, sinMermaHeaderIdx !== -1 ? sinMermaHeaderIdx : 30).filter(r => r && typeof r[0] === 'number');
     const bottomRows = sinMermaHeaderIdx !== -1 ? pesoRows.slice(sinMermaHeaderIdx + 2).filter(r => r && typeof r[0] === 'number') : [];
 
@@ -282,12 +282,30 @@ export async function seedData(db: any) {
   }
 
   // 9. MANO DE OBRA (desde hoja ManoDeObra)
-  if (workbook.Sheets['ManoDeObra']) {
-    await db.delete(schema.manoObra);
+  //
+  // Guarda de tabla vacia, igual que el resto de las tablas de este sembrado.
+  //
+  // Antes esto hacia `await db.delete(schema.manoObra)` sin ninguna condicion, y
+  // como `getDb()` llama a `seedData` en cada arranque, las 432 tarifas se
+  // borraban y se reinsertaban desde el Excel cada vez que arrancaba cualquier
+  // proceso: el servidor, o cualquier script, incluso los que solo leen.
+  //
+  // Efecto: `PUT /api/inputs/mano-de-obra/:productoId` existe, la UI deja editar
+  // el costo de mano de obra y responde OK, y la edicion sobrevivia solo hasta el
+  // siguiente arranque. Silencioso, sin error, imposible de notar desde la UI.
+  //
+  // Decidido con el usuario el 29-jul-2026: la base manda. El Excel siembra la
+  // mano de obra una sola vez, cuando la tabla esta vacia, y de ahi en adelante
+  // gana lo que haya en la base.
+  //
+  // Para forzar una reimportacion desde el Excel no hace falta codigo nuevo:
+  // vaciar `mano_obra` y volver a arrancar vuelve a sembrarla.
+  const existingManoObra = await db.select().from(schema.manoObra);
+  if (existingManoObra.length === 0 && workbook.Sheets['ManoDeObra']) {
     const moRows = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets['ManoDeObra'], { header: 1 });
     const dataRows = moRows.slice(2).filter(r => r && typeof r[0] === 'number');
 
-    const moInserts: any[] = [];
+    const moInserts: any[] = [];;
     dataRows.forEach((row) => {
       const itemNum = Number(row[0]);
       const prod = productoMapByItem.get(itemNum);
@@ -313,8 +331,13 @@ export async function seedData(db: any) {
 
     if (moInserts.length > 0) {
       await db.insert(schema.manoObra).values(moInserts);
-      console.log(`  ✅ Tarifas Mano de Obra en DB: ${moInserts.length}`);
+      console.log(`  ✅ Tarifas Mano de Obra sembradas por primera vez: ${moInserts.length}`);
     }
+  } else if (existingManoObra.length > 0) {
+    console.log(
+      `  ↷ Mano de Obra: ${existingManoObra.length} tarifas ya en la base, no se re-siembra. ` +
+      `Para reimportar desde el Excel, vaciar la tabla y volver a arrancar.`
+    );
   }
 
   // 10. PRECIOS DE VENTA (desde hoja PrecioDeVenta)

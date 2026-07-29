@@ -9,19 +9,23 @@ import { logger } from 'hono/logger';
 import { prettyJSON } from 'hono/pretty-json';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getDb, schema } from './database/sqljs';
+import { getDb, saveDbToDisk, schema } from './database/sqljs';
 import colegioRoutes from './routes/colegio';
 import usuarioRoutes from './routes/usuario';
 import productoRoutes from './routes/producto';
 import tallaRoutes from './routes/talla';
 import telaRoutes from './routes/tela';
 import accesorioRoutes from './routes/accesorio';
+import detalleAccesorioRoutes from './routes/detalleAccesorio';
+import copiaPrendaRoutes from './routes/copiaPrenda';
 import calculoRoutes, { loadExcelMatrices } from './routes/calculo';
 import inventarioRoutes from './routes/inventario';
 import precioRoutes from './routes/precio';
 import exportRoutes from './routes/export';
 import inputRoutes from './routes/inputs';
+import costeoRoutes from './routes/costeo';
 import { asc, eq } from 'drizzle-orm';
+import { costearLote } from './services/calculo/costeoInputs.service';
 
 const app = new Hono();
 
@@ -118,47 +122,115 @@ app.use(
 app.get('/health', async (c) => {
   try {
     await getDb();
-    return c.json({ 
-      status: 'ok', 
-      timestamp: new Date().toISOString(), 
+    return c.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
       database: 'sql-js-local',
       excel: 'CAMBRIDGE.xlsx cargado'
     });
   } catch (error) {
-    return c.json({ 
-      status: 'error', 
+    return c.json({
+      status: 'error',
       timestamp: new Date().toISOString(),
       error: String(error)
     }, 500);
   }
 });
 
-// Database init middleware - inyecta DB en el context
+// Database init middleware - inyecta DB en el context, y persiste al salir.
+//
+// PERSISTENCIA AUTOMATICA. sql.js vive en memoria: una escritura solo llega al
+// disco cuando alguien llama saveDbToDisk(). Ese "alguien" era cada handler, a
+// mano, y la mitad no lo hacia. Escribian en memoria, devolvian 200, y el dato se
+// perdia al reiniciar el proceso:
+//
+//   PUT /api/calculo/precio-venta              <- el precio de venta
+//   PUT /api/inputs/tabla-auxiliar-accesorios/:id  <- el costo del accesorio
+//   POST, PUT y DELETE de tela, talla y accesorio
+//   POST, PUT, DELETE y PATCH de colegio
+//
+// Peor que perderse siempre: se perdia a veces. saveDbToDisk() vuelca la base
+// entera, asi que si despues de editar un precio el usuario tocaba el inventario
+// —que si guardaba— el precio se persistia de rebote. El mismo gesto se guardaba
+// o se perdia segun lo que el usuario hiciera despues.
+//
+// Es la tercera vez en el refactor que aparece este patron (antes: mano_obra
+// resembrada en cada arranque, y el PUT de mano de obra que respondia OK y
+// desaparecia). Sembrar dieciseis llamadas mas seria repetir la causa. El flush
+// vive en UN lugar, corre despues del handler, solo en escrituras que salieron
+// bien, y no se puede olvidar.
+//
+// Esto es especifico del entrypoint local. index.ts usa D1, donde la escritura ya
+// es durable y no hay nada que volcar.
 app.use('/api/*', async (c, next) => {
   const db = await getDb();
   (c as any).db = db;
   (c as any).schema = schema;
-  return next();
+
+  await next();
+
+  const metodo = c.req.method;
+  const esEscritura = metodo !== 'GET' && metodo !== 'HEAD' && metodo !== 'OPTIONS';
+  if (esEscritura && c.res.status < 400) {
+    saveDbToDisk();
+  }
 });
 
 // API resumen dashboard avanzado con KPIs financieros completos de prendas, precios y costos
+//
+// EL COSTO SALE DEL MOTOR. Antes salia del cache de CAMBRIDGE.xlsx:
+//
+//   const ct = excelData ? (excelData.costoTotal.get(key) || 0) : 0;
+//
+// con key = `${itemNumero}_${tallaCodigo}`. Para una prenda de un colegio que no tiene
+// hoja en ese workbook, esa busqueda devolvia undefined y el costo quedaba en CERO.
+//
+// Lo delator era que el precio y el stock SI aparecian: los dos PUT de la matriz
+// escriben en ese mismo Map, asi que quedaban cargados. La pantalla mostraba
+// "Venta Total Proyectada 8.160" con "Inversion Total 0,00" y una ganancia del 100%.
+//
+// Este era el QUINTO consumidor de la formula de costeo y estaba en server.ts, no en
+// routes/. Todas las auditorias de la Fase 2 buscaron copias en routes/ y midieron TRES
+// bandas nombradas; esta nunca declaro huella y nunca se comparo. La afirmacion "una
+// sola formula" era cierta para lo medido y falsa para lo que no se miro.
 app.get('/api/dashboard-resumen', async (c) => {
   const db = await getDb();
-  const colegioId = c.req.query('colegioId');
+  const colegioIdRaw = c.req.query('colegioId');
+  const colegioId = colegioIdRaw && colegioIdRaw !== 'all' ? colegioIdRaw : undefined;
 
-  const colegio = (await db.select().from(schema.colegios).limit(1))[0];
+  // El encabezado tiene que mostrar el colegio ELEGIDO, no el primero de la tabla.
+  // Con dos colegios, `limit(1)` mostraba siempre el mismo nombre.
+  const colegio = colegioId
+    ? (await db.select().from(schema.colegios).where(eq(schema.colegios.id, colegioId)).limit(1))[0]
+    : (await db.select().from(schema.colegios).limit(1))[0];
+
   const anio = (await db.select().from(schema.aniosEscolares).limit(1))[0];
   const admin = (await db.select().from(schema.usuarios).limit(1))[0];
   const tallas = await db.select().from(schema.tallas).orderBy(asc(schema.tallas.orden));
-  
+
   let prodQuery = db.select().from(schema.productos);
-  if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(schema.productos.colegioId, colegioId));
+  if (colegioId) prodQuery = prodQuery.where(eq(schema.productos.colegioId, colegioId));
   const productos = await prodQuery.orderBy(asc(schema.productos.orden), asc(schema.productos.itemNumero));
 
   const telas = await db.select().from(schema.telas);
   const accesorios = await db.select().from(schema.accesorios);
 
-  const excelData = loadExcelMatrices();
+  // Costeo y precios: del motor, la misma fuente que las matrices.
+  const { filas } = await costearLote(db, { colegioId });
+  const costeo = new Map<string, { costo: number; precio: number }>();
+  for (const f of filas) {
+    costeo.set(`${f.meta.productoId}_${f.meta.tallaId}`, {
+      costo: Number(f.resultado.costoUnitarioNeto) || 0,
+      precio: Number(f.meta.precioVentaBs) || 0,
+    });
+  }
+
+  // Stock: de la tabla, que es su fuente de verdad.
+  const invList = await db.select().from(schema.inventario);
+  const stockPorClave = new Map<string, number>();
+  for (const i of invList) {
+    stockPorClave.set(`${i.productoId}_${i.tallaId}`, Number(i.cantidad) || 0);
+  }
 
   let totalStockUnidades = 0;
   let totalValorCostoBs = 0;
@@ -173,25 +245,32 @@ app.get('/api/dashboard-resumen', async (c) => {
     let maxCosto = 0;
     let minPrecio = Infinity;
     let maxPrecio = 0;
+    const margenes: number[] = [];
 
     tallas.forEach((t: any) => {
-      const key = `${p.itemNumero}_${t.codigo}`;
-      const inv = excelData ? (excelData.inventarioUnidades.get(key) || 0) : 0;
-      const ct = excelData ? (excelData.costoTotal.get(key) || 0) : 0;
-      const pv = excelData ? (excelData.precioVenta.get(key) || 0) : 0;
+      const clave = `${p.id}_${t.id}`;
+      const c2 = costeo.get(clave);
+      if (!c2) return;
+
+      const ct = c2.costo;
+      const pv = c2.precio;
+      const inv = stockPorClave.get(clave) || 0;
 
       if (ct > 0) {
         if (ct < minCosto) minCosto = ct;
         if (ct > maxCosto) maxCosto = ct;
       }
-
       if (pv > 0) {
         if (pv < minPrecio) minPrecio = pv;
         if (pv > maxPrecio) maxPrecio = pv;
+        // El margen sobre venta se promedia solo donde hay precio Y costo: con costo 0
+        // el margen sale 100% y ensucia el promedio sin informar nada.
+        if (ct > 0) margenes.push(((pv - ct) / pv) * 100);
       }
 
       prodStock += inv;
       prodCostoBs += inv * ct;
+      // Sin precio de venta se valoriza al costo, igual que antes.
       prodVentaBs += inv * (pv > 0 ? pv : ct);
     });
 
@@ -199,24 +278,9 @@ app.get('/api/dashboard-resumen', async (c) => {
     totalValorCostoBs += prodCostoBs;
     totalValorVentaBs += prodVentaBs;
 
-    // Calcular el promedio real unitario (%Margen en Venta: (PV - CT)/PV * 100) iterando directamente el mapa de Excel
-    let unitMarginList: number[] = [];
-    if (excelData && excelData.costoTotal && excelData.precioVenta) {
-      excelData.costoTotal.forEach((ct: number, key: string) => {
-        const parts = key.split('_');
-        if (parts[0] === String(p.itemNumero) && ct > 0) {
-          const pv = excelData.precioVenta.get(key) || 0;
-          if (pv > 0) {
-            const marginOnSale = ((pv - ct) / pv) * 100;
-            unitMarginList.push(marginOnSale);
-          }
-        }
-      });
-    }
-
     const gananciaBs = prodVentaBs - prodCostoBs;
-    const margenPct = unitMarginList.length > 0
-      ? (unitMarginList.reduce((a, b) => a + b, 0) / unitMarginList.length)
+    const margenPct = margenes.length > 0
+      ? margenes.reduce((a, b) => a + b, 0) / margenes.length
       : 0;
 
     return {
@@ -232,17 +296,21 @@ app.get('/api/dashboard-resumen', async (c) => {
       valorVentaTotalBs: parseFloat(prodVentaBs.toFixed(2)),
       gananciaEstimadaBs: parseFloat(gananciaBs.toFixed(2)),
       margenPromedioPct: parseFloat(margenPct.toFixed(2)),
+      // Si el motor no pudo costear ninguna talla, la fila lo dice en vez de mostrar 0.
+      sinCosteo: maxCosto === 0,
     };
   });
 
   const gananciaTotalBs = totalValorVentaBs - totalValorCostoBs;
   const margenPromedioGlobalPct = totalValorCostoBs > 0 ? (gananciaTotalBs / totalValorCostoBs) * 100 : 0;
 
+  const sinCosteo = resumenPrendas.filter((p: any) => p.sinCosteo).map((p: any) => p.itemNumero);
+
   return c.json({
     success: true,
-    colegio: colegio?.nombre || 'CAMBRIDGE',
+    colegio: colegio?.nombre || 'Sin colegio',
     anio: anio?.anio || '2026',
-    admin: admin?.email || 'admin@cambridge.edu',
+    admin: admin?.email || '',
     tallasCount: tallas.length,
     productosCount: productos.length,
     variacionesCount: productos.length * tallas.length,
@@ -256,6 +324,12 @@ app.get('/api/dashboard-resumen', async (c) => {
     margenPromedioGlobalPct: parseFloat(margenPromedioGlobalPct.toFixed(2)),
     // Lista de Prendas con Resumen Financiero
     prendas: resumenPrendas,
+    // Huella, como las tres bandas de la reja. Si esta pantalla vuelve a leer del Excel,
+    // este campo lo delata.
+    fuenteCosto: 'motor-de-costeo',
+    avisos: sinCosteo.length > 0
+      ? [`Sin costeo en ninguna talla: item(s) ${sinCosteo.join(', ')}. Revisar tela vinculada, peso de materia prima y mano de obra.`]
+      : [],
   });
 });
 
@@ -263,6 +337,13 @@ app.get('/api/dashboard-resumen', async (c) => {
 app.route('/api/colegios', colegioRoutes);
 app.route('/api/usuarios', usuarioRoutes);
 app.route('/api/productos', productoRoutes);
+// Receta de accesorios de cada prenda. Se monta en el mismo prefijo que
+// productoRoutes porque las rutas son /:productoId/accesorios, que no colisiona
+// con el /:id de productoRoutes (distinta cantidad de segmentos).
+app.route('/api/productos', detalleAccesorioRoutes);
+// Copiar los datos de costeo de una prenda de referencia: factor, tela, pesos, mano de
+// obra y receta. Tercer router en el mismo prefijo, patron que este proyecto ya usa.
+app.route('/api/productos', copiaPrendaRoutes);
 app.route('/api/tallas', tallaRoutes);
 app.route('/api/telas', telaRoutes);
 app.route('/api/accesorios', accesorioRoutes);
@@ -271,22 +352,25 @@ app.route('/api/inventario', inventarioRoutes);
 app.route('/api/precios', precioRoutes);
 app.route('/api/export', exportRoutes);
 app.route('/api/inputs', inputRoutes);
+// Costeo unificado. Se monta AL LADO de /api/inputs y /api/calculo, sin
+// reemplazar nada, para poder comparar paridad antes de tocar esas pantallas.
+app.route('/api/costeo', costeoRoutes);
 
 // Iniciar servidor si se ejecuta directamente
 async function start() {
   const PORT = 3000;
-  
+
   console.log(`🚀 Iniciando servidor local en http://localhost:${PORT}`);
   console.log('📊 Base de datos: sql.js (en memoria con datos de CAMBRIDGE.xlsx)');
   console.log(`🔗 Dashboard UI: http://localhost:${PORT}/`);
   console.log(`🔗 Health check: http://localhost:${PORT}/health`);
   console.log(`🔗 API base: http://localhost:${PORT}/api/`);
-  
+
   await getDb();
   console.log('✅ Base de datos inicializada y poblada desde CAMBRIDGE.xlsx');
-  
+
   const { serve } = await import('@hono/node-server');
-  
+
   serve(
     {
       fetch: app.fetch.bind(app),

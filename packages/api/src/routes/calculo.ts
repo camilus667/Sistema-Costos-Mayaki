@@ -1,30 +1,92 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, or, isNull } from 'drizzle-orm';
 import { calcularCostoTotal } from '../services/calculo/costoTotal.service';
-import { productos, tallas, pesoMateriaPrima, manoObra, telas, preciosVenta, detalleAccesorio, accesorios, inventario, costosIndirectos } from '../database/schema';
+import { costearLote, costearPrendaTodasLasTallas } from '../services/calculo/costeoInputs.service';
+import { productos, tallas, preciosVenta, inventario } from '../database/schema';
 import XLSX from 'xlsx';
 import { findExcelPath } from '../scripts/seed';
-import { saveDbToDisk } from '../database/sqljs';
+import { resolverPrendaPorItem } from '../services/resolucion.service';
+
+/** Redondeo de presentacion. El motor ya redondea; esto es para los pesos crudos. */
+const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
 
 const api = new Hono();
 
+/**
+ * Simulador instantaneo: expone la superficie REAL del motor.
+ *
+ * El schema anterior descartaba la mitad del motor. Como zValidator borra las
+ * claves que no estan declaradas, los campos faltantes no daban error: se
+ * perdian en silencio y el motor calculaba con undefined.
+ *
+ * Lo que faltaba y ahora esta:
+ *   precioBsG               el camino preferido de costo de tela, el que quedo
+ *                           verificado contra el Excel. Sin el, la unica via era
+ *                           precioTelaUnitario + rendimiento.
+ *   pesoConMermaGramos      peso que ya trae la merma, que es lo que guarda la base
+ *   pesoExactoGramos        peso limpio, al que el motor le aplica la merma
+ *   precioAdquisicion       prendas semiterminadas o de reventa
+ *   costoIndirectoUnitario  indirecto ya prorrateado, para poder usar un
+ *                           denominador anual en vez de la produccion del mes
+ *   tasaIva                 configurable, antes siempre caia en IVA_RATE
+ *
+ * Ademas:
+ * - `pesoGramos`, `precioTelaUnitario` y `rendimientoTela` pasan a opcionales.
+ *   Eran obligatorios y positivos, asi que era IMPOSIBLE simular una prenda
+ *   adquirida (no lleva peso) o usar el camino de precioBsG.
+ * - `factorComplejidad` deja de ser `.int()`. La columna del schema paso a real
+ *   en la Fase 4, asi que 1,5 ya se persiste. SQLite tiene tipado dinamico y la
+ *   afinidad INTEGER ya guardaba 1.5 como REAL, asi que no hizo falta migrar datos.
+ * - Se saca el `.default(8)` de la merma. Era el tercer lugar con el 8
+ *   hardcodeado, justo el que el motor elimino a proposito para que el default
+ *   viva solo en el schema de la base y en configuracion_sistema. Si no viene, el
+ *   motor avisa en su diagnostico.
+ */
 const calcularSchema = z.object({
   productoId: z.string().optional().default('demo-prod'),
   tallaId: z.string().optional().default('demo-talla'),
   colegioId: z.string().optional().default('demo-colegio'),
-  pesoGramos: z.number().positive(),
-  mermaPorcentaje: z.number().min(0).max(100).default(8),
-  precioTelaUnitario: z.number().positive(),
-  rendimientoTela: z.number().positive(),
+
+  // Peso. Tres formas, con la precedencia que documenta el motor.
+  pesoConMermaGramos: z.number().nonnegative().optional(),
+  pesoExactoGramos: z.number().nonnegative().optional(),
+  pesoGramos: z.number().nonnegative().optional(),
+  mermaPorcentaje: z.number().min(0).max(100).optional(),
+
+  // Precio de la tela. Dos caminos.
+  precioBsG: z.number().positive().optional(),
+  precioTelaUnitario: z.number().positive().optional(),
+  rendimientoTela: z.number().positive().optional(),
+
+  // Prendas adquiridas: reemplaza al costo de tela.
+  precioAdquisicion: z.number().positive().optional(),
+
   costoAccesorios: z.number().default(0),
   costoManoObra: z.number().default(0),
-  factorComplejidad: z.number().int().positive().default(1),
+  factorComplejidad: z.number().positive().default(1),
   costoFijo: z.number().default(0),
+
+  costoIndirectoUnitario: z.number().nonnegative().optional(),
   costoIndirectoMensual: z.number().default(0),
   produccionTotalMes: z.number().int().positive().default(1),
+
   precioVenta: z.number().optional().nullable(),
+
+  // FRACCION, no porcentaje. El tope de 1 lo hace cumplir en el borde: si alguien
+  // manda 13 pensando en el 13%, el motor calcularia 1300% de IVA sin lanzar
+  // nada. Es la trampa de unidades de todo el refactor, y aca se ataja con un
+  // mensaje que dice exactamente que hacer.
+  tasaIva: z
+    .number()
+    .min(0)
+    .max(1, {
+      message:
+        'tasaIva se expresa como fraccion, no como porcentaje: 0.13 para el 13%. ' +
+        'Enviar 13 daria 1300% de IVA.',
+    })
+    .optional(),
 });
 
 // Cache global compartido en memoria para sincronía 100% entre todas las pestañas
@@ -126,140 +188,254 @@ api.post('/calcular', zValidator('json', calcularSchema), async (c) => {
   return c.json({ success: true, data: resultado });
 });
 
-import { getSystemConfig } from '../services/configService';
 
-// GET /api/calculo/matriz-consolidada - Replicando las 9 pestañas del Excel con cálculo 100% dinámico DB
+// GET /api/calculo/matriz-consolidada - Grilla completa de prendas x tallas
+//
+// UNIFICADO (Fase 2). Antes esta ruta casi no calculaba: leia los totales ya
+// hechos del Excel (`costoBruto`, `costoAntesImp`, `costoTotal`) y solo caia en un
+// calculo propio cuando el Excel callaba. Ademas despejaba el costo de tela por
+// resta y derivaba el costo fijo como `excelCa - cb`, o sea heredaba de la
+// planilla un fijo por prenda que no tiene por que coincidir con el que sale del
+// pool de indirectos.
+//
+// Consecuencia: la base de datos no era autoritativa. Editar un peso o un precio
+// de tela no movia la grilla mientras el Excel tuviera un valor para esa celda.
+//
+// El usuario fallo el 29-jul-2026 que gana el numero nuevo (causa 2 del arnes).
+// Ahora delega en el motor y el Excel deja de participar del costeo.
+//
+// El shape se conserva campo por campo: el dashboard lee
+// `json.data[].tallas[codigo].{costoBruto,precioVenta,costoUnitarioNeto,
+// ingresoNetoConFactura,ingresoNetoSinFactura,utilidadConFactura,utilidadSinFactura,
+// margenConFactura,margenSinFactura,inventarioUnidades,costoInventario,
+// precioInventario}` y `json.tallas[].codigo`.
+//
+// FASE 3: desaparecieron costoAntesImp, costoTotal, utilidadNeta y margenPorcentaje.
+// El costo ya no lleva IVA y el margen se parte por canal de venta.
 api.get('/matriz-consolidada', async (c) => {
-  const db = (c as any).db;
-  const colegioId = c.req.query('colegioId');
-  const sysConfig = await getSystemConfig(db);
-
-  let prodQuery = db.select().from(productos);
-  if (colegioId && colegioId !== 'all') {
-    prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
-  }
-  const allProds = await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero));
-  const allTallas = await db.select().from(tallas).orderBy(asc(tallas.orden));
-
-  let pesos: any[] = [];
-  let moList: any[] = [];
-  let precios: any[] = [];
-  let invList: any[] = [];
   try {
-    pesos = await db.select().from(pesoMateriaPrima);
-    moList = await db.select().from(manoObra);
-    precios = await db.select().from(preciosVenta);
-    invList = await db.select().from(inventario);
-  } catch (e) {}
+    const db = (c as any).db;
+    const colegioIdRaw = c.req.query('colegioId');
+    const colegioId = colegioIdRaw && colegioIdRaw !== 'all' ? colegioIdRaw : undefined;
 
-  const pesoMap = new Map<string, any>();
-  pesos.forEach((p: any) => pesoMap.set(`${p.productoId}_${p.tallaId}`, p));
+    const { ctx, filas } = await costearLote(db, { colegioId });
 
-  const moMap = new Map<string, number>();
-  moList.forEach((m: any) => moMap.set(`${m.productoId}_${m.tallaId}`, m.costoBs));
+    // El inventario no es un concepto de costeo, se consulta aparte.
+    let invList: any[] = [];
+    try {
+      invList = await db.select().from(inventario);
+    } catch (e) {}
+    const invMap = new Map<string, number>();
+    invList.forEach((i: any) => invMap.set(`${i.productoId}_${i.tallaId}`, i.cantidad));
 
-  const precioMap = new Map<string, number>();
-  precios.forEach((pr: any) => precioMap.set(`${pr.productoId}_${pr.tallaId}`, pr.precioBs));
+    // PRESERVADO A PROPOSITO: la lista de tallas se trae global, sin filtro de
+    // colegio, igual que antes. Es la cabecera de columnas de la grilla, y
+    // filtrarla cambiaria la forma de la tabla. Corresponde a la Fase 6.
+    const allTallas = await db.select().from(tallas).orderBy(asc(tallas.orden));
 
-  const invMap = new Map<string, number>();
-  invList.forEach((inv: any) => invMap.set(`${inv.productoId}_${inv.tallaId}`, inv.cantidad));
+    const porProducto = new Map<string, any[]>();
+    for (const f of filas) {
+      const arr = porProducto.get(f.meta.productoId) || [];
+      arr.push(f);
+      porProducto.set(f.meta.productoId, arr);
+    }
 
-  // Dynamic tarifa calculation from costosIndirectos DB & System Config
-  let indirectosList: any[] = [];
-  try { indirectosList = await db.select().from(costosIndirectos); } catch (e) {}
-  const totalIndirectos = indirectosList.reduce((acc: number, ci: any) => acc + (Number(ci.montoMensual) || 0), 0);
-  const prendasProducidasMes = sysConfig.volumenMensualProduccion;
-  const tarifaPunto = prendasProducidasMes > 0 ? (totalIndirectos / (prendasProducidasMes * 10)) : 0;
-
-  const excelData = loadExcelMatrices();
-
-  const gridData = allProds.map((prod: any) => {
-    const rowObj: any = {
-      productoId: prod.id,
-      itemNumero: prod.itemNumero,
-      descripcion: prod.descripcion,
-      tallas: {}
-    };
-
-    const costoAcc = excelData ? (excelData.itemAccMap.get(prod.itemNumero) || 0) : 0;
-
-    allTallas.forEach((talla: any) => {
-      const key = `${prod.itemNumero}_${talla.codigo}`;
-      const pRec = pesoMap.get(`${prod.id}_${talla.id}`);
-      const moValDb = moMap.get(`${prod.id}_${talla.id}`);
-      const pvValDb = precioMap.get(`${prod.id}_${talla.id}`);
-      const invValDb = invMap.get(`${prod.id}_${talla.id}`);
-
-      let costoMO = moValDb ?? 0;
-
-      const pesoConMerma = pRec?.pesoGramos || (pRec?.pesoExactoGramos ? pRec.pesoExactoGramos * (1 + sysConfig.mermaPorcentajeEstandar / 100) : 0);
-      let costoTela = 0;
-
-      const excelCb = excelData ? (excelData.costoBruto.get(key) || 0) : 0;
-      let cb = 0;
-      if (excelCb > 0) {
-        cb = excelCb;
-        if (costoMO > 0 && costoAcc > 0) {
-          costoTela = Math.max(0, cb - costoMO - costoAcc);
-        }
-      } else {
-        cb = costoTela + costoAcc + costoMO;
-      }
-
-      const excelCa = excelData ? (excelData.costoAntesImp.get(key) || 0) : 0;
-      const dynamicCostoFijo = (prod.factorComplejidad || 0) * tarifaPunto;
-      const fijosXprendaVal = excelCa > 0 ? (excelCa - cb) : dynamicCostoFijo;
-
-      const ca = cb > 0 ? (cb + fijosXprendaVal) : 0;
-      const excelCt = excelData ? (excelData.costoTotal.get(key) || 0) : 0;
-      const ct = ca > 0 ? parseFloat((ca * sysConfig.factorIva).toFixed(2)) : (excelCt > 0 ? excelCt : 0);
-
-      const pv = pvValDb !== undefined && pvValDb !== null && pvValDb > 0 ? pvValDb : (excelData ? (excelData.precioVenta.get(key) || 0) : 0);
-
-      const un = pv > 0 && ct > 0 ? (pv - ct) : 0;
-      const mg = pv > 0 && un !== 0 ? (un / pv) * 100 : 0;
-
-      const inv = invValDb !== undefined && invValDb !== null ? invValDb : (excelData ? (excelData.inventarioUnidades.get(key) || 0) : 0);
-      const ci = inv * ct;
-      const pi = inv * (pv > 0 ? pv : ct);
-
-      rowObj.tallas[talla.codigo] = {
-        costoBruto: parseFloat(cb.toFixed(2)),
-        precioVenta: parseFloat(pv.toFixed(2)),
-        costoAntesImp: parseFloat(ca.toFixed(2)),
-        costoTotal: parseFloat(ct.toFixed(2)),
-        utilidadNeta: parseFloat(un.toFixed(2)),
-        margenPorcentaje: parseFloat(mg.toFixed(2)),
-        inventarioUnidades: inv,
-        costoInventario: parseFloat(ci.toFixed(2)),
-        precioInventario: parseFloat(pi.toFixed(2)),
-      };
+    // Celda de una combinacion que no se ofrece. Se devuelve en cero, con el
+    // inventario si lo hubiera, para conservar el mismo juego de claves que
+    // antes: el dashboard recorre todas las tallas de la cabecera.
+    const celdaVacia = () => ({
+      costoBruto: 0,
+      precioVenta: 0,
+      costoUnitarioNeto: 0,
+      ingresoNetoConFactura: 0,
+      ingresoNetoSinFactura: 0,
+      utilidadConFactura: 0,
+      utilidadSinFactura: 0,
+      margenConFactura: 0,
+      margenSinFactura: 0,
+      inventarioUnidades: 0,
+      costoInventario: 0,
+      precioInventario: 0,
+      seOfrece: false,
     });
 
-    return rowObj;
-  });
+    const gridData = ctx.productos.map((prod: any) => {
+      const rowObj: any = {
+        productoId: prod.id,
+        itemNumero: prod.itemNumero,
+        descripcion: prod.descripcion,
+        tallas: {},
+      };
 
-  return c.json({
-    success: true,
-    tallas: allTallas.map((t: any) => ({ id: t.id, codigo: t.codigo, orden: t.orden })),
-    data: gridData,
-  });
+      const porTalla = new Map<string, any>();
+      for (const f of porProducto.get(prod.id) || []) porTalla.set(f.meta.tallaId, f);
+
+      for (const talla of allTallas) {
+        const inv = invMap.get(`${prod.id}_${talla.id}`) ?? 0;
+        const f = porTalla.get(talla.id);
+
+        // Regla decidida: sin precio de venta vigente la prenda no se ofrece en
+        // esa talla, asi que no se le prorratea costo fijo a algo que no existe.
+        if (!f || !f.meta.seOfrece) {
+          rowObj.tallas[talla.codigo] = { ...celdaVacia(), inventarioUnidades: inv };
+          continue;
+        }
+
+        const r = f.resultado;
+        const pv = f.meta.precioVentaBs ?? 0;
+        rowObj.tallas[talla.codigo] = {
+          costoBruto: r.costoBruto,
+          precioVenta: r2(pv),
+          costoUnitarioNeto: r.costoUnitarioNeto,
+          ingresoNetoConFactura: r.ingresoNetoConFactura ?? 0,
+          ingresoNetoSinFactura: r.ingresoNetoSinFactura ?? 0,
+          utilidadConFactura: r.utilidadConFactura ?? 0,
+          utilidadSinFactura: r.utilidadSinFactura ?? 0,
+          margenConFactura: r.margenConFactura ?? 0,
+          margenSinFactura: r.margenSinFactura ?? 0,
+          inventarioUnidades: inv,
+          // El inventario se valua al costo NETO. Antes se valuaba al costo con
+          // IVA, asi que el valor del stock estaba inflado ~13%.
+          costoInventario: r2(inv * r.costoUnitarioNeto),
+          precioInventario: r2(inv * (pv > 0 ? pv : r.costoUnitarioNeto)),
+          seOfrece: true,
+        };
+      }
+
+      return rowObj;
+    });
+
+    return c.json({
+      success: true,
+      tallas: allTallas.map((t: any) => ({ id: t.id, codigo: t.codigo, orden: t.orden })),
+      // Huella para el arnes de paridad: distingue esta version de la heredada.
+      implementacion: 'unificada',
+      data: gridData,
+    });
+  } catch (e: any) {
+    console.error('matriz-consolidada:', e);
+    return c.json({ success: false, error: e?.message || String(e) }, 500);
+  }
 });
 
+/**
+ * Resuelve prenda y talla para los dos PUT de la matriz.
+ *
+ * PREFIERE LAS CLAVES PRIMARIAS. La pantalla ya tiene productoId y tallaId en cada
+ * celda de la grilla —los devuelve matriz-consolidada— y sin embargo mandaba
+ * itemNumero y tallaCodigo, que son claves de NEGOCIO. itemNumero se numera por
+ * colegio, asi que con dos colegios puede identificar dos prendas y el lookup tiene
+ * que rechazar por ambiguo.
+ *
+ * Resolver por clave de negocio cuando el llamador tiene la clave primaria es pedirle
+ * al servidor que adivine algo que el cliente ya sabe. Con productoId no hay ambiguedad
+ * posible y la clase entera de error 409 desaparece.
+ *
+ * Se mantiene el camino por itemNumero para no romper a quien ya lo usa —la
+ * verificacion automatica, entre otros— pero el preferido es el directo.
+ */
+async function resolverCelda(
+  db: any,
+  body: any
+): Promise<{ prenda: any; talla: any; estado: number; error: string | null }> {
+  const { productoId, tallaId, itemNumero, tallaCodigo, colegioId } = body;
+
+  // Camino directo: las dos claves primarias.
+  if (productoId && tallaId) {
+    const [prenda] = await db.select().from(productos).where(eq(productos.id, productoId)).limit(1);
+    if (!prenda) {
+      return { prenda: null, talla: null, estado: 404, error: `No existe la prenda ${productoId}.` };
+    }
+    const [talla] = await db.select().from(tallas).where(eq(tallas.id, tallaId)).limit(1);
+    if (!talla) {
+      return { prenda: null, talla: null, estado: 404, error: `No existe la talla ${tallaId}.` };
+    }
+    return { prenda, talla, estado: 200, error: null };
+  }
+
+  // Camino por clave de negocio, con la guarda de ambiguedad.
+  if (!itemNumero || Number(itemNumero) <= 0 || !tallaCodigo) {
+    return {
+      prenda: null,
+      talla: null,
+      estado: 400,
+      error: 'Hacen falta productoId y tallaId, o bien itemNumero y tallaCodigo.',
+    };
+  }
+
+  const r = await resolverPrendaPorItem(db, Number(itemNumero), colegioId);
+  if (!r.prenda) {
+    return { prenda: null, talla: null, estado: r.estado, error: r.error };
+  }
+
+  const talla = await resolverTallaPorCodigo(db, String(tallaCodigo), r.prenda.colegioId);
+  if (!talla) {
+    return {
+      prenda: null,
+      talla: null,
+      estado: 404,
+      error: `No existe la talla ${tallaCodigo} para esa prenda.`,
+    };
+  }
+
+  return { prenda: r.prenda, talla, estado: 200, error: null };
+}
+
+/** Busca la talla por codigo dentro del vocabulario visible para esa prenda. */
+async function resolverTallaPorCodigo(db: any, tallaCodigo: string, colegioIdPrenda: string) {
+  const [talla] = await db
+    .select()
+    .from(tallas)
+    .where(
+      and(
+        eq(tallas.codigo, tallaCodigo),
+        or(eq(tallas.colegioId, colegioIdPrenda), isNull(tallas.colegioId))
+      )
+    )
+    .limit(1);
+  return talla || null;
+}
+
 // PUT /api/calculo/precio-venta - Actualizar PrecioDeVenta directamente en la matriz
+//
+// Acepta colegioId opcional en el cuerpo. Sin colegio se comporta igual que antes
+// mientras el item sea inequivoco; con dos colegios cargados exige que se diga cual.
 api.put('/precio-venta', async (c) => {
   const db = (c as any).db;
-  const body = await c.req.json(); // { itemNumero, tallaCodigo, precioBs }
+  const body = await c.req.json(); // { itemNumero, tallaCodigo, precioBs, colegioId? }
 
   const { itemNumero, tallaCodigo, precioBs } = body;
-  const key = `${itemNumero}_${tallaCodigo}`;
 
+  // La base manda: primero se resuelve contra la base, y solo despues se toca el
+  // cache del Excel. Al reves —como estaba— un fallo dejaba la matriz mostrando un
+  // precio que nunca se guardo: el cache decia una cosa y la base otra.
+  const { prenda, talla, estado, error } = await resolverCelda(db, body);
+  if (!prenda || !talla) return c.json({ success: false, error }, estado as any);
+
+  const nuevoPv = Number(precioBs) || 0;
+
+  try {
+    await db.delete(preciosVenta).where(and(eq(preciosVenta.productoId, prenda.id), eq(preciosVenta.tallaId, talla.id)));
+    await db.insert(preciosVenta).values({
+      productoId: prenda.id,
+      tallaId: talla.id,
+      precioBs: nuevoPv,
+    });
+  } catch (e: any) {
+    // Antes el catch se tragaba el error y el handler devolvia success igual. Si la
+    // escritura falla el usuario tiene que saberlo: la pantalla no puede mostrar
+    // como guardado algo que no se guardo.
+    console.error('Error actualizando DB para precioVenta:', e);
+    return c.json({ success: false, error: 'No se pudo guardar el precio: ' + (e?.message || String(e)) }, 500);
+  }
+
+  // Cache heredado del Excel. Se actualiza recien ahora, con la base ya escrita.
+  const key = `${itemNumero}_${tallaCodigo}`;
   const excelData = loadExcelMatrices();
   if (excelData) {
-    excelData.precioVenta.set(key, Number(precioBs) || 0);
+    excelData.precioVenta.set(key, nuevoPv);
 
     const ct = excelData.costoTotal.get(key) || 0;
-    const nuevoPv = Number(precioBs) || 0;
     const nuevaUn = nuevoPv > 0 && ct > 0 ? nuevoPv - ct : 0;
     const nuevoMg = nuevoPv > 0 ? (nuevaUn / nuevoPv) * 100 : 0;
 
@@ -267,56 +443,55 @@ api.put('/precio-venta', async (c) => {
     excelData.margenPorcentaje.set(key, nuevoMg);
   }
 
-  try {
-    const [prod] = await db.select().from(productos).where(eq(productos.itemNumero, itemNumero)).limit(1);
-    if (prod) {
-      const [tallaObj] = await db.select().from(tallas).where(and(eq(tallas.colegioId, prod.colegioId), eq(tallas.codigo, tallaCodigo))).limit(1);
-      if (tallaObj) {
-        await db.delete(preciosVenta).where(and(eq(preciosVenta.productoId, prod.id), eq(preciosVenta.tallaId, tallaObj.id)));
-        await db.insert(preciosVenta).values({
-          productoId: prod.id,
-          tallaId: tallaObj.id,
-          precioBs: Number(precioBs) || 0,
-        });
-      }
-    }
-  } catch (e) {
-    console.error('Error actualizando DB para precioVenta:', e);
-  }
-
   return c.json({ success: true, message: 'Precio de venta actualizado exitosamente' });
 });
 
 // PUT /api/calculo/inventario-unidades - Actualizar INVENTARIO directamente en la matriz
+//
+// Mismo tratamiento que /precio-venta: colegioId opcional, la base manda, y no se
+// devuelve success si la escritura no ocurrio.
 api.put('/inventario-unidades', async (c) => {
   const db = (c as any).db;
-  const body = await c.req.json(); // { itemNumero, tallaCodigo, cantidad }
+  const body = await c.req.json(); // { itemNumero, tallaCodigo, cantidad, colegioId? }
 
   const { itemNumero, tallaCodigo, cantidad } = body;
-  const key = `${itemNumero}_${tallaCodigo}`;
 
-  const excelData = loadExcelMatrices();
-  if (excelData) {
-    const cantNum = Number(cantidad) || 0;
-    excelData.inventarioUnidades.set(key, cantNum);
+  const { prenda, talla, estado, error } = await resolverCelda(db, body);
+  if (!prenda || !talla) return c.json({ success: false, error }, estado as any);
 
-    const ct = excelData.costoTotal.get(key) || 0;
-    excelData.costoInventario.set(key, cantNum * ct);
-  }
+  const cantNum = Number(cantidad) || 0;
 
   try {
-    const [prod] = await db.select().from(productos).where(eq(productos.itemNumero, itemNumero)).limit(1);
-    if (prod) {
-      const [tallaObj] = await db.select().from(tallas).where(and(eq(tallas.colegioId, prod.colegioId), eq(tallas.codigo, tallaCodigo))).limit(1);
-      if (tallaObj) {
-        await db.update(inventario).set({
-          cantidad: Number(cantidad) || 0
-        }).where(and(eq(inventario.productoId, prod.id), eq(inventario.tallaId, tallaObj.id)));
-        saveDbToDisk();
-      }
+    // .returning() para distinguir "actualice una fila" de "no habia ninguna".
+    // Antes, si la prenda y la talla no tenian fila de inventario, el update no
+    // afectaba nada y el handler devolvia success: el mismo defecto que tenia el
+    // PUT de mano de obra.
+    const filas = await db
+      .update(inventario)
+      .set({ cantidad: cantNum })
+      .where(and(eq(inventario.productoId, prenda.id), eq(inventario.tallaId, talla.id)))
+      .returning();
+
+    if (filas.length === 0) {
+      return c.json({
+        success: false,
+        error: `La prenda item ${itemNumero} y la talla ${tallaCodigo} no tienen fila de inventario.`,
+      }, 404);
     }
-  } catch (e) {
+  } catch (e: any) {
     console.error('Error actualizando DB para inventario:', e);
+    return c.json({ success: false, error: 'No se pudo guardar el inventario: ' + (e?.message || String(e)) }, 500);
+  }
+
+  // El volcado a disco lo hace ahora el middleware de server.ts. La llamada
+  // explicita a saveDbToDisk() que vivia aca era la unica de este archivo, y por eso
+  // el precio de venta se guardaba solo si despues tocabas el inventario.
+  const key = `${itemNumero}_${tallaCodigo}`;
+  const excelData = loadExcelMatrices();
+  if (excelData) {
+    excelData.inventarioUnidades.set(key, cantNum);
+    const ct = excelData.costoTotal.get(key) || 0;
+    excelData.costoInventario.set(key, cantNum * ct);
   }
 
   return c.json({ success: true, message: 'Inventario actualizado exitosamente' });
@@ -335,114 +510,95 @@ api.put('/accesorio-total', async (c) => {
   return c.json({ success: true, message: 'Total de accesorios actualizado exitosamente' });
 });
 
-// GET /api/calculo/matriz-prenda/:productoId - Matriz por prenda individual 100% consistente
+// GET /api/calculo/matriz-prenda/:productoId - Matriz por prenda individual
+//
+// UNIFICADO (Fase 2). Antes esta ruta tenia su propia copia de la formula, y en
+// realidad casi no calculaba: leia los totales ya hechos del Excel y despejaba el
+// costo de tela por resta, `costoTela = max(0, excelCb - costoMO - costoAcc)`.
+// Donde el Excel no tenia valor, el costo de tela quedaba en 0: reportaba tela
+// gratis, y no por redondeo sino por incapacidad estructural — nunca podia
+// costear tela desde la base. El usuario fallo el 29-jul-2026 que gana el numero
+// nuevo (causa 2 del arnes de paridad).
+//
+// Ahora delega en el motor. La aritmetica que habia aca no existe mas.
+//
+// El shape de la respuesta se conserva campo por campo, porque dashboard.html lee
+// estos nombres directo. Se agregan dos campos nuevos, `seOfrece` y `diagnostico`,
+// que son aditivos y no rompen a ningun consumidor.
 api.get('/matriz-prenda/:productoId', async (c) => {
-  const db = (c as any).db;
-  const productoId = c.req.param('productoId');
-  const sysConfig = await getSystemConfig(db);
+  try {
+    const db = (c as any).db;
+    const productoId = c.req.param('productoId');
 
-  const [prod] = await db.select().from(productos).where(eq(productos.id, productoId)).limit(1);
-  if (!prod) {
-    return c.json({ success: false, error: 'Producto no encontrado' }, 404);
-  }
-
-  const allTallas = await db.select().from(tallas).where(eq(tallas.colegioId, prod.colegioId)).orderBy(asc(tallas.orden));
-  const pesos = await db.select().from(pesoMateriaPrima).where(eq(pesoMateriaPrima.productoId, productoId));
-  const pesoMap = new Map<string, any>();
-  pesos.forEach((p: any) => pesoMap.set(p.tallaId, p));
-
-
-  const moList = await db.select().from(manoObra).where(eq(manoObra.productoId, productoId));
-  const moMap = new Map<string, number>();
-  moList.forEach((m: any) => {
-    const foundTalla = allTallas.find((t: any) => t.id === m.tallaId);
-    if (foundTalla) moMap.set(foundTalla.codigo, m.costoBs);
-    moMap.set(m.tallaId, m.costoBs);
-  });
-
-  const precios = await db.select().from(preciosVenta).where(eq(preciosVenta.productoId, productoId));
-  const precioMap = new Map<string, any>();
-  precios.forEach((pr: any) => precioMap.set(pr.tallaId, pr));
-
-  // Dynamic tarifa calculation from costosIndirectos DB and System Config
-  let indirectosListP: any[] = [];
-  try { indirectosListP = await db.select().from(costosIndirectos); } catch (e) {}
-  const totalIndirectosP = indirectosListP.reduce((acc: number, ci: any) => acc + (Number(ci.montoMensual) || 0), 0);
-  const prendasProducidasMesP = sysConfig.volumenMensualProduccion;
-  const tarifaPuntoP = prendasProducidasMesP > 0 ? (totalIndirectosP / (prendasProducidasMesP * 10)) : 0;
-
-  const excelData = loadExcelMatrices();
-
-  const getMoVal = (t: any) => {
-    const code = t.codigo;
-    const dbVal = moMap.get(code) ?? moMap.get(t.id);
-    return dbVal || 0;
-  };
-
-  const costoAcc = excelData ? (excelData.itemAccMap.get(prod.itemNumero) || 0) : 0;
-
-  const matriz = allTallas.map((t: any) => {
-    const key = `${prod.itemNumero}_${t.codigo}`;
-    const pRecord = pesoMap.get(t.id);
-    const precioRecord = precioMap.get(t.id);
-
-    const pesoExacto = pRecord?.pesoExactoGramos || 0;
-    const pesoConMerma = pRecord?.pesoGramos || 0;
-    const costoMO = getMoVal(t);
-    const precioVentaVal = precioRecord?.precioBs || (excelData ? excelData.precioVenta.get(key) || null : null);
-
-    const excelCb = excelData ? (excelData.costoBruto.get(key) || 0) : 0;
-    const excelCa = excelData ? (excelData.costoAntesImp.get(key) || 0) : 0;
-    const excelCt = excelData ? (excelData.costoTotal.get(key) || 0) : 0;
-
-    let costoTelaVal = 0;
-    if (excelCb > 0) {
-      costoTelaVal = Math.max(0, excelCb - costoMO - costoAcc);
+    const res = await costearPrendaTodasLasTallas(db, productoId);
+    if (!res) {
+      return c.json({ success: false, error: 'Producto no encontrado' }, 404);
     }
+    const { producto: prod, filas } = res;
 
-    const isProduced = (pesoConMerma > 0 || excelCb > 0) && (costoMO > 0 || costoAcc > 0 || costoTelaVal > 0);
-    const cb = isProduced ? (excelCb > 0 ? excelCb : parseFloat((costoTelaVal + costoAcc + costoMO).toFixed(2))) : 0;
+    const matriz = filas.map((f) => {
+      const { meta, resultado } = f;
 
-    const dynamicCostoFijoP = (prod.factorComplejidad || 0) * tarifaPuntoP;
-    const fijosXprendaVal = excelCa > 0 && excelCb > 0 ? parseFloat((excelCa - excelCb).toFixed(2)) : dynamicCostoFijoP;
-    const ca = cb > 0 ? (excelCa > 0 ? excelCa : parseFloat((cb + fijosXprendaVal).toFixed(2))) : 0;
-    const ct = ca > 0 ? (excelCt > 0 ? excelCt : parseFloat((ca * sysConfig.factorIva).toFixed(2))) : 0;
+      // Regla decidida el 29-jul-2026: `precio_venta` es la fuente de verdad de
+      // si la prenda se ofrece en esa talla. Sin precio vigente no se ofrece, y
+      // los costos se muestran en 0 en vez de prorratearle un costo fijo a una
+      // combinacion que no existe. Reemplaza al viejo `isProduced`, que era una
+      // heuristica sobre peso y componentes.
+      const existe = meta.seOfrece;
 
-    const un = (precioVentaVal > 0 && ct > 0) ? parseFloat((precioVentaVal - ct).toFixed(2)) : null;
-    const mg = (precioVentaVal > 0 && un !== null && un !== 0) ? parseFloat(((un / precioVentaVal) * 100).toFixed(2)) : null;
+      return {
+        tallaId: meta.tallaId,
+        tallaCodigo: meta.tallaCodigo,
+        tallaNombre: meta.tallaNombre,
+        pesoExacto: r2(meta.pesoExactoGramos),
+        pesoConMerma: r2(resultado.pesoConMerma),
+        mermaPorcentaje: meta.mermaPorcentaje ?? 8,
+        costoTela: existe ? resultado.costoTela : 0,
+        costoAccesorios: existe ? resultado.costoAccesorios : 0,
+        costoManoObra: existe ? resultado.costoManoObra : 0,
+        costoBruto: existe ? resultado.costoBruto : 0,
+        costoFijosVariable: existe ? resultado.costoFijosVariable : 0,
+        // FASE 4: el indirecto ya no viaja disfrazado de costo fijo. Prorrateado
+        // sobre volumen ANUAL y proporcional al factorComplejidad, normalizado
+        // para que lo absorbido iguale el pool.
+        costoIndirecto: existe ? resultado.costoIndirecto : 0,
+        costoUnitarioNeto: existe ? resultado.costoUnitarioNeto : 0,
+        precioVenta: meta.precioVentaBs,
+        ingresoNetoConFactura: existe ? resultado.ingresoNetoConFactura : null,
+        ingresoNetoSinFactura: existe ? resultado.ingresoNetoSinFactura : null,
+        utilidadConFactura: existe ? resultado.utilidadConFactura : null,
+        utilidadSinFactura: existe ? resultado.utilidadSinFactura : null,
+        margenConFactura: existe ? resultado.margenConFactura : null,
+        margenSinFactura: existe ? resultado.margenSinFactura : null,
 
-    return {
-      tallaId: t.id,
-      tallaCodigo: t.codigo,
-      tallaNombre: t.nombre,
-      pesoExacto: parseFloat(pesoExacto.toFixed(2)),
-      pesoConMerma: parseFloat(pesoConMerma.toFixed(2)),
-      mermaPorcentaje: pRecord?.mermaPorcentaje || 8,
-      costoTela: parseFloat((cb > 0 ? costoTelaVal : 0).toFixed(2)),
-      costoAccesorios: parseFloat((cb > 0 ? costoAcc : 0).toFixed(2)),
-      costoManoObra: parseFloat((cb > 0 ? costoMO : 0).toFixed(2)),
-      costoBruto: parseFloat(cb.toFixed(2)),
-      costoFijosVariable: parseFloat(fijosXprendaVal.toFixed(2)),
+        // Aditivos. Lo que antes se resolvia devolviendo 0 en silencio.
+        seOfrece: existe,
+        diagnostico: {
+          ...resultado.diagnostico,
+          modoCosteo: meta.modoCosteo,
+          telaVinculada: meta.telaVinculada,
+          tieneManoObra: meta.tieneManoObra,
+          faltantes: meta.faltantes,
+          inconsistencias: meta.inconsistencias,
+        },
+      };
+    });
 
-      costoAntesImpuestos: parseFloat(ca.toFixed(2)),
-      iva: parseFloat((ct > 0 ? ct - ca : 0).toFixed(2)),
-      costoTotal: parseFloat(ct.toFixed(2)),
-      precioVenta: precioVentaVal > 0 ? parseFloat(precioVentaVal.toFixed(2)) : null,
-      utilidadNeta: un,
-      margenPorcentaje: mg,
-    };
-  });
-
-  return c.json({
-    success: true,
-    producto: {
-      id: prod.id,
-      itemNumero: prod.itemNumero,
-      descripcion: prod.descripcion,
-      factorComplejidad: prod.factorComplejidad,
-    },
-    data: matriz,
-  });
+    return c.json({
+      success: true,
+      producto: {
+        id: prod.id,
+        itemNumero: prod.itemNumero,
+        descripcion: prod.descripcion,
+        factorComplejidad: prod.factorComplejidad,
+        modoCosteo: prod.modoCosteo === 'adquirido' ? 'adquirido' : 'confeccion',
+      },
+      data: matriz,
+    });
+  } catch (e: any) {
+    console.error('matriz-prenda:', e);
+    return c.json({ success: false, error: e?.message || String(e) }, 500);
+  }
 });
 
 export default api;

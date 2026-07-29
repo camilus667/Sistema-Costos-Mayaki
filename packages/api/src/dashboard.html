@@ -31,12 +31,12 @@
     </div>
 
     <div class="header-controls">
-      <label style="font-size: 0.8rem; color: var(--text-muted);">Colegio Activo:</label>
+      <label style="font-size: 0.8rem; color: var(--text-muted);" title="Qué estás viendo: la empresa entera o un colegio">Ámbito:</label>
       <select id="global-colegio-select" class="colegio-selector" onchange="cambiarColegioGlobal(this.value)">
-        <option value="all">TODOS LOS COLEGIOS</option>
+        <option value="all">TODA LA EMPRESA</option>
       </select>
       <button class="btn-icon-admin" onclick="switchTab('admin-colegio')"
-        title="Centro de Configuración y Administración del Colegio">⚙️ Configuración</button>
+        title="Configuración de la empresa y de cada colegio">⚙️ Configuración</button>
       <div class="status-badge">
         <div class="status-dot"></div>
         <span id="env-status">sql.js / D1 Activo</span>
@@ -51,7 +51,7 @@
     <button class="tab-btn" onclick="switchTab('costeo-individual')">Costeo Individual</button>
     <button class="tab-btn" onclick="switchTab('matriz-tallas')">Costeo Multitalla</button>
     <button class="tab-btn" onclick="switchTab('inventario')">Inventario por Colegio</button>
-    <button class="tab-btn" onclick="switchTab('admin-colegio')">⚙️ Configuración del Colegio</button>
+    <button class="tab-btn" onclick="switchTab('admin-colegio')">⚙️ Configuración</button>
   </nav>
 
   <main>
@@ -173,12 +173,15 @@
               TOTAL</button>
             <button class="excel-tab" onclick="switchExcelConcept('precioVenta', this)">Precio de Venta al
               Público</button>
-            <button class="excel-tab" onclick="switchExcelConcept('costoAntesImp', this)">Subtotal antes de
-              impuestos</button>
-            <button class="excel-tab" onclick="switchExcelConcept('costoTotal', this)">Precio final con
-              Impuestos</button>
-            <button class="excel-tab" onclick="switchExcelConcept('utilidadNeta', this)">Utilidad Bruta</button>
-            <button class="excel-tab" onclick="switchExcelConcept('margenPorcentaje', this)">Margen Bruto Real
+            <button class="excel-tab" onclick="switchExcelConcept('costoUnitarioNeto', this)">Costo unitario
+              neto</button>
+            <button class="excel-tab" onclick="switchExcelConcept('utilidadConFactura', this)">Utilidad con
+              factura</button>
+            <button class="excel-tab" onclick="switchExcelConcept('margenConFactura', this)">Margen con factura
+              (%)</button>
+            <button class="excel-tab" onclick="switchExcelConcept('utilidadSinFactura', this)">Utilidad sin
+              factura</button>
+            <button class="excel-tab" onclick="switchExcelConcept('margenSinFactura', this)">Margen sin factura
               (%)</button>
             <button class="excel-tab" onclick="switchExcelConcept('inventarioUnidades', this)">INVENTARIO</button>
             <button class="excel-tab" onclick="switchExcelConcept('costoInventario', this)">Costo Inventario</button>
@@ -314,17 +317,18 @@
               style="background:#10b98122; color:#34d399; border-color:#05966944; font-size:0.85rem; padding:0.25rem 0.65rem;">CAMBRIDGE</span>
           </div>
 
-          <div class="admin-tabs-bar" style="border-bottom:none; margin:0; padding:0;">
-            <button class="admin-tab-btn active" id="btn-atab-telas" onclick="switchAdminTab('telas')">🧵 Telas del
-              Colegio</button>
-            <button class="admin-tab-btn" id="btn-atab-prendas" onclick="switchAdminTab('prendas')">👔 Prendas &
-              Reordenamiento</button>
-            <button class="admin-tab-btn" id="btn-atab-tallas" onclick="switchAdminTab('tallas')">📏 Tallas
-              Habilitadas</button>
-            <button class="admin-tab-btn" id="btn-atab-colegios" onclick="switchAdminTab('colegios')">🏛️ Perfil &
-              Nuevos Colegios</button>
-            <button class="admin-tab-btn" id="btn-atab-sistema" onclick="switchAdminTab('sistema')">⚙️ Parámetros del
-              Sistema</button>
+          <div class="admin-tabs-bar" style="border-bottom:none; margin:0; padding:0; display:flex; align-items:center; gap:0.35rem; flex-wrap:wrap;">
+            <span style="font-size:0.62rem; font-weight:800; color:#34d399; letter-spacing:1px; padding:0 0.35rem;">DE LA EMPRESA</span>
+            <button class="admin-tab-btn active" id="btn-atab-telas" onclick="switchAdminTab('telas')">🧵 Telas</button>
+            <button class="admin-tab-btn" id="btn-atab-insumos" onclick="switchAdminTab('insumos')">🧷 Insumos</button>
+            <button class="admin-tab-btn" id="btn-atab-tallas" onclick="switchAdminTab('tallas')">📏 Tallas</button>
+            <button class="admin-tab-btn" id="btn-atab-sistema" onclick="switchAdminTab('sistema')">⚙️ Parámetros</button>
+
+            <span style="width:1px; height:22px; background:#334155; margin:0 0.5rem;"></span>
+
+            <span style="font-size:0.62rem; font-weight:800; color:#93c5fd; letter-spacing:1px; padding:0 0.35rem;">DEL COLEGIO</span>
+            <button class="admin-tab-btn" id="btn-atab-prendas" onclick="switchAdminTab('prendas')">👔 Prendas &amp; Recetas</button>
+            <button class="admin-tab-btn" id="btn-atab-colegios" onclick="switchAdminTab('colegios')">🏛️ Perfil &amp; Colegios</button>
           </div>
         </div>
 
@@ -341,8 +345,7 @@
 
             <div id="form-nueva-tela-container"
               style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
-              <h4 style="margin-top:0; margin-bottom:0.75rem; color:#34d399; font-size:0.9rem;">✨ Registrar Nueva Tela
-                para este Colegio</h4>
+              <h4 style="margin-top:0; margin-bottom:0.75rem; color:#34d399; font-size:0.9rem;">✨ Registrar Nueva Tela</h4>
               <div style="display:grid; grid-template-columns: 1fr auto; gap:0.75rem; align-items:end;">
                 <div>
                   <label style="font-size:0.72rem; color:#94a3b8;">Nombre / Descripción de la Tela *</label>
@@ -354,6 +357,16 @@
                     Tela</button>
                 </div>
               </div>
+              <div style="display:flex; align-items:center; gap:0.6rem; margin-top:0.8rem;">
+                <label style="font-size:0.78rem; color:#f59e0b; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                  <input type="checkbox" id="nt-exclusivo">
+                  Exclusiva de este colegio
+                </label>
+                <span style="font-size:0.72rem; color:#64748b;">
+                  Sin marcar, la tela es de la empresa y la ven todos los colegios. Es el caso normal:
+                  11 de las 12 telas del catálogo son compartidas y solo el Casimir Escocés es del colegio.
+                </span>
+              </div>
             </div>
 
             <div style="max-height: 680px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
@@ -361,17 +374,102 @@
                 <thead>
                   <tr>
                     <th style="width:80px; text-align:center;">Orden</th>
-                    <th style="text-align:left; padding-left:0.75rem; font-size:0.9rem; min-width:550px;">Nombre /
+                    <th style="text-align:left; padding-left:0.75rem; font-size:0.9rem; min-width:480px;">Nombre /
                       Descripción de la Tela</th>
+                    <th style="width:150px; text-align:center;">Ámbito</th>
                     <th style="width:80px; text-align:center;">Activo</th>
                   </tr>
                 </thead>
                 <tbody id="tb-admin-telas-body">
                   <tr>
-                    <td colspan="3" style="text-align:center; padding:2rem;">Cargando telas del colegio...</td>
+                    <td colspan="4" style="text-align:center; padding:2rem;">Cargando telas...</td>
                   </tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- SUBTAB: INSUMOS -->
+          <div id="admin-sec-insumos" style="display:none;">
+            <div style="background:#0f172a; border:1px solid #334155; border-radius:10px; padding:0.85rem 1rem; margin-bottom:1rem;">
+              <div style="font-size:0.78rem; color:#94a3b8; line-height:1.5;">
+                Los insumos son <strong style="color:#f8fafc;">de la empresa</strong>: botones, cierres, elástico, hilo, etiquetas.
+                Los comparten todos los colegios, así que un cambio de precio se hace <strong style="color:#f8fafc;">una sola vez</strong>.
+                Solo lleva colegio lo que carga su identidad: bordados, serigrafías, vinilos, cuello y botamanga.
+                <br>
+                Para asignar un insumo a una prenda y decidir la cantidad, andá a la pestaña
+                <strong style="color:#38bdf8;">Prendas</strong> y usá el botón Receta de esa prenda.
+              </div>
+            </div>
+
+            <div style="display:flex; align-items:center; justify-content:flex-end; margin-bottom:0.75rem; gap:0.6rem;">
+              <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.45rem 0.85rem;"
+                onclick="mostrarFormNuevoInsumo()">+ Dar de Alta Nuevo Insumo</button>
+            </div>
+
+            <div id="form-nuevo-insumo-container"
+              style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
+              <h4 style="margin-top:0; margin-bottom:0.75rem; color:#34d399; font-size:0.9rem;">✨ Registrar Nuevo Insumo</h4>
+              <div style="display:grid; grid-template-columns: 1fr 130px 110px 130px; gap:0.75rem; align-items:end;">
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Nombre del insumo *</label>
+                  <input type="text" id="ni-desc" class="cell-editable-sm" style="width:100%; font-weight:600;"
+                    placeholder="Ej. Boton de 4 huecos">
+                </div>
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Unidad de compra *</label>
+                  <input type="text" id="ni-unidad" class="cell-editable-sm" style="width:100%;" placeholder="Ej. bolsa, rollo">
+                </div>
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Cantidad x unidad *</label>
+                  <input type="number" id="ni-cant" class="cell-editable-sm" style="width:100%; text-align:center;"
+                    step="0.01" min="0.01" value="1" oninput="previewCostoInsumo()">
+                </div>
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Costo de esa unidad, Bs *</label>
+                  <input type="number" id="ni-costo" class="cell-editable-sm" style="width:100%; text-align:right;"
+                    step="0.01" min="0.01" oninput="previewCostoInsumo()">
+                </div>
+              </div>
+
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-top:0.9rem; gap:1rem; flex-wrap:wrap;">
+                <div style="font-size:0.78rem; color:#94a3b8;">
+                  Costo unitario que va a quedar:
+                  <strong id="ni-preview" style="color:#34d399; font-size:0.95rem;">—</strong>
+                  <span style="color:#475569;">(lo calcula el servidor: costo de la unidad ÷ cantidad)</span>
+                </div>
+                <label style="font-size:0.78rem; color:#f59e0b; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                  <input type="checkbox" id="ni-exclusivo">
+                  Exclusivo de este colegio
+                </label>
+                <button class="btn" style="padding:0.45rem 1rem;" onclick="crearNuevoInsumoAdmin()">Guardar Insumo</button>
+              </div>
+              <div style="font-size:0.72rem; color:#64748b; margin-top:0.5rem;">
+                Dejá el check sin marcar si el insumo lo puede usar cualquier colegio. Es el caso normal:
+                27 de los 38 insumos del catálogo son de la empresa.
+              </div>
+            </div>
+
+            <div style="max-height: 620px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
+              <table class="table-compact-auto" style="width:100%; min-width:880px;">
+                <thead>
+                  <tr>
+                    <th style="text-align:left; padding-left:0.75rem; min-width:300px;">Insumo</th>
+                    <th style="width:120px; text-align:center;">Unid. compra</th>
+                    <th style="width:100px; text-align:center;">Cant. x ud</th>
+                    <th style="width:120px; text-align:right;">Costo ud, Bs</th>
+                    <th style="width:130px; text-align:right;">Costo unitario</th>
+                    <th style="width:150px; text-align:center;">Ámbito</th>
+                  </tr>
+                </thead>
+                <tbody id="tb-admin-insumos-body">
+                  <tr><td colspan="6" style="text-align:center; padding:2rem;">Cargando insumos...</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div style="font-size:0.72rem; color:#64748b; margin-top:0.6rem;">
+              Cada campo se guarda al salir de él, y el costo unitario se recalcula en el servidor.
+              Cambiar el costo de un insumo mueve el costo de todas las prendas que lo llevan.
             </div>
           </div>
 
@@ -404,7 +502,7 @@
                 <div>
                   <label style="font-size:0.72rem; color:#94a3b8;">Tela Asignada</label>
                   <select id="np-tela" class="cell-editable-sm" style="width:100%; padding:0.4rem; font-weight:600;">
-                    <option value="">-- Sin tela / Promedio --</option>
+                    <option value="">-- Sin tela asignada --</option>
                   </select>
                 </div>
                 <div>
@@ -419,8 +517,106 @@
               </div>
             </div>
 
+            <!-- Receta de accesorios de UNA prenda. La API existia desde antes
+                 (detalleAccesorio.ts) y la pantalla no la llamaba nunca: la unica
+                 forma de tocar la receta era la matriz de todas las prendas contra
+                 todos los insumos. -->
+            <div id="panel-receta"
+              style="display:none; background:#0f172a; padding:1rem 1.15rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:0.85rem;">
+                <h4 style="margin:0; color:#34d399; font-size:0.95rem;">
+                  🧵 Receta de <span id="receta-titulo" style="color:#f8fafc;"></span>
+                </h4>
+                <button class="btn" style="background:#334155; font-size:0.75rem; padding:0.35rem 0.8rem;"
+                  onclick="cerrarReceta()">Cerrar</button>
+              </div>
+
+              <table class="table-compact-auto" style="width:100%; margin-bottom:0.9rem;">
+                <thead>
+                  <tr>
+                    <th style="text-align:left; padding-left:0.6rem; min-width:260px;">Insumo</th>
+                    <th style="width:110px; text-align:center;">Cantidad</th>
+                    <th style="width:120px; text-align:right;">Costo unit.</th>
+                    <th style="width:120px; text-align:right;">Costo total</th>
+                    <th style="width:80px; text-align:center;">Quitar</th>
+                  </tr>
+                </thead>
+                <tbody id="tb-receta-body"></tbody>
+                <tfoot>
+                  <tr style="border-top:2px solid #334155;">
+                    <td colspan="3" style="padding:0.5rem 0.6rem; font-weight:700; color:#94a3b8;">SUBTOTAL DE ACCESORIOS</td>
+                    <td id="receta-subtotal" style="text-align:right; font-weight:800; color:#f59e0b;">0.00</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+
+              <div style="display:grid; grid-template-columns: 1fr 110px auto; gap:0.6rem; align-items:end; padding-top:0.85rem; border-top:1px solid #1e293b;">
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Agregar insumo</label>
+                  <select id="receta-nuevo-acc" class="cell-editable-sm" style="width:100%; padding:0.4rem;"></select>
+                </div>
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Cantidad</label>
+                  <input type="number" id="receta-nueva-cant" class="cell-editable-sm"
+                    style="width:100%; text-align:center;" step="0.01" min="0.01" value="1">
+                </div>
+                <div>
+                  <button class="btn" style="padding:0.45rem 1rem;" onclick="agregarLineaReceta()">Agregar</button>
+                </div>
+              </div>
+
+              <div style="margin-top:0.9rem; padding-top:0.85rem; border-top:1px solid #1e293b;">
+                <div style="display:grid; grid-template-columns: 1fr auto; gap:0.6rem; align-items:end;">
+                  <div>
+                    <label style="font-size:0.72rem; color:#94a3b8;">Copiar los datos de costeo de otra prenda</label>
+                    <select id="receta-origen" class="cell-editable-sm" style="width:100%; padding:0.4rem;"></select>
+                  </div>
+                  <div>
+                    <button class="btn" style="background:#7c3aed; padding:0.45rem 1.2rem;" onclick="copiarDeReferencia()">Copiar</button>
+                  </div>
+                </div>
+
+                <div style="display:flex; gap:1.1rem; flex-wrap:wrap; margin-top:0.7rem; font-size:0.76rem; color:#cbd5e1;">
+                  <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
+                    <input type="checkbox" id="cp-receta" checked> Receta de insumos
+                  </label>
+                  <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
+                    <input type="checkbox" id="cp-pesos" checked> Pesos de tela por talla
+                  </label>
+                  <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
+                    <input type="checkbox" id="cp-manoobra" checked> Mano de obra por talla
+                  </label>
+                  <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
+                    <input type="checkbox" id="cp-factor" checked> Factor de complejidad
+                  </label>
+                  <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
+                    <input type="checkbox" id="cp-tela"> Tela asignada
+                  </label>
+                </div>
+
+                <label style="display:flex; align-items:center; gap:0.4rem; margin-top:0.6rem; font-size:0.78rem; color:#f59e0b; cursor:pointer;">
+                  <input type="checkbox" id="receta-reemplazar">
+                  Reemplazar lo que la prenda ya tenga
+                </label>
+
+                <div id="receta-nota-tela" style="font-size:0.72rem; color:#38bdf8; margin-top:0.6rem; font-weight:600;"></div>
+                <div style="font-size:0.72rem; color:#64748b; margin-top:0.35rem; line-height:1.5;">
+                  Sin marcar "reemplazar" solo se llena lo que está <strong>vacío</strong>: un peso ya cargado no se
+                  toca, un factor distinto de 1 no se toca, y una línea de receta que ya existe no se duplica.
+                  Copiar no debe borrar trabajo hecho a mano. Marcalo cuando quieras realinear una prenda ya cargada
+                  con su referencia.
+                  <br>
+                  Los datos copiados son <strong>provisionales y trazables</strong>: sabés de qué prenda salieron.
+                  Un peso copiado se equivoca en un 5%; el cero con el que nace una prenda se equivoca en un 100%.
+                  Los insumos exclusivos de otro colegio no viajan, y la respuesta dice cuáles quedaron sin copiar.
+                </div>
+              </div>
+
+            </div>
+
             <div style="max-height: 680px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
-              <table class="table-compact-auto" style="width:100%; min-width:1100px;">
+              <table class="table-compact-auto" style="width:100%; min-width:1200px;">
                 <thead>
                   <tr>
                     <th style="width:60px; text-align:center;">Orden</th>
@@ -429,11 +625,12 @@
                     <th style="width:420px; text-align:left; padding-left:0.5rem;">Tela Asignada (Selector)</th>
                     <th style="width:90px; text-align:center;">Factor Comp.</th>
                     <th style="width:70px; text-align:center;">Activo</th>
+                    <th style="width:95px; text-align:center;">Receta</th>
                   </tr>
                 </thead>
                 <tbody id="tb-admin-prendas-body">
                   <tr>
-                    <td colspan="6" style="text-align:center; padding:2rem;">Cargando catálogo de prendas...</td>
+                    <td colspan="7" style="text-align:center; padding:2rem;">Cargando prendas del colegio...</td>
                   </tr>
                 </tbody>
               </table>
@@ -458,7 +655,7 @@
           <div id="admin-sec-colegios" style="display:none;">
             <div
               style="background:#1e293b; padding:1.25rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.5rem;">
-              <h4 style="margin-top:0; color:#f8fafc;">🏛️ Datos del Colegio Activo</h4>
+              <h4 style="margin-top:0; color:#f8fafc;">🏛️ Datos del Colegio</h4>
               <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
                 <div>
                   <label style="font-size:0.78rem; color:#94a3b8;">Nombre del Colegio</label>
@@ -584,10 +781,7 @@
         const select = document.getElementById('global-colegio-select');
         if (json.data && json.data.length > 0) {
           const currentId = String(colegioFiltroActual);
-          select.innerHTML = `
-            <option value="all">TODOS LOS COLEGIOS</option>
-            ${json.data.map(c => `<option value="${c.id}">Colegio ${c.nombre}</option>`).join('')}
-          `;
+          construirSelectorAmbito(json.data);
 
           const hasCurrentOption = Array.from(select.options).some(opt => opt.value === currentId);
           if (hasCurrentOption && currentId !== 'all') {
@@ -612,53 +806,23 @@
 
       const tabAdmin = document.getElementById('tab-admin-colegio');
       if (tabAdmin && tabAdmin.classList.contains('active')) {
-        if (val === 'all') {
-          alert('⚠️ "TODOS LOS COLEGIOS" es una vista agrupada global. Se seleccionará automáticamente un Colegio específico para la configuración.');
-          const select = document.getElementById('global-colegio-select');
-          for (let opt of select.options) {
-            if (opt.value && opt.value !== 'all') {
-              colegioFiltroActual = opt.value;
-              select.value = opt.value;
-              break;
-            }
-          }
-        }
+        // Aca habia un alert y un cambio FORZADO de seleccion: si elegias el ambito de
+        // empresa estando en Configuracion, la pantalla te devolvia a un colegio y te
+        // avisaba que lo habia hecho. Tenia sentido cuando las cuatro pestañas de empresa
+        // se cargaban por /api/colegios/:id/config y sin colegio no habia nada que mostrar.
+        //
+        // Ya no: Telas, Insumos, Tallas y Parametros cargan sin colegio, asi que el ambito
+        // de empresa es un estado valido y util en esta pantalla. Sacarle al usuario la
+        // opcion que acaba de elegir es peor que no ofrecerla.
         cargarConfigAdminColegio();
       }
     }
 
-    async function cargarConfigAdminColegio() {
-      const select = document.getElementById('global-colegio-select');
-
-      if (!colegioFiltroActual || colegioFiltroActual === 'all') {
-        let foundRealSchool = null;
-        for (let opt of select.options) {
-          if (opt.value && opt.value !== 'all') {
-            foundRealSchool = opt.value;
-            select.value = opt.value;
-            break;
-          }
-        }
-        if (foundRealSchool) {
-          colegioFiltroActual = foundRealSchool;
-        } else {
-          alert('⚠️ Selecciona un colegio específico para abrir la configuración.');
-          return;
-        }
-      }
-
-      try {
-        const res = await fetch('/api/colegios/' + colegioFiltroActual + '/config');
-        const json = await res.json();
-        if (json.success) {
-          adminConfigData = json;
-          renderAdminTelas();
-          renderAdminPrendas();
-          renderAdminTallas();
-          renderAdminPerfilColegio();
-        }
-      } catch (e) { console.error('Error al cargar config admin:', e); }
-    }
+    // La definicion vieja de cargarConfigAdminColegio vivia aca y estaba MUERTA: habia dos
+    // en el archivo y en JavaScript gana la ultima. Irónicamente esta resolvia bien el caso
+    // del selector en TODOS (buscaba el primer colegio real), y la que corria hacia return
+    // en silencio. Se borra, y la version viva —mas abajo— toma la parte buena.
+    function cargarConfigAdminColegioObsoleta() { /* eliminada, ver la version viva */ }
 
     function fmtNum(val) {
       return (val || 0).toLocaleString('en-US');
@@ -798,12 +962,11 @@
         const json = await res.json();
         const select = document.getElementById('global-colegio-select');
         if (json.data && json.data.length > 0) {
-          select.innerHTML = `
-            <option value="all">TODOS LOS COLEGIOS</option>
-            ${json.data.map(c => `<option value="${c.id}" ${c.nombre === 'CAMBRIDGE' ? 'selected' : ''}>Colegio ${c.nombre}</option>`).join('')}
-          `;
-          const selectedOpt = select.options[select.selectedIndex];
-          colegioFiltroActual = selectedOpt ? selectedOpt.value : 'all';
+          // El literal 'CAMBRIDGE' que preseleccionaba aca estaba MUERTO: el nombre real
+          // es "Col. Cambridge" y la comparacion nunca daba true, asi que el selector
+          // caia en la primera opcion. construirSelectorAmbito conserva la eleccion del
+          // usuario y deja el ambito de empresa cuando no hay nada valido que conservar.
+          construirSelectorAmbito(json.data);
         }
       } catch (e) { console.error(e); }
     }
@@ -970,27 +1133,60 @@
           }
         }
 
-        // Extraer valores con fallbacks
-        const moCost = (p.manoDeObra && typeof p.manoDeObra.totalManoObraBs === 'number') ? p.manoDeObra.totalManoObraBs : 15.0;
-        const moConf = (p.manoDeObra && typeof p.manoDeObra.costoConfeccion === 'number') ? p.manoDeObra.costoConfeccion : moCost;
-        const fijosCost = (p.fijosEIndirectos && typeof p.fijosEIndirectos.totalFijosBs === 'number') ? p.fijosEIndirectos.totalFijosBs : 1.5;
-        const fijosXp = (p.fijosEIndirectos && typeof p.fijosEIndirectos.fijosXprenda === 'number') ? p.fijosEIndirectos.fijosXprenda : 1.0;
-        const indirXp = (p.fijosEIndirectos && typeof p.fijosEIndirectos.indirectosXprenda === 'number') ? p.fijosEIndirectos.indirectosXprenda : 0.5;
-        const telaCost = (p.tela && typeof p.tela.costoTelaBs === 'number') ? p.tela.costoTelaBs : 0.0;
-        const pesoG = (p.tela && p.tela.pesoGramos != null) ? p.tela.pesoGramos : 0;
-        const accCost = typeof p.subtotalAccesoriosBs === 'number' ? p.subtotalAccesoriosBs : 0.0;
+        // Valores del API. El navegador NO calcula: si un campo falta se muestra 0
+        // y se avisa, nunca un numero inventado.
+        //
+        // Antes aca vivia una CUARTA copia de la formula de costeo, ademas de las
+        // tres del backend. Era una copia defensiva: usaba el valor del API si
+        // venia, y si no lo recalculaba como tela + accesorios + mano de obra +
+        // fijos, con el 13% de IVA hardcodeado en 1.13. Y peor: cuando faltaba un
+        // campo inventaba constantes plausibles a la vista — mano de obra 15.0,
+        // fijos 1.5, fijosXprenda 1.0, indirectos 0.5. Es la misma patologia que
+        // los 15,00 Bs hardcodeados que se sacaron del backend, replicada en el
+        // cliente, y no era codigo muerto: se activaba con cualquier respuesta
+        // incompleta, sin dejar rastro.
+        const faltantesUI = [];
+        const dato = (v, nombre) => {
+          if (typeof v === 'number' && !isNaN(v)) return v;
+          faltantesUI.push(nombre);
+          return 0;
+        };
 
-        const subtotalAntesImp = (typeof p.costoAntesImpuestosBs === 'number' && !isNaN(p.costoAntesImpuestosBs))
-          ? p.costoAntesImpuestosBs : (telaCost + accCost + moCost + fijosCost);
-        const precioFinalIva = (typeof p.precioFinalConIvaBs === 'number' && !isNaN(p.precioFinalConIvaBs))
-          ? p.precioFinalConIvaBs : (subtotalAntesImp * 1.13);
+        const moCost = dato(p.manoDeObra && p.manoDeObra.totalManoObraBs, 'mano de obra');
+        const moConf = (p.manoDeObra && typeof p.manoDeObra.costoConfeccion === 'number') ? p.manoDeObra.costoConfeccion : moCost;
+        const fijosCost = dato(p.fijosEIndirectos && p.fijosEIndirectos.totalFijosBs, 'fijos e indirectos');
+        const fijosXp = dato(p.fijosEIndirectos && p.fijosEIndirectos.fijosXprenda, 'fijos por prenda');
+        const indirXp = (p.fijosEIndirectos && typeof p.fijosEIndirectos.indirectosXprenda === 'number') ? p.fijosEIndirectos.indirectosXprenda : 0;
+        const telaCost = dato(p.tela && p.tela.costoTelaBs, 'costo de tela');
+        const pesoG = (p.tela && p.tela.pesoGramos != null) ? p.tela.pesoGramos : 0;
+        const accCost = dato(p.subtotalAccesoriosBs, 'accesorios');
+
+        // Sin recalculo de respaldo. Estos dos vienen del motor o no vienen.
+        const subtotalAntesImp = dato(p.costoUnitarioNetoBs, 'costo unitario neto');
+        // Ya no existe un "precio final con impuestos" del lado del costo: era el
+        // costo inflado un 13%. Lo que importa ahora es el ingreso por canal.
+        const ingresoCon = p.ingresoNetoConFacturaBs;
+        const ingresoSin = p.ingresoNetoSinFacturaBs;
+
+        // El backend ahora devuelve un diagnostico: prenda sin peso de tela, sin
+        // tela vinculada, sin receta de accesorios, o talla que no se ofrece. Se
+        // muestra en vez de taparlo con un numero que parece correcto.
+        const avisosBackend = p.diagnostico
+          ? [].concat(p.diagnostico.faltantes || [], p.diagnostico.inconsistencias || [], p.diagnostico.advertencias || [])
+          : [];
 
         const pctTela = subtotalAntesImp > 0 ? (telaCost / subtotalAntesImp * 100) : 0;
         const pctAcc = subtotalAntesImp > 0 ? (accCost / subtotalAntesImp * 100) : 0;
         const pctMo = subtotalAntesImp > 0 ? (moCost / subtotalAntesImp * 100) : 0;
         const pctFij = subtotalAntesImp > 0 ? (fijosCost / subtotalAntesImp * 100) : 0;
 
-        if (badge) badge.innerHTML = `<strong style="color:#fbbf24;">Subtotal:</strong> <span style="color:#f8fafc; font-weight:700;">Bs. ${subtotalAntesImp.toFixed(2)}</span>`;
+        if (badge) {
+          const problemas = [].concat(faltantesUI.map(f => "El API no devolvio: " + f), avisosBackend);
+          const aviso = problemas.length > 0
+            ? ` <span style="color:#f87171; font-weight:700; cursor:help;" title="${problemas.join(" | ").replace(/"/g, "&quot;")}">&#9888; ${problemas.length} aviso(s)</span>`
+            : "";
+          badge.innerHTML = `<strong style="color:#fbbf24;">Subtotal:</strong> <span style="color:#f8fafc; font-weight:700;">Bs. ${subtotalAntesImp.toFixed(2)}</span>${aviso}`;
+        }
 
         const accRows = (p.accesoriosIntervinientes && p.accesoriosIntervinientes.length > 0)
           ? p.accesoriosIntervinientes.map(a => `
@@ -1018,7 +1214,9 @@
               <div style="text-align:right;">
                 <div style="font-size:0.72rem; color:#94a3b8; text-transform:uppercase; letter-spacing:1px; font-weight:700;">Subtotal antes de impuestos</div>
                 <div style="font-size:2rem; font-weight:900; color:#fbbf24; line-height:1.1;">Bs. ${subtotalAntesImp.toFixed(2)}</div>
-                <div style="font-size:0.78rem; color:#34d399; font-weight:700; margin-top:0.35rem;">Precio final con Impuestos: <strong>Bs. ${precioFinalIva.toFixed(2)}</strong></div>
+                <div style="font-size:0.78rem; color:#94a3b8; font-weight:600; margin-top:0.35rem;">Costo unitario neto, sin IVA</div>
+                <div style="font-size:0.78rem; color:#34d399; font-weight:700; margin-top:0.35rem;">${typeof ingresoCon === 'number' ? 'Ingreso con factura: <strong>Bs. ' + ingresoCon.toFixed(2) + '</strong>' : 'Sin precio de venta cargado'}</div>
+                <div style="font-size:0.78rem; color:#34d399; font-weight:700;">${typeof ingresoSin === 'number' ? 'Ingreso sin factura: <strong>Bs. ' + ingresoSin.toFixed(2) + '</strong>' : ''}</div>
               </div>
             </div>
 
@@ -1737,33 +1935,114 @@
       renderMatrizConsolidada();
     }
 
-    async function guardarPrecioVentaMatriz(itemNum, tallaCode, inputElem) {
-      const precioBs = parseFloat(inputElem.value) || 0;
-      try {
-        await fetch('/api/calculo/precio-venta', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ itemNumero: itemNum, tallaCodigo: tallaCode, precioBs })
-        });
-        await cargarMatrizConsolidada();
-        cargarInventario();
-        cargarResumen();
-      } catch (e) { console.error(e); }
+    /**
+     * Marca visualmente el resultado de guardar una celda, SIN re-renderizar la grilla.
+     *
+     * Por que importa no re-renderizar: guardarPrecioVentaMatriz llamaba a
+     * cargarMatrizConsolidada() despues de cada edicion, y eso reescribia el tbody
+     * entero. Dos consecuencias, y el usuario reporto las dos:
+     *
+     *   1. El input que tenia el foco se destruia, asi que Tab no iba a la celda de al
+     *      lado: no iba a ninguna parte.
+     *   2. Si el guardado habia fallado, el re-render traia el valor VIEJO del servidor
+     *      y borraba lo que acababas de escribir. Y como la respuesta ni se miraba, el
+     *      fallo era invisible: parecia que el sistema "no acepta valores".
+     *
+     * Ahora la celda se marca sola y la grilla no se toca. Tab funciona nativo: en una
+     * tabla, el orden de tabulacion del navegador ya es a la derecha y despues abajo.
+     */
+    function marcarCeldaOk(inputElem) {
+      inputElem.style.transition = 'background 0.15s, border-color 0.15s';
+      inputElem.style.background = '#064e3b';
+      inputElem.style.borderColor = '#34d399';
+      setTimeout(() => {
+        inputElem.style.background = '';
+        inputElem.style.borderColor = '';
+      }, 600);
     }
 
-    async function guardarInventarioMatriz(itemNum, tallaCode, inputElem) {
-      const cantidad = parseInt(inputElem.value) || 0;
+    function marcarCeldaError(inputElem, mensaje) {
+      inputElem.style.background = '#7f1d1d';
+      inputElem.style.borderColor = '#f87171';
+      inputElem.title = mensaje || 'No se pudo guardar';
+      // El valor tecleado SE QUEDA: es lo que el usuario quiso poner y lo necesita a la
+      // vista para corregirlo. Borrarselo y no decir nada era el bug.
+      alert('No se pudo guardar la celda:\n\n' + (mensaje || 'error desconocido') +
+        '\n\nEl valor queda en pantalla en rojo para que lo puedas corregir. No se guardo.');
+    }
+
+    /** Refresca las pantallas que dependen del dato, sin tocar esta grilla. */
+    function refrescarDependientesDeMatriz() {
       try {
-        await fetch('/api/calculo/inventario-unidades', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ itemNumero: itemNum, tallaCodigo: tallaCode, cantidad })
-        });
-        await cargarMatrizConsolidada();
         cargarInventario();
         cargarResumen();
-      } catch (e) { console.error(e); }
+      } catch (e) { /* cortesia: no debe romper la edicion */ }
     }
+
+    /** Actualiza el dato en memoria para que la grilla y rawConsolidadaData no divergan. */
+    function actualizarCeldaEnMemoria(productoId, tallaCodigo, concepto, valor) {
+      if (!rawConsolidadaData || !Array.isArray(rawConsolidadaData.data)) return;
+      const fila = rawConsolidadaData.data.find(p => p.productoId === productoId);
+      if (fila && fila.tallas && fila.tallas[tallaCodigo]) {
+        fila.tallas[tallaCodigo][concepto] = valor;
+      }
+    }
+
+    async function guardarPrecioVentaMatriz(itemNum, tallaCode, inputElem, productoId, tallaId) {
+      const precioBs = parseFloat(inputElem.value) || 0;
+      try {
+        const res = await fetch('/api/calculo/precio-venta', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          // Se mandan las CLAVES PRIMARIAS, que la grilla ya tiene. itemNumero y
+          // tallaCodigo van tambien por compatibilidad, pero el servidor prefiere las
+          // primeras: itemNumero se numera por colegio y con dos colegios puede ser
+          // ambiguo.
+          body: JSON.stringify({
+            productoId, tallaId,
+            itemNumero: itemNum, tallaCodigo: tallaCode,
+            precioBs,
+          })
+        });
+        const json = await res.json();
+        if (!json.success) {
+          marcarCeldaError(inputElem, json.error);
+          return;
+        }
+        marcarCeldaOk(inputElem);
+        actualizarCeldaEnMemoria(productoId, tallaCode, 'precioVenta', precioBs);
+        refrescarDependientesDeMatriz();
+      } catch (e) {
+        marcarCeldaError(inputElem, String(e));
+      }
+    }
+
+    async function guardarInventarioMatriz(itemNum, tallaCode, inputElem, productoId, tallaId) {
+      const cantidad = parseInt(inputElem.value) || 0;
+      try {
+        const res = await fetch('/api/calculo/inventario-unidades', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            productoId, tallaId,
+            itemNumero: itemNum, tallaCodigo: tallaCode,
+            cantidad,
+          })
+        });
+        const json = await res.json();
+        if (!json.success) {
+          marcarCeldaError(inputElem, json.error);
+          return;
+        }
+        marcarCeldaOk(inputElem);
+        actualizarCeldaEnMemoria(productoId, tallaCode, 'inventarioUnidades', cantidad);
+        refrescarDependientesDeMatriz();
+      } catch (e) {
+        marcarCeldaError(inputElem, String(e));
+      }
+    }
+
+
 
     function renderMatrizConsolidada() {
       if (!rawConsolidadaData) return;
@@ -1799,13 +2078,13 @@
           colTotals[t.codigo] += val;
 
           if (currentExcelConcept === 'precioVenta') {
-            return `<td style="text-align:center;">${getInputHtml(val, '1', `onchange="guardarPrecioVentaMatriz(${p.itemNumero}, '${t.codigo}', this)"`)}</td>`;
+            return `<td style="text-align:center;">${getInputHtml(val, '1', `onchange="guardarPrecioVentaMatriz(${p.itemNumero}, '${t.codigo}', this, '${p.productoId}', '${t.id}')"`)}</td>`;
           } else if (currentExcelConcept === 'inventarioUnidades') {
-            return `<td style="text-align:center;">${getInputHtml(val, '1', `onchange="guardarInventarioMatriz(${p.itemNumero}, '${t.codigo}', this)"`)}</td>`;
+            return `<td style="text-align:center;">${getInputHtml(val, '1', `onchange="guardarInventarioMatriz(${p.itemNumero}, '${t.codigo}', this, '${p.productoId}', '${t.id}')"`)}</td>`;
           } else {
             if (val === null || val === undefined || val === 0) return '<td style="text-align:center; color: var(--text-muted);">-</td>';
             let formattedVal = '-';
-            if (currentExcelConcept === 'margenPorcentaje') {
+            if ((currentExcelConcept === 'margenConFactura' || currentExcelConcept === 'margenSinFactura')) {
               formattedVal = `<strong style="color:${getMarginColor(val)}; font-weight:700;">${val.toFixed(1)}%</strong>`;
             } else if (currentExcelConcept === 'precioInventario') {
               formattedVal = val.toLocaleString('es-BO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -1851,7 +2130,7 @@
             fTot = cTot.toLocaleString();
           } else if (currentExcelConcept === 'precioInventario') {
             fTot = cTot.toLocaleString('es-BO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-          } else if (currentExcelConcept === 'margenPorcentaje') {
+          } else if ((currentExcelConcept === 'margenConFactura' || currentExcelConcept === 'margenSinFactura')) {
             fTot = '-';
           } else {
             fTot = cTot.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1919,9 +2198,9 @@
 
           const tallas = json.data;
 
-          const activeProducedTallas = tallas.filter(t => t.costoTotal > 0 && t.margenPorcentaje !== null && t.margenPorcentaje !== undefined && t.margenPorcentaje !== 0);
+          const activeProducedTallas = tallas.filter(t => t.costoUnitarioNeto > 0 && t.margenConFactura !== null && t.margenConFactura !== undefined && t.margenConFactura !== 0);
           if (activeProducedTallas.length > 0) {
-            const realAvgMargin = activeProducedTallas.reduce((sum, t) => sum + t.margenPorcentaje, 0) / activeProducedTallas.length;
+            const realAvgMargin = activeProducedTallas.reduce((sum, t) => sum + t.margenConFactura, 0) / activeProducedTallas.length;
             const marginColor = getMarginColor(realAvgMargin);
 
             if (selectElem && selectElem.selectedIndex >= 0) {
@@ -1942,13 +2221,15 @@
             { name: 'Costo de tela', desc: 'Costo directo de la tela por prenda calculado según su peso con merma y el precio por metro o kilo de tela.', key: 'costoTela', fmt: v => v ? v.toFixed(2) : '-' },
             { name: 'Costo accesorios', desc: 'Suma del costo de todos los insumos (botones, cierres, hilos, elásticos, etiquetas) usados en la prenda.', key: 'costoAccesorios', fmt: v => v ? v.toFixed(2) : '-' },
             { name: 'Mano de Obra Directa', desc: 'Costo directo pagado por el corte, confección y armado de la prenda según su rango de talla.', key: 'costoManoObra', fmt: v => v ? '<span style="color:white;">' + v.toFixed(2) + '</span>' : '-' },
-            { name: 'Costos Indirectos', desc: 'Gastos fijos de taller prorrateados según el factor de complejidad de la prenda (incluye costos indirectos de producción).', key: 'costoFijosVariable', fmt: v => v ? '<span style="color:white;">' + v.toFixed(2) + '</span>' : '-' },
-            { name: 'Subtotal antes de impuestos', desc: 'Subtotal del costo de producción antes de aplicar la tasa impositiva del 13% IVA para facturar.', key: 'costoAntesImpuestos', fmt: v => v ? '<strong style="color:#f97316;">' + v.toFixed(2) + '</strong>' : '-' },
-            { name: 'Impuestos', desc: 'Impuesto al Valor Agregado (13%) calculado sobre el costo para la emisión de factura de producción.', key: 'iva', fmt: v => v ? v.toFixed(2) : '-' },
-            { name: 'Precio final con Impuestos', desc: 'Costo final unitario de producción terminada (Subtotal antes de impuestos + 13% IVA).', key: 'costoTotal', fmt: v => v ? '<strong style="color:#f97316; font-size:0.9rem;">' + v.toFixed(2) + '</strong>' : '-' },
-            { name: 'Precio de Venta al Público', desc: 'Precio final de venta al público fijado para esta talla en la matriz comercial.', key: 'precioVenta', fmt: v => v ? '<strong>' + v.toFixed(2) + '</strong>' : '-' },
-            { name: 'Utilidad Bruta', desc: 'Ganancia obtenida por cada prenda vendida (Precio Venta - Precio final con Impuestos).', key: 'utilidadNeta', fmt: v => v !== null && v !== 0 ? '<strong style="color:var(--success);">' + v.toFixed(2) + '</strong>' : '-' },
-            { name: 'Margen Bruto Real (%)', desc: 'Porcentaje de utilidad bruta sobre el Precio de Venta al Público: (Utilidad Bruta / Precio de Venta al Público) × 100.', key: 'margenPorcentaje', fmt: v => v !== null && v !== 0 ? `<strong style="color:${getMarginColor(v)}; font-weight:700;">` + v.toFixed(2) + '%</strong>' : '-' }
+            { name: 'Costos Indirectos', desc: 'Pool de gastos indirectos de taller prorrateado sobre el volumen ANUAL y proporcional al factor de complejidad, normalizado para que la suma absorbida iguale el pool. Antes se prorrateaba sobre la producción del mes, así que la misma prenda costaba distinto según cuándo se produjo.', key: 'costoIndirecto', fmt: v => v ? '<span style="color:white;">' + v.toFixed(2) + '</span>' : '-' },
+            { name: 'Costo unitario neto', desc: 'El costo completo de producir la prenda. NO incluye IVA: el IVA de compras es crédito fiscal recuperable, no un costo. Antes este número se mostraba inflado un 13%.', key: 'costoUnitarioNeto', fmt: v => v ? '<strong style="color:#f97316;">' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Precio de Venta al Público', desc: 'Precio de lista CON factura fijado para esta talla. La venta sin factura aplica el descuento configurado.', key: 'precioVenta', fmt: v => v ? '<strong>' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Ingreso neto con factura', desc: 'Lo que queda del precio de lista después del débito fiscal. El IVA boliviano va por dentro: de 100 Bs quedan 87.', key: 'ingresoNetoConFactura', fmt: v => v ? v.toFixed(2) : '-' },
+            { name: 'Ingreso neto sin factura', desc: 'Precio de lista menos el descuento por no facturar. No se debe débito fiscal, pero el crédito fiscal de las compras queda sin usar.', key: 'ingresoNetoSinFactura', fmt: v => v ? v.toFixed(2) : '-' },
+            { name: 'Utilidad con factura', desc: 'Ingreso neto con factura menos el costo unitario neto.', key: 'utilidadConFactura', fmt: v => v !== null && v !== 0 ? '<strong style="color:var(--success);">' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Utilidad sin factura', desc: 'Ingreso neto sin factura menos el costo unitario neto.', key: 'utilidadSinFactura', fmt: v => v !== null && v !== 0 ? '<strong style="color:var(--success);">' + v.toFixed(2) + '</strong>' : '-' },
+            { name: 'Margen con factura (%)', desc: 'Utilidad sobre el ingreso efectivamente cobrado, no sobre el precio de lista. Medir contra plata que nunca entra sobreestima la rentabilidad.', key: 'margenConFactura', fmt: v => v !== null && v !== 0 ? `<strong style="color:${getMarginColor(v)}; font-weight:700;">` + v.toFixed(2) + '%</strong>' : '-' },
+            { name: 'Margen sin factura (%)', desc: 'El mismo margen para el canal sin factura. Comparar los dos dice qué canal conviene a este precio.', key: 'margenSinFactura', fmt: v => v !== null && v !== 0 ? `<strong style="color:${getMarginColor(v)}; font-weight:700;">` + v.toFixed(2) + '%</strong>' : '-' }
           ];
 
           tbody.innerHTML = rows.map(r => `
@@ -1988,7 +2269,10 @@
 
     let adminConfigData = null;
 
+    let adminTabActual = 'telas';
+
     function switchAdminTab(tabName) {
+      adminTabActual = tabName;
       document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
       const activeBtn = document.getElementById('btn-atab-' + tabName);
       if (activeBtn) activeBtn.classList.add('active');
@@ -2003,8 +2287,12 @@
       if (secColegios) secColegios.style.display = tabName === 'colegios' ? 'block' : 'none';
       const secSistema = document.getElementById('admin-sec-sistema');
       if (secSistema) secSistema.style.display = tabName === 'sistema' ? 'block' : 'none';
+      const secInsumos = document.getElementById('admin-sec-insumos');
+      if (secInsumos) secInsumos.style.display = tabName === 'insumos' ? 'block' : 'none';
 
       if (tabName === 'sistema') cargarConfigSistemaAdmin();
+      if (tabName === 'insumos') cargarInsumosAdmin();
+      actualizarAlcanceConfig(tabName);
     }
 
     async function cargarConfigSistemaAdmin() {
@@ -2070,8 +2358,58 @@
       }
     }
 
+    /**
+     * Catalogo de la EMPRESA. No depende de ningun colegio.
+     *
+     * Antes las telas y las tallas se leian de adminConfigData, que es la respuesta de
+     * /api/colegios/:id/config. O sea que datos de la empresa heredaban una dependencia
+     * de colegio que no tienen, y con el selector en TODOS LOS COLEGIOS el cargador
+     * salia en la primera linea y las tablas quedaban en "Cargando..." para siempre.
+     */
+    let catalogoEmpresa = { telas: [], tallas: [] };
+
+    async function cargarCatalogoEmpresa() {
+      try {
+        const [rt, rl, rc] = await Promise.all([
+          fetch('/api/telas'), fetch('/api/tallas'), fetch('/api/colegios')
+        ]);
+        const [jt, jl, jc] = await Promise.all([rt.json(), rl.json(), rc.json()]);
+        catalogoEmpresa = {
+          telas: jt.success ? (jt.data || []) : [],
+          tallas: jl.success ? (jl.data || []) : [],
+        };
+        // Los colegios se necesitan para los selectores de ambito de Telas e Insumos.
+        colegiosDisponibles = jc.success ? (jc.data || []) : [];
+        renderAdminTelas();
+        renderAdminTallas();
+      } catch (e) {
+        console.error('Error al cargar el catalogo de la empresa:', e);
+      }
+    }
+
+    /**
+     * Carga la Configuracion. Dos alcances, y el de la empresa NO espera al colegio.
+     *
+     * HABIA DOS DEFINICIONES DE ESTA FUNCION en el archivo, y en JavaScript gana la
+     * ultima. La primera —muerta— resolvia bien el caso del selector en TODOS: buscaba
+     * el primer colegio real y lo elegia, o avisaba si no habia ninguno. La segunda
+     * —la que corria— hacia `return` en silencio. El buen comportamiento estaba escrito
+     * y no se ejecutaba nunca, y por eso la pantalla se quedaba cargando.
+     */
     async function cargarConfigAdminColegio() {
-      if (!colegioFiltroActual || colegioFiltroActual === 'all') return;
+      // Lo de la empresa, siempre. No necesita colegio y no debe esperarlo.
+      await cargarCatalogoEmpresa();
+      cargarInsumosAdmin();
+      cargarConfigSistemaAdmin();
+
+      // Y lo del colegio, solo si hay uno elegido.
+      const hayColegio = !!(colegioFiltroActual && colegioFiltroActual !== 'all');
+      if (!hayColegio) {
+        adminConfigData = null;
+        renderSinColegio();
+        actualizarAlcanceConfig(adminTabActual);
+        return;
+      }
 
       try {
         const res = await fetch('/api/colegios/' + colegioFiltroActual + '/config');
@@ -2079,12 +2417,65 @@
         if (json.success) {
           adminConfigData = json;
           renderAdminPrendas();
-          renderAdminTelas();
-          renderAdminTallas();
           renderAdminPerfilColegio();
-          cargarConfigSistemaAdmin();
         }
-      } catch (e) { console.error('Error al cargar config admin:', e); }
+      } catch (e) {
+        console.error('Error al cargar la configuracion del colegio:', e);
+      }
+      actualizarAlcanceConfig(adminTabActual);
+    }
+
+    /** Las pestañas del colegio, cuando no hay colegio elegido, lo DICEN. */
+    function renderSinColegio() {
+      const aviso = `
+        <tr><td colspan="7" style="text-align:center; padding:2.5rem; color:#94a3b8;">
+          <div style="font-size:0.95rem; font-weight:600; color:#f59e0b; margin-bottom:0.4rem;">
+            Elegí un colegio para ver sus prendas
+          </div>
+          <div style="font-size:0.8rem;">
+            Las prendas son de cada colegio. Arriba a la derecha, en "Ámbito", está el
+            selector: hoy dice TODA LA EMPRESA.
+          </div>
+        </td></tr>`;
+      const tbody = document.getElementById('tb-admin-prendas-body');
+      if (tbody) tbody.innerHTML = aviso;
+    }
+
+    /**
+     * El badge de alcance dice la verdad sobre la pestaña en la que estas.
+     *
+     * Antes lo escribia renderAdminPrendas con `col.nombre || 'CAMBRIDGE'`, o sea un
+     * literal hardcodeado. Con el selector en TODOS LOS COLEGIOS la pantalla mostraba
+     * CAMBRIDGE igual: cuatro afirmaciones distintas sobre el alcance a la vez (el
+     * selector decia TODOS, la pestaña de nav decia "del Colegio", el badge decia
+     * CAMBRIDGE y la tabla decia "telas del colegio").
+     */
+    const TABS_DE_LA_EMPRESA = ['telas', 'insumos', 'tallas', 'sistema'];
+
+    function actualizarAlcanceConfig(tabName) {
+      const badge = document.getElementById('modal-colegio-name-badge');
+      if (!badge) return;
+
+      if (TABS_DE_LA_EMPRESA.includes(tabName)) {
+        badge.textContent = 'TODA LA EMPRESA';
+        badge.style.background = '#064e3b';
+        badge.style.color = '#34d399';
+        badge.title = 'Estos datos los comparten todos los colegios';
+        return;
+      }
+
+      const nombre = adminConfigData && adminConfigData.colegio && adminConfigData.colegio.nombre;
+      if (nombre) {
+        badge.textContent = String(nombre).toUpperCase();
+        badge.style.background = '#1e3a8a';
+        badge.style.color = '#93c5fd';
+        badge.title = 'Estos datos son solo de este colegio';
+      } else {
+        badge.textContent = 'SIN COLEGIO ELEGIDO';
+        badge.style.background = '#78350f';
+        badge.style.color = '#fbbf24';
+        badge.title = 'Elegí un colegio en el selector de arriba';
+      }
     }
 
     let draggedIndex = null;
@@ -2128,8 +2519,8 @@
         prods.forEach((p, i) => p.orden = i + 1);
         renderAdminPrendas();
       } else if (type === 'tela') {
-        if (!adminConfigData || !adminConfigData.telas) return;
-        const telas = adminConfigData.telas;
+        if (!catalogoEmpresa.telas || catalogoEmpresa.telas.length === 0) return;
+        const telas = catalogoEmpresa.telas;
         const itemToMove = telas.splice(draggedIndex, 1)[0];
         telas.splice(targetIndex, 0, itemToMove);
         telas.forEach((t, i) => t.orden = i + 1);
@@ -2148,14 +2539,19 @@
     function renderAdminPrendas() {
       if (!adminConfigData) return;
       const prods = adminConfigData.productos || [];
-      const telas = adminConfigData.telas || [];
-      const col = adminConfigData.colegio || {};
+      // Las telas del selector salen del catalogo de la empresa.
+      const telas = catalogoEmpresa.telas || [];
 
-      document.getElementById('modal-colegio-name-badge').textContent = col.nombre || 'CAMBRIDGE';
+      // El badge lo pone actualizarAlcanceConfig, que dice la verdad segun la pestaña.
+      // Antes se escribia aca con `col.nombre || 'CAMBRIDGE'`: un literal hardcodeado que
+      // hacia que la pantalla dijera CAMBRIDGE incluso con el selector en TODOS.
 
       const selectNpTela = document.getElementById('np-tela');
-      selectNpTela.innerHTML = `<option value="">-- Sin tela / Promedio --</option>` +
-        telas.map(t => `<option value="${t.id}">${t.descripcion} (Bs. ${(t.precioBsG || 0.1475).toFixed(3)}/g)</option>`).join('');
+      // Sin promedios inventados: si la prenda no lleva tela, se costea con tela en 0
+      // y el motor lo reporta como sinPrecioDeTela. Decir "Promedio" prometia un
+      // calculo que no existe en ninguna parte del sistema.
+      selectNpTela.innerHTML = `<option value="">-- Sin tela asignada (se costea con tela en 0) --</option>` +
+        telas.map(t => `<option value="${t.id}">${t.descripcion} ${t.precioBsG ? '(Bs. ' + t.precioBsG.toFixed(3) + '/g)' : '(SIN PRECIO CARGADO)'}</option>`).join('');
 
       const tbody = document.getElementById('tb-admin-prendas-body');
       tbody.innerHTML = prods.map((p, idx) => `
@@ -2178,8 +2574,8 @@
           </td>
           <td style="padding:0.35rem 0.5rem;">
             <select id="ap-tela-${p.id}" class="cell-editable-sm" style="width:100%; font-weight:600; font-size:0.88rem; padding:0.4rem 0.6rem;">
-              <option value="" ${!p.telaId ? 'selected' : ''}>-- Tasa Promedio Catálogo (0.148 Bs/g) --</option>
-              ${telas.map(t => `<option value="${t.id}" ${p.telaId === t.id ? 'selected' : ''}>${t.descripcion} (Bs. ${(t.precioBsG || 0.1475).toFixed(3)}/g)</option>`).join('')}
+              <option value="" ${!p.telaId ? 'selected' : ''}>-- SIN TELA ASIGNADA: se costea con tela en 0 --</option>
+              ${telas.map(t => `<option value="${t.id}" ${p.telaId === t.id ? 'selected' : ''}>${t.descripcion} ${t.precioBsG ? '(Bs. ' + t.precioBsG.toFixed(3) + '/g)' : '(SIN PRECIO CARGADO)'}</option>`).join('')}
             </select>
           </td>
           <td style="text-align:center;">
@@ -2188,8 +2584,311 @@
           <td style="text-align:center;">
             <input type="checkbox" id="ap-act-${p.id}" ${p.activo ? 'checked' : ''}>
           </td>
+          <td style="text-align:center;">
+            <button class="btn" style="background:#065f46; padding:0.25rem 0.6rem; font-size:0.72rem; white-space:nowrap;"
+              onclick="abrirReceta('${p.id}', ${p.itemNumero}, '${String(p.descripcion).replace(/'/g, "\\'")}')"
+              title="Ver y editar los insumos que lleva esta prenda">🧵 Receta</button>
+          </td>
         </tr>
       `).join('');
+    }
+
+    // ---------------------------------------------------------------- receta
+    //
+    // Asignar insumos a UNA prenda. La API vive en detalleAccesorio.ts desde antes y
+    // la pantalla no la llamaba nunca: se editaba la matriz de todas las prendas
+    // contra todos los insumos, que servia para ajustar cantidades pero no para
+    // responder "que lleva esta prenda".
+
+    let recetaProductoActual = null;
+
+    function cerrarReceta() {
+      document.getElementById('panel-receta').style.display = 'none';
+      recetaProductoActual = null;
+    }
+
+    async function abrirReceta(productoId, itemNumero, descripcion) {
+      recetaProductoActual = productoId;
+      document.getElementById('receta-titulo').textContent = 'item ' + itemNumero + ' — ' + descripcion;
+      document.getElementById('panel-receta').style.display = 'block';
+
+      // Las prendas de origen las propone el servidor, por tela y cruzando colegios.
+      await cargarCandidatosCopia(productoId);
+      await cargarReceta();
+      document.getElementById('panel-receta').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    /**
+     * Llena el selector de origen para copiar la receta.
+     *
+     * Antes se llenaba con adminConfigData.productos, o sea las prendas del MISMO
+     * colegio. Para una prenda recien creada en un colegio nuevo ese selector salia
+     * VACIO: la funcion de copiar no servia justo en el caso para el que existe.
+     *
+     * Ahora el servidor propone por TELA y cruzando colegios, en dos grupos. Cada
+     * opcion dice cuantos insumos trae y cuanto suman, porque elegir entre "item 2" y
+     * "item 13" sin saber que hay adentro es elegir a ciegas.
+     */
+    async function cargarCandidatosCopia(productoId) {
+      const sel = document.getElementById('receta-origen');
+      const nota = document.getElementById('receta-nota-tela');
+      sel.innerHTML = '<option value="">Buscando prendas parecidas...</option>';
+
+      try {
+        const res = await fetch('/api/productos/' + productoId + '/accesorios/candidatos-copia');
+        const json = await res.json();
+        if (!json.success) {
+          sel.innerHTML = '<option value="">(no se pudieron cargar las prendas)</option>';
+          if (nota) nota.textContent = json.error || '';
+          return;
+        }
+
+        const etiqueta = (p) =>
+          `item ${p.itemNumero} — ${p.descripcion}` +
+          (p.esDeOtroColegio ? ' · ' + p.colegioNombre : '') +
+          ` · ${p.lineas} insumo(s), ${Number(p.subtotalBs).toFixed(2)} Bs`;
+
+        const opciones = (lista) =>
+          lista.map(p => `<option value="${escAttr(p.id)}">${escAttr(etiqueta(p))}</option>`).join('');
+
+        let html = '<option value="">-- elegí una prenda --</option>';
+        if ((json.mismaTela || []).length > 0) {
+          html += `<optgroup label="Misma tela: ${escAttr(json.prenda.telaDescripcion || '')}">` +
+            opciones(json.mismaTela) + '</optgroup>';
+        }
+        if ((json.otras || []).length > 0) {
+          html += '<optgroup label="Otras prendas con receta">' + opciones(json.otras) + '</optgroup>';
+        }
+        if ((json.mismaTela || []).length === 0 && (json.otras || []).length === 0) {
+          html = '<option value="">(ninguna otra prenda tiene receta para copiar)</option>';
+        }
+        sel.innerHTML = html;
+
+        if (nota) {
+          nota.textContent = json.motivoSinMismaTela
+            ? json.motivoSinMismaTela
+            : json.prenda.telaDescripcion
+              ? 'Se sugieren primero las prendas que usan la misma tela: ' + json.prenda.telaDescripcion
+              : '';
+        }
+      } catch (e) {
+        sel.innerHTML = '<option value="">(error al cargar)</option>';
+        if (nota) nota.textContent = String(e);
+      }
+    }
+
+    async function cargarReceta() {
+      if (!recetaProductoActual) return;
+      const tbody = document.getElementById('tb-receta-body');
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:1rem; color:#64748b;">Cargando...</td></tr>';
+
+      try {
+        const res = await fetch('/api/productos/' + recetaProductoActual + '/accesorios');
+        const json = await res.json();
+        if (!json.success) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:1rem; color:#f87171;">' + (json.error || 'Error') + '</td></tr>';
+          return;
+        }
+
+        const lineas = json.data || [];
+        tbody.innerHTML = lineas.length === 0
+          ? '<tr><td colspan="5" style="text-align:center; padding:1rem; color:#64748b; font-style:italic;">Esta prenda todavía no lleva ningún insumo. Se costea con accesorios en 0.</td></tr>'
+          : lineas.map(l => `
+            <tr>
+              <td style="padding:0.4rem 0.6rem; font-weight:600; color:#f8fafc;">${l.descripcion}
+                <span style="color:#475569; font-size:0.72rem;">${l.unidadCompra ? '(' + l.unidadCompra + ')' : ''}</span>
+              </td>
+              <td style="text-align:center;">
+                <input type="number" id="rec-cant-${l.id}" class="cell-editable-sm"
+                  style="width:85px; text-align:center;" step="0.01" min="0.01" value="${l.cantidadUso}"
+                  onchange="cambiarCantidadReceta('${l.id}')">
+              </td>
+              <td style="text-align:right; color:#94a3b8;">${Number(l.costoUnitario || 0).toFixed(4)}</td>
+              <td style="text-align:right; font-weight:700; color:#38bdf8;">${Number(l.costoTotalBs || 0).toFixed(2)}</td>
+              <td style="text-align:center;">
+                <button class="btn" style="background:#7f1d1d; padding:0.2rem 0.55rem; font-size:0.72rem;"
+                  onclick="quitarLineaReceta('${l.id}', '${String(l.descripcion).replace(/'/g, "\\'")}')">✕</button>
+              </td>
+            </tr>`).join('');
+
+        document.getElementById('receta-subtotal').textContent =
+          Number(json.subtotalAccesoriosBs || 0).toFixed(2);
+
+        // Los insumos que se pueden agregar: los del catalogo que no estan ya puestos.
+        const yaPuestos = new Set(lineas.map(l => l.accesorioId));
+        const url = colegioFiltroActual && colegioFiltroActual !== 'all'
+          ? '/api/accesorios?colegioId=' + encodeURIComponent(colegioFiltroActual)
+          : '/api/accesorios';
+        const resAcc = await fetch(url);
+        const jsonAcc = await resAcc.json();
+        const disponibles = (jsonAcc.data || []).filter(a => !yaPuestos.has(a.id));
+
+        document.getElementById('receta-nuevo-acc').innerHTML = disponibles.length === 0
+          ? '<option value="">(la prenda ya lleva todos los insumos del catálogo)</option>'
+          : '<option value="">-- elegí un insumo --</option>' + disponibles.map(a =>
+              `<option value="${a.id}">${a.descripcion} — ${Number(a.costoUnitario || 0).toFixed(4)} Bs${a.colegioId ? ' [colegio]' : ''}</option>`
+            ).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:1rem; color:#f87171;">Error: ' + e + '</td></tr>';
+      }
+    }
+
+    async function agregarLineaReceta() {
+      if (!recetaProductoActual) return;
+      const accesorioId = document.getElementById('receta-nuevo-acc').value;
+      const cantidadUso = parseFloat(document.getElementById('receta-nueva-cant').value);
+
+      if (!accesorioId) return alert('Elegí un insumo de la lista.');
+      if (!(cantidadUso > 0)) return alert('La cantidad tiene que ser mayor a cero.');
+
+      try {
+        const res = await fetch('/api/productos/' + recetaProductoActual + '/accesorios', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accesorioId, cantidadUso })
+        });
+        const json = await res.json();
+        if (!json.success) return alert('No se pudo agregar: ' + (json.error || 'error desconocido'));
+        document.getElementById('receta-nueva-cant').value = '1';
+        await cargarReceta();
+        await refrescarCosteoTrasReceta();
+      } catch (e) { alert('Error al agregar el insumo: ' + e); }
+    }
+
+    async function cambiarCantidadReceta(detalleId) {
+      if (!recetaProductoActual) return;
+      const cantidadUso = parseFloat(document.getElementById('rec-cant-' + detalleId).value);
+      if (!(cantidadUso > 0)) {
+        alert('La cantidad tiene que ser mayor a cero. Para sacar el insumo usá la X.');
+        await cargarReceta();
+        return;
+      }
+      try {
+        const res = await fetch('/api/productos/' + recetaProductoActual + '/accesorios/' + detalleId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cantidadUso })
+        });
+        const json = await res.json();
+        if (!json.success) return alert('No se pudo guardar la cantidad: ' + (json.error || 'error'));
+        await cargarReceta();
+        await refrescarCosteoTrasReceta();
+      } catch (e) { alert('Error al guardar la cantidad: ' + e); }
+    }
+
+    async function quitarLineaReceta(detalleId, descripcion) {
+      if (!recetaProductoActual) return;
+      if (!confirm('¿Quitar "' + descripcion + '" de esta prenda?')) return;
+      try {
+        const res = await fetch('/api/productos/' + recetaProductoActual + '/accesorios/' + detalleId, {
+          method: 'DELETE'
+        });
+        const json = await res.json();
+        if (!json.success) return alert('No se pudo quitar: ' + (json.error || 'error'));
+        await cargarReceta();
+        await refrescarCosteoTrasReceta();
+      } catch (e) { alert('Error al quitar el insumo: ' + e); }
+    }
+
+    /**
+     * Copia los datos de costeo de una prenda de referencia.
+     *
+     * Antes esto copiaba SOLO la receta, y eso dejaba la prenda nueva costeando casi
+     * nada: POST /:id/prendas crea sus 16 pesos EN CERO y ninguna mano de obra, asi que
+     * con la receta copiada faltaban dos de los tres componentes del costo. El usuario
+     * copiaba, veia el costo en cero, y no tenia forma de saber que le faltaba.
+     */
+    async function copiarDeReferencia() {
+      if (!recetaProductoActual) return;
+      const origenId = document.getElementById('receta-origen').value;
+      if (!origenId) return alert('Elegí la prenda de la que querés copiar.');
+
+      const que = {
+        receta: document.getElementById('cp-receta').checked,
+        pesos: document.getElementById('cp-pesos').checked,
+        manoObra: document.getElementById('cp-manoobra').checked,
+        factor: document.getElementById('cp-factor').checked,
+        tela: document.getElementById('cp-tela').checked,
+        reemplazar: document.getElementById('receta-reemplazar').checked,
+      };
+
+      if (!que.receta && !que.pesos && !que.manoObra && !que.factor && !que.tela) {
+        return alert('No marcaste nada para copiar.');
+      }
+
+      if (que.reemplazar) {
+        const lista = Object.keys(que).filter(k => k !== 'reemplazar' && que[k]).join(', ');
+        if (!confirm(
+          'Vas a REEMPLAZAR lo que esta prenda ya tenga en: ' + lista + '.\n\n' +
+          'Los valores actuales se pierden. Sin este check, solo se llenaría lo que está vacío.'
+        )) return;
+      }
+
+      try {
+        const res = await fetch('/api/productos/' + recetaProductoActual + '/copiar-de/' + origenId, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(que)
+        });
+        const json = await res.json();
+        if (!json.success) {
+          return alert('No se pudo copiar:\n\n' + (json.error || 'error desconocido'));
+        }
+
+        // Se informa CONCEPTO POR CONCEPTO, incluido lo que NO se copio y por que. Un
+        // "copiado exitosamente" que oculta que tres de cinco conceptos se saltearon es
+        // la clase de mensaje que hizo invisibles la mitad de los bugs de este sistema.
+        const partes = [`Copiado desde item ${json.origen.itemNumero} — ${json.origen.descripcion}:`];
+
+        if (json.receta) {
+          partes.push(`  · Receta: ${json.receta.copiados.length} insumo(s), ${json.receta.subtotalCopiadoBs.toFixed(2)} Bs`);
+          if (json.receta.omitidosPorEstarYaAsignados.length > 0) {
+            partes.push(`    ${json.receta.omitidosPorEstarYaAsignados.length} ya estaban asignados`);
+          }
+        }
+        if (json.pesos) {
+          partes.push(`  · Pesos: ${json.pesos.actualizados} actualizado(s), ${json.pesos.insertados} nuevo(s), ${json.pesos.saltados} sin tocar`);
+        }
+        if (json.manoObra) {
+          partes.push(`  · Mano de obra: ${json.manoObra.actualizados} actualizada(s), ${json.manoObra.insertados} nueva(s), ${json.manoObra.saltados} sin tocar`);
+        }
+        if (json.factor) {
+          partes.push(json.factor.copiado
+            ? `  · Factor: ${json.factor.de} → ${json.factor.a}`
+            : `  · Factor: sin cambios (${json.factor.motivo})`);
+        }
+        if (json.tela) {
+          partes.push(json.tela.copiado ? '  · Tela: asignada' : `  · Tela: sin cambios (${json.tela.motivo})`);
+        }
+        if ((json.avisos || []).length > 0) {
+          partes.push('');
+          partes.push('ATENCIÓN:');
+          for (const a of json.avisos) partes.push('  ' + a);
+        }
+
+        alert(partes.join('\n'));
+
+        document.getElementById('receta-reemplazar').checked = false;
+        await cargarReceta();
+        await cargarCandidatosCopia(recetaProductoActual);
+        // El factor, los pesos y la tela cambian el costo: la config y las matrices
+        // quedaron viejas.
+        await cargarConfigAdminColegio();
+        await refrescarCosteoTrasReceta();
+      } catch (e) {
+        alert('Error al copiar: ' + e);
+      }
+    }
+
+
+
+    /** El costo de accesorios cambio, asi que las pantallas que lo muestran quedaron viejas. */
+    async function refrescarCosteoTrasReceta() {
+      try {
+        await cargarMatrizConsolidada();
+        if (currentInputConcept === 'Accesorios') await cargarInputConcept('Accesorios');
+        generarMatrizPrenda();
+      } catch (e) { /* refrescar es cortesia, no debe romper la edicion */ }
     }
 
     function moverPrendaUp(idx) {
@@ -2257,6 +2956,17 @@
 
       if (!descripcion) return alert('Por favor ingresa la descripción de la prenda.');
 
+      // Una prenda pertenece a UN colegio. Con el ambito en la empresa no hay a cual
+      // asignarla, y antes esto pegaba a /api/colegios/all/prendas y creaba una prenda
+      // huerfana con colegio_id = 'all'.
+      if (!colegioFiltroActual || colegioFiltroActual === 'all') {
+        return alert(
+          'Elegí un colegio antes de crear una prenda.\n\n' +
+          'Arriba a la derecha, en "Ámbito", ahora dice TODA LA EMPRESA. Las prendas son ' +
+          'de cada colegio, así que no hay a cuál asignarla.'
+        );
+      }
+
       try {
         const res = await fetch('/api/colegios/' + colegioFiltroActual + '/prendas', {
           method: 'POST',
@@ -2264,6 +2974,9 @@
           body: JSON.stringify({ itemNumero, descripcion, telaId, factorComplejidad })
         });
         const json = await res.json();
+        if (!json.success) {
+          return alert('No se pudo crear la prenda:\n\n' + (json.error || 'error desconocido'));
+        }
         if (json.success) {
           document.getElementById('form-nueva-prenda-container').style.display = 'none';
           document.getElementById('np-desc').value = '';
@@ -2278,8 +2991,8 @@
     }
 
     function renderAdminTelas() {
-      if (!adminConfigData) return;
-      const telas = adminConfigData.telas || [];
+      // Del catalogo de la EMPRESA, no de la respuesta del colegio.
+      const telas = catalogoEmpresa.telas || [];
 
       const tbody = document.getElementById('tb-admin-telas-body');
       if (!tbody) return;
@@ -2297,7 +3010,10 @@
             <button class="btn-move" onclick="moverTelaDown(${idx})" ${idx === telas.length - 1 ? 'disabled style="opacity:0.3;"' : ''}>▼</button>
           </td>
           <td style="padding: 0.35rem 0.5rem;">
-            <input type="text" id="at-desc-${t.id}" class="cell-editable-sm" style="width:100%; font-weight:600; font-size:0.92rem; padding:0.4rem 0.65rem; color:#f8fafc;" value="${t.descripcion}">
+            <input type="text" id="at-desc-${t.id}" class="cell-editable-sm" style="width:100%; font-weight:600; font-size:0.92rem; padding:0.4rem 0.65rem; color:#f8fafc;" value="${escAttr(t.descripcion)}">
+          </td>
+          <td style="padding: 0.35rem 0.35rem;">
+            ${selectAmbito('tela', t.id, t.colegioId)}
           </td>
           <td style="text-align:center;">
             <input type="checkbox" id="at-act-${t.id}" ${t.activo !== false ? 'checked' : ''}>
@@ -2306,9 +3022,310 @@
       `).join('');
     }
 
+    // ---------------------------------------------------------------- insumos
+    //
+    // Alta de insumos del catalogo. No existia ninguna forma de crear un accesorio
+    // desde la pantalla: la Tabla Auxiliar solo editaba los que ya estaban, asi que
+    // dar de alta un colegio con un insumo nuevo era imposible sin tocar la base.
+
+    function previewCostoInsumo() {
+      const cant = parseFloat(document.getElementById('ni-cant').value) || 0;
+      const costo = parseFloat(document.getElementById('ni-costo').value) || 0;
+      const el = document.getElementById('ni-preview');
+      // Solo es una vista previa: el valor que se guarda lo calcula el servidor. Si
+      // esta cuenta y la del servidor se separaran, manda el servidor.
+      el.textContent = cant > 0 && costo > 0 ? (costo / cant).toFixed(4) + ' Bs' : '—';
+    }
+
+    function mostrarFormNuevoInsumo() {
+      const c = document.getElementById('form-nuevo-insumo-container');
+      c.style.display = c.style.display === 'none' ? 'block' : 'none';
+      if (c.style.display === 'block') document.getElementById('ni-desc').focus();
+    }
+
+    /** Escapa para meter texto dentro de un atributo HTML entre comillas dobles. */
+    function escAttr(s) {
+      return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+    }
+
+    async function cargarInsumosAdmin() {
+      const tbody = document.getElementById('tb-admin-insumos-body');
+      if (!tbody) return;
+      try {
+        const url = colegioFiltroActual && colegioFiltroActual !== 'all'
+          ? '/api/accesorios?colegioId=' + encodeURIComponent(colegioFiltroActual)
+          : '/api/accesorios';
+        const res = await fetch(url);
+        const json = await res.json();
+        const lista = json.success ? (json.data || []) : [];
+
+        if (lista.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:2rem; color:#64748b;">No hay insumos cargados.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = lista.map(a => {
+          return `
+          <tr id="fila-insumo-${a.id}">
+            <td style="padding:0.3rem 0.5rem;">
+              <input type="text" id="ai-desc-${a.id}" class="cell-editable-sm"
+                style="width:100%; font-weight:600; color:#f8fafc;" value="${escAttr(a.descripcion)}"
+                onchange="guardarInsumo('${a.id}')">
+            </td>
+            <td style="padding:0.3rem 0.35rem;">
+              <input type="text" id="ai-unid-${a.id}" class="cell-editable-sm"
+                style="width:100%; text-align:center;" value="${escAttr(a.unidadCompra || '')}"
+                onchange="guardarInsumo('${a.id}')">
+            </td>
+            <td style="padding:0.3rem 0.35rem;">
+              <input type="number" id="ai-cant-${a.id}" class="cell-editable-sm"
+                style="width:100%; text-align:center;" step="0.01" min="0.01"
+                value="${a.cantidadXUd ?? 1}" onchange="guardarInsumo('${a.id}')">
+            </td>
+            <td style="padding:0.3rem 0.35rem;">
+              <input type="number" id="ai-costo-${a.id}" class="cell-editable-sm"
+                style="width:100%; text-align:right;" step="0.01" min="0"
+                value="${Number(a.costoUdCompra || 0)}" onchange="guardarInsumo('${a.id}')">
+            </td>
+            <td id="ai-unit-${a.id}" style="text-align:right; font-weight:700; color:#38bdf8;">${Number(a.costoUnitario || 0).toFixed(4)}</td>
+            <td style="padding:0.3rem 0.35rem;">${selectAmbito('accesorio', a.id, a.colegioId)}</td>
+          </tr>`;
+        }).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:2rem; color:#f87171;">Error al cargar insumos: ' + e + '</td></tr>';
+      }
+    }
+
+    /**
+     * Guarda una fila de insumo. Se dispara al salir del campo, no con un boton de
+     * Guardar general: en esta sesion aparecieron tres pantallas distintas que decian
+     * haber guardado sin guardar, asi que cada cambio confirma o falla por si mismo.
+     *
+     * El costo unitario que se muestra viene de la RESPUESTA del servidor, no de
+     * dividir en el navegador. Es un valor derivado, y la division tiene que vivir en
+     * un solo lado: si la calculara aca tambien, tendria dos cuentas que pueden
+     * separarse y ninguna razon para creerle a una mas que a la otra.
+     */
+    async function guardarInsumo(id) {
+      const descripcion = document.getElementById('ai-desc-' + id).value.trim();
+      const unidadCompra = document.getElementById('ai-unid-' + id).value.trim();
+      const cantidadXUd = parseFloat(document.getElementById('ai-cant-' + id).value);
+      const costoUdCompra = parseFloat(document.getElementById('ai-costo-' + id).value);
+
+      if (!descripcion) { alert('El nombre del insumo no puede quedar vacío.'); await cargarInsumosAdmin(); return; }
+      if (!unidadCompra) { alert('La unidad de compra no puede quedar vacía.'); await cargarInsumosAdmin(); return; }
+      if (!(cantidadXUd > 0)) { alert('La cantidad por unidad tiene que ser mayor a cero.'); await cargarInsumosAdmin(); return; }
+      if (!(costoUdCompra > 0)) { alert('El costo de la unidad de compra tiene que ser mayor a cero.'); await cargarInsumosAdmin(); return; }
+
+      const fila = document.getElementById('fila-insumo-' + id);
+      try {
+        const res = await fetch('/api/accesorios/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ descripcion, unidadCompra, cantidadXUd, costoUdCompra })
+        });
+        const json = await res.json();
+        if (!json.success) {
+          alert('No se pudo guardar: ' + (json.error || 'error desconocido'));
+          await cargarInsumosAdmin();
+          return;
+        }
+
+        // El servidor re-deriva el costo unitario en cada escritura: se muestra el suyo.
+        document.getElementById('ai-unit-' + id).textContent =
+          Number(json.data.costoUnitario || 0).toFixed(4);
+
+        if (fila) {
+          fila.style.transition = 'background 0.15s';
+          fila.style.background = '#064e3b';
+          setTimeout(() => { fila.style.background = ''; }, 550);
+        }
+
+        // El costo de este insumo entra en toda prenda que lo lleve, asi que las
+        // pantallas de costeo que estan a la vista quedaron viejas.
+        await refrescarCosteoTrasReceta();
+      } catch (e) {
+        alert('Error al guardar el insumo: ' + e);
+        await cargarInsumosAdmin();
+      }
+    }
+
+    async function crearNuevoInsumoAdmin() {
+      const descripcion = document.getElementById('ni-desc').value.trim();
+      const unidadCompra = document.getElementById('ni-unidad').value.trim();
+      const cantidadXUd = parseFloat(document.getElementById('ni-cant').value);
+      const costoUdCompra = parseFloat(document.getElementById('ni-costo').value);
+      const exclusivo = document.getElementById('ni-exclusivo').checked;
+
+      if (!descripcion) return alert('Falta el nombre del insumo.');
+      if (!unidadCompra) return alert('Falta la unidad de compra: bolsa, rollo, metro, unidad.');
+      if (!(cantidadXUd > 0)) return alert('La cantidad por unidad tiene que ser mayor a cero.');
+      if (!(costoUdCompra > 0)) return alert('El costo de la unidad de compra tiene que ser mayor a cero.');
+
+      // Sin el check, colegioId va NULL y el insumo es de la empresa. NO se manda
+      // costoUnitario: lo deriva el servidor, para que la cuenta viva en un solo lado.
+      const cuerpo = { descripcion, unidadCompra, cantidadXUd, costoUdCompra };
+      if (exclusivo && colegioFiltroActual && colegioFiltroActual !== 'all') {
+        cuerpo.colegioId = colegioFiltroActual;
+      }
+
+      try {
+        const res = await fetch('/api/accesorios', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cuerpo)
+        });
+        const json = await res.json();
+        if (!json.success) return alert('No se pudo crear el insumo: ' + (json.error || 'error desconocido'));
+
+        document.getElementById('form-nuevo-insumo-container').style.display = 'none';
+        ['ni-desc', 'ni-unidad', 'ni-costo'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('ni-cant').value = '1';
+        document.getElementById('ni-exclusivo').checked = false;
+        previewCostoInsumo();
+
+        const ambito = json.data && json.data.colegioId ? 'exclusivo de este colegio' : 'de la empresa';
+        alert('Insumo creado (' + ambito + '). Costo unitario: ' + Number(json.data.costoUnitario).toFixed(4) + ' Bs.\n\nPara usarlo en una prenda, abrí su Receta en la pestaña Prendas.');
+        await cargarInsumosAdmin();
+      } catch (e) {
+        alert('Error al crear el insumo: ' + e);
+      }
+    }
+
+    /**
+     * Lista de colegios, para los selectores de ambito. Se carga con el catalogo de la
+     * empresa porque las dos pestañas que la usan —Telas e Insumos— son de la empresa.
+     */
+    let colegiosDisponibles = [];
+
+    /**
+     * El selector de ambito de una fila. Opcion vacia = de la empresa (colegio_id NULL).
+     *
+     * Se usa el mismo control en Telas y en Insumos: el ambito es el mismo concepto en
+     * las dos tablas, y dos controles distintos para el mismo concepto es como empezo la
+     * historia de las cuatro copias de la formula de costeo.
+     */
+    function selectAmbito(tipo, id, colegioIdActual) {
+      const opciones = [
+        `<option value="" ${!colegioIdActual ? 'selected' : ''}>empresa</option>`,
+      ].concat(
+        colegiosDisponibles.map(c =>
+          `<option value="${escAttr(c.id)}" ${colegioIdActual === c.id ? 'selected' : ''}>${escAttr(c.nombre)}</option>`
+        )
+      ).join('');
+
+      const color = colegioIdActual ? '#fbbf24' : '#34d399';
+      return `<select id="amb-${tipo}-${id}" class="cell-editable-sm"
+        style="width:100%; text-align:center; font-size:0.75rem; font-weight:700; color:${color};"
+        onchange="cambiarAmbito('${tipo}', '${id}')"
+        title="empresa = lo comparten todos los colegios">${opciones}</select>`;
+    }
+
+    /**
+     * Cambia el ambito de una tela o un insumo.
+     *
+     * El servidor RECHAZA con 409 si el item pasaria a ser exclusivo de un colegio
+     * mientras prendas de otro colegio lo usan, y devuelve cuales. Ese caso no se puede
+     * permitir en silencio: el motor de costeo resuelve por id y no mira colegio, asi que
+     * seguiria cobrando el insumo en esas prendas mientras el selector deja de ofrecerlo.
+     * El dato quedaria vivo e invisible.
+     */
+    async function cambiarAmbito(tipo, id) {
+      const sel = document.getElementById('amb-' + tipo + '-' + id);
+      if (!sel) return;
+      const valor = sel.value;
+      const colegioId = valor || null;
+      const ruta = tipo === 'tela' ? '/api/telas/' : '/api/accesorios/';
+      const queEs = tipo === 'tela' ? 'la tela' : 'el insumo';
+
+      if (colegioId) {
+        const nombre = (colegiosDisponibles.find(c => c.id === colegioId) || {}).nombre || 'ese colegio';
+        if (!confirm(
+          `¿Volver ${queEs} exclusivo de ${nombre}?\n\n` +
+          `Los demás colegios dejan de poder usarlo. Si alguna prenda de otro colegio ya lo ` +
+          `usa, el cambio se va a rechazar y te va a decir cuáles.`
+        )) {
+          await recargarAmbitos(tipo);
+          return;
+        }
+      }
+
+      try {
+        const res = await fetch(ruta + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ colegioId })
+        });
+        const json = await res.json();
+
+        if (!json.success) {
+          alert('No se pudo cambiar el ámbito:\n\n' + (json.error || 'error desconocido'));
+          await recargarAmbitos(tipo);
+          return;
+        }
+
+        await recargarAmbitos(tipo);
+        await refrescarCosteoTrasReceta();
+      } catch (e) {
+        alert('Error al cambiar el ámbito: ' + e);
+        await recargarAmbitos(tipo);
+      }
+    }
+
+    /** Recarga la tabla que corresponde, para que lo que se ve sea lo que hay en la base. */
+    async function recargarAmbitos(tipo) {
+      if (tipo === 'tela') {
+        await cargarCatalogoEmpresa();
+      } else {
+        await cargarInsumosAdmin();
+      }
+    }
+
+    /**
+     * Construye el selector de ambito global, en UN solo lugar.
+     *
+     * Habia DOS bloques que escribian este mismo <select>, con reglas distintas, y el
+     * segundo tenia esto:
+     *
+     *   ${c.nombre === 'CAMBRIDGE' ? 'selected' : ''}
+     *
+     * El nombre real del colegio es "Col. Cambridge", asi que esa comparacion era FALSA
+     * para todas las filas. Ninguna opcion quedaba seleccionada, el navegador tomaba la
+     * primera —value="all"— y la linea siguiente hacia colegioFiltroActual = 'all'.
+     *
+     * Ese literal muerto es la razon por la que la pantalla caia siempre en el ambito de
+     * empresa, y por lo tanto la razon por la que la Configuracion se quedaba cargando
+     * antes de que las pestañas de empresa dejaran de depender de un colegio.
+     *
+     * VOCABULARIO. La opcion sin colegio se llama TODA LA EMPRESA, no "todos los
+     * colegios" ni "general". Es el mismo concepto que ya nombramos en dos lugares hoy:
+     * el badge de Configuracion dice TODA LA EMPRESA y las columnas Ámbito de Telas e
+     * Insumos dicen "empresa". Una tercera palabra para la misma cosa obliga al usuario a
+     * aprender que son sinonimos, y ese es el trabajo del programa, no del usuario.
+     *
+     * Y los colegios van con su nombre pelado. El prefijo "Colegio " producia
+     * "Colegio Col. Cambridge", porque el nombre ya lo traia.
+     */
+    function construirSelectorAmbito(lista) {
+      const select = document.getElementById('global-colegio-select');
+      if (!select) return;
+
+      const previo = String(colegioFiltroActual || 'all');
+      select.innerHTML =
+        '<option value="all">TODA LA EMPRESA</option>' +
+        lista.map(c => `<option value="${escAttr(c.id)}">${escAttr(c.nombre)}</option>`).join('');
+
+      // Se conserva lo que el usuario tenia elegido si todavia existe. Si no, queda en
+      // TODA LA EMPRESA: es un estado valido y completo —la Configuracion general
+      // funciona y las matrices muestran todo— y es preferible a adivinar un colegio.
+      const sigueValido = Array.from(select.options).some(o => o.value === previo);
+      select.value = sigueValido ? previo : 'all';
+      colegioFiltroActual = select.value;
+    }
+
     function moverTelaUp(idx) {
-      if (idx <= 0 || !adminConfigData || !adminConfigData.telas) return;
-      const telas = adminConfigData.telas;
+      if (idx <= 0 || !catalogoEmpresa.telas) return;
+      const telas = catalogoEmpresa.telas;
       const temp = telas[idx];
       telas[idx] = telas[idx - 1];
       telas[idx - 1] = temp;
@@ -2319,8 +3336,8 @@
     }
 
     function moverTelaDown(idx) {
-      if (!adminConfigData || !adminConfigData.telas || idx >= adminConfigData.telas.length - 1) return;
-      const telas = adminConfigData.telas;
+      if (!catalogoEmpresa.telas || idx >= catalogoEmpresa.telas.length - 1) return;
+      const telas = catalogoEmpresa.telas;
       const temp = telas[idx];
       telas[idx] = telas[idx + 1];
       telas[idx + 1] = temp;
@@ -2331,8 +3348,14 @@
     }
 
     async function guardarConfigTelasAdmin() {
-      if (!adminConfigData || !adminConfigData.telas) return;
-      const payload = adminConfigData.telas.map((t, i) => ({
+      // Antes esto era `if (!adminConfigData || ...) return;`, asi que con el selector en
+      // TODOS LOS COLEGIOS el boton Guardar no hacia nada y no decia nada. Las telas son
+      // de la empresa: no hay razon para que guardarlas dependa de un colegio.
+      if (!catalogoEmpresa.telas || catalogoEmpresa.telas.length === 0) {
+        alert('No hay telas cargadas para guardar.');
+        return;
+      }
+      const payload = catalogoEmpresa.telas.map((t, i) => ({
         id: t.id,
         orden: i + 1,
         descripcion: document.getElementById('at-desc-' + t.id).value.trim(),
@@ -2370,7 +3393,12 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            colegioId: colegioFiltroActual,
+            // Sin el check, la tela es de la empresa: colegioId va NULL.
+            //
+            // Antes mandaba colegioFiltroActual siempre, asi que toda tela creada desde
+            // la pantalla nacia del colegio, al revés de las once compartidas del
+            // catalogo, y un segundo colegio no la habria visto nunca.
+            colegioId: document.getElementById('nt-exclusivo').checked ? colegioFiltroActual : null,
             descripcion,
             anchoMts: 1.5,
             unid: 'kilo',
@@ -2392,9 +3420,10 @@
     }
 
     function renderAdminTallas() {
-      if (!adminConfigData || !adminConfigData.tallas) return;
       const container = document.getElementById('container-admin-tallas');
-      container.innerHTML = adminConfigData.tallas.map(t => `
+      if (!container) return;
+      // Las tallas son vocabulario de la empresa: las 16 tienen colegio_id NULL.
+      container.innerHTML = (catalogoEmpresa.tallas || []).map(t => `
         <div style="background:#1e293b; padding:0.75rem; border-radius:8px; border:1px solid #334155; display:flex; align-items:center; justify-content:space-between;">
           <div>
             <strong style="color:#f8fafc; display:block; font-size:0.9rem;">${t.codigo}</strong>
@@ -2406,8 +3435,11 @@
     }
 
     async function guardarTallasAdmin() {
-      if (!adminConfigData || !adminConfigData.tallas) return;
-      const payload = adminConfigData.tallas.map(t => ({
+      if (!catalogoEmpresa.tallas || catalogoEmpresa.tallas.length === 0) {
+        alert('No hay tallas cargadas para guardar.');
+        return;
+      }
+      const payload = catalogoEmpresa.tallas.map(t => ({
         id: t.id,
         activo: document.getElementById('atalla-act-' + t.id).checked
       }));

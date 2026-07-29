@@ -12,5 +12,17 @@ turbo
 *.sqlite
 !packages/api/sistema_inventario.db
 
+# Artefactos generados. No van al repo.
+paridad.csv
+*.db.bak
 
+# Bases fantasma. `getDbFilePath()` resolvia contra process.cwd(), asi que correr
+# cualquier script desde la raiz del monorepo CREABA y sembraba una base nueva
+# aca, sin las lineas de detalle_acc ni los precios de adquisicion que vinieron de
+# los importadores. Un script corrido desde el directorio equivocado calculaba
+# contra datos incompletos y daba numeros plausibles pero falsos. La causa esta
+# corregida en sqljs.ts; esta regla evita que una copia vieja vuelva a colarse.
+/sistema_inventario.db
 
+# Archivos de bloqueo de Excel, se crean al abrir el .xlsx
+~$*.xlsx

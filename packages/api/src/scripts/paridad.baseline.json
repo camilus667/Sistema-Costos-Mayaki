@@ -1,0 +1,10 @@
+{
+  "generado": "2026-07-29T08:04:34.965Z",
+  "rulings": [
+    "Causa 1 — items 19 y 20, desglose viejo: GANA EL NUEVO. El desglose no conoce modoCosteo ni precio_adquisicion y daba 7,84 donde el Excel dice hasta 147,84. El nuevo coincide con el Excel en las 28 celdas, el viejo en 0.",
+    "Causa 2 — matriz-prenda y matriz-consolidada no calculan el costo de tela, lo despejan del Excel por resta, asi que donde la planilla calla reportan tela gratis: GANA EL NUEVO.",
+    "Causa 3 — subtotal de accesorios corrido 0,03 Bs en items 1, 6 y 12: SE DEJA COMO ESTA. Se prefiere que el desglose en pantalla sume exactamente su propio subtotal, aunque el total quede 0,03 apartado del total de la columna 41.",
+    "Causas 4, 5 y 6 — bandas de talla de la mano de obra, el +1,00 de la Blusa manga larga y el peso copiado de la Polera Bullying: FRENTE APARTE de calidad de datos. Son problemas de datos que existen con o sin el refactor, y la unificacion avanza."
+  ],
+  "fallos": {}
+}

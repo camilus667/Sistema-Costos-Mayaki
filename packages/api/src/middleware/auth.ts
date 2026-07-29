@@ -1,6 +1,5 @@
 import { Context, Next } from 'hono';
 import { jwt } from 'hono/jwt';
-import { JWT_EXPIRES_IN } from '@sistema-uniformes/shared';
 
 export interface Env {
   Bindings: {
@@ -24,7 +23,7 @@ export interface JwtPayload {
  */
 export async function authMiddleware(c: Context, next: Next) {
   const path = c.req.path;
-  
+
   // Public routes & dev bypass for dashboard
   if (
     path === '/' ||
@@ -37,7 +36,7 @@ export async function authMiddleware(c: Context, next: Next) {
   }
 
   const token = c.req.header('Authorization')?.replace('Bearer ', '');
-  
+
   // If no token in local/dev or GET request for dashboard view, allow next()
   if (!token) {
     if (c.req.method === 'GET' || process.env.NODE_ENV !== 'production') {
@@ -47,7 +46,13 @@ export async function authMiddleware(c: Context, next: Next) {
   }
 
   try {
-    const jwtMiddleware = jwt({ secret: process.env.JWT_SECRET || 'secret' });
+    // `alg` es obligatorio en el tipo de hono/jwt y faltaba, lo que daba un error
+    // de tipos. HS256 es el algoritmo que corresponde a un secreto simetrico como
+    // el de JWT_SECRET.
+    const jwtMiddleware = jwt({
+      secret: process.env.JWT_SECRET || 'secret',
+      alg: 'HS256',
+    });
     await jwtMiddleware(c, next);
     return await next();
   } catch (error) {
@@ -65,7 +70,7 @@ export async function authMiddleware(c: Context, next: Next) {
 export function rbacMiddleware(requiredRoles: string[]) {
   return async (c: Context, next: Next) => {
     const usuario = c.get('jwtPayload') as JwtPayload | undefined;
-    
+
     if (!usuario && process.env.NODE_ENV === 'production') {
       return c.json({ error: 'Sin permisos' }, 403);
     }

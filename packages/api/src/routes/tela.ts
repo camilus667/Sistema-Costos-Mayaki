@@ -1,13 +1,17 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, or, isNull } from 'drizzle-orm';
 import { telas } from '../database/schema';
+import { usosEnOtrosColegios } from '../services/resolucion.service';
 
 const api = new Hono();
 
 const crearTelaSchema = z.object({
-  colegioId: z.string().optional(),
+  // FASE 5: colegioId es opcional Y nullable. NULL significa "tela de la empresa",
+  // que es el caso normal: 11 de las 12 telas del catalogo son compartidas y solo
+  // el Casimir Escoces (el tartan) pertenece a un colegio.
+  colegioId: z.string().nullable().optional(),
   descripcion: z.string().min(1),
   anchoMts: z.number().positive(),
   unid: z.string().optional().default('kilo'),
@@ -19,14 +23,19 @@ const crearTelaSchema = z.object({
 api.get('/', async (c) => {
   const db = (c as any).db;
   const colegioId = c.req.query('colegioId');
-  
+
   let query = db.select().from(telas);
   if (colegioId && colegioId !== 'all') {
-    query = query.where(eq(telas.colegioId, colegioId));
+    // FASE 5: `= colegio OR IS NULL`, no `= colegio`. Este filtro se quedo corto
+    // cuando la migracion puso NULL en las telas compartidas: con `eq` a secas,
+    // pedir las telas de un colegio devolvia UNA SOLA — el tartan — y escondia las
+    // once genericas. La reja de paridad no lo detecto porque compara el motor de
+    // costeo, y este endpoint no pasa por el motor.
+    query = query.where(or(eq(telas.colegioId, colegioId), isNull(telas.colegioId)));
   }
-  
+
   const allTelas = await query.orderBy(asc(telas.orden), asc(telas.descripcion));
-  
+
   return c.json({
     success: true,
     data: allTelas,
@@ -37,17 +46,17 @@ api.get('/', async (c) => {
 api.get('/:id', async (c) => {
   const db = (c as any).db;
   const id = c.req.param('id');
-  
+
   const [tela] = await db
     .select()
     .from(telas)
     .where(eq(telas.id, id))
     .limit(1);
-  
+
   if (!tela) {
     return c.json({ success: false, error: 'Tela no encontrada' }, 404);
   }
-  
+
   return c.json({
     success: true,
     data: tela,
@@ -58,7 +67,7 @@ api.get('/:id', async (c) => {
 api.post('/', zValidator('json', crearTelaSchema), async (c) => {
   const db = (c as any).db;
   const body = c.req.valid('json');
-  
+
   const anchoMts = body.anchoMts;
   const unid = body.unid || 'kilo';
   const densidadGm2 = body.densidadGm2;
@@ -71,7 +80,14 @@ api.post('/', zValidator('json', crearTelaSchema), async (c) => {
 
   const insertData = {
     ...body,
-    colegioId: body.colegioId || 'default-colegio',
+    // FASE 5: si no viene colegio, la tela es de la empresa -> NULL.
+    //
+    // Antes esto ponia el literal 'default-colegio', que no es el id de ningun
+    // colegio existente. Esa tela quedaba invisible para todos: no la veia el
+    // colegio real (su colegio_id no coincide) ni el filtro de compartidas (no es
+    // NULL), y de paso violaba la foreign key contra colegio.id. Se creaba bien,
+    // devolvia 201, y despues no aparecia en ninguna pantalla.
+    colegioId: body.colegioId || null,
     rendimiento: parseFloat(rendimiento.toFixed(4)),
     pesoMtLineal: parseFloat(pesoMtLineal.toFixed(2)),
     precioBsKg: parseFloat(precioBsKg.toFixed(4)),
@@ -80,7 +96,7 @@ api.post('/', zValidator('json', crearTelaSchema), async (c) => {
   };
 
   const [newTela] = await db.insert(telas).values(insertData).returning();
-  
+
   return c.json({
     success: true,
     data: newTela,
@@ -94,10 +110,30 @@ api.put('/:id', async (c) => {
   const db = (c as any).db;
   const id = c.req.param('id');
   const body = await c.req.json();
-  
+
   const [existing] = await db.select().from(telas).where(eq(telas.id, id)).limit(1);
   if (!existing) {
     return c.json({ success: false, error: 'Tela no encontrada' }, 404);
+  }
+
+  // CAMBIO DE AMBITO de la tela. Antes updateValues no incluia colegioId en absoluto,
+  // asi que cambiar el ambito de una tela era imposible desde la API.
+  //
+  // Solo se chequea cuando se ANGOSTA. Ampliarlo es seguro: nadie pierde acceso.
+  const ambitoNuevo = body.colegioId === undefined ? undefined : (body.colegioId || null);
+  if (ambitoNuevo && ambitoNuevo !== existing.colegioId) {
+    const usos = await usosEnOtrosColegios(db, 'tela', id, ambitoNuevo);
+    if (usos.length > 0) {
+      const detalle = usos.map((u: any) => `item ${u.itemNumero} ${u.descripcion}`).join(', ');
+      return c.json({
+        success: false,
+        error:
+          `No se puede volver esta tela exclusiva de un colegio: la usan ${usos.length} ` +
+          `prenda(s) de otro colegio (${detalle}). El motor seguiria costeandolas con esta ` +
+          `tela mientras el selector dejaria de ofrecerla. Primero hay que cambiarles la tela.`,
+        usos,
+      }, 409);
+    }
   }
 
   const anchoMts = body.anchoMts !== undefined ? Number(body.anchoMts) : existing.anchoMts;
@@ -111,7 +147,7 @@ api.put('/:id', async (c) => {
   const precioBsKg = unid === 'metro' ? precioCompra * rendimiento : precioCompra;
   const precioBsG = precioBsKg / 1000;
 
-  const updateValues = {
+  const updateValues: any = {
     descripcion: body.descripcion || existing.descripcion,
     anchoMts: parseFloat(anchoMts.toFixed(2)),
     unid: unid,
@@ -124,12 +160,18 @@ api.put('/:id', async (c) => {
     precioUnitario: parseFloat(precioBsG.toFixed(4)),
   };
 
+  // El ambito se aplica solo si vino en el cuerpo, para que un PUT que edita el precio
+  // no arrastre el colegio sin querer.
+  if (ambitoNuevo !== undefined) {
+    updateValues.colegioId = ambitoNuevo;
+  }
+
   const [updatedTela] = await db
     .update(telas)
     .set(updateValues)
     .where(eq(telas.id, id))
     .returning();
-  
+
   return c.json({
     success: true,
     data: updatedTela,
@@ -141,16 +183,16 @@ api.put('/:id', async (c) => {
 api.delete('/:id', async (c) => {
   const db = (c as any).db;
   const id = c.req.param('id');
-  
+
   const [deletedTela] = await db
     .delete(telas)
     .where(eq(telas.id, id))
     .returning();
-  
+
   if (!deletedTela) {
     return c.json({ success: false, error: 'Tela no encontrada' }, 404);
   }
-  
+
   return c.json({
     success: true,
     message: 'Tela eliminada exitosamente',

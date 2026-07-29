@@ -11,10 +11,13 @@ import productoRoutes from './routes/producto';
 import tallaRoutes from './routes/talla';
 import telaRoutes from './routes/tela';
 import accesorioRoutes from './routes/accesorio';
+import detalleAccesorioRoutes from './routes/detalleAccesorio';
+import copiaPrendaRoutes from './routes/copiaPrenda';
 import calculoRoutes from './routes/calculo';
 import inventarioRoutes from './routes/inventario';
 import precioRoutes from './routes/precio';
 import exportRoutes from './routes/export';
+import costeoRoutes from './routes/costeo';
 import dashboardHtml from './dashboard.html';
 
 export interface Env {
@@ -50,10 +53,10 @@ app.get('/', (c) => c.html(dashboardHtml));
 app.get('/dashboard', (c) => c.html(dashboardHtml));
 
 // Health check
-app.get('/health', (c) => c.json({ 
-  status: 'ok', 
+app.get('/health', (c) => c.json({
+  status: 'ok',
   environment: 'Cloudflare Workers',
-  timestamp: new Date().toISOString() 
+  timestamp: new Date().toISOString()
 }));
 
 // API resumen dashboard
@@ -119,6 +122,10 @@ app.use('/api/*', authMiddleware);
 app.route('/api/colegios', colegioRoutes);
 app.route('/api/usuarios', usuarioRoutes);
 app.route('/api/productos', productoRoutes);
+app.route('/api/productos', detalleAccesorioRoutes);
+// Copiar los datos de costeo de una prenda de referencia: factor, tela, pesos, mano de
+// obra y receta. Tercer router en el mismo prefijo, patron que este proyecto ya usa.
+app.route('/api/productos', copiaPrendaRoutes);
 app.route('/api/tallas', tallaRoutes);
 app.route('/api/telas', telaRoutes);
 app.route('/api/accesorios', accesorioRoutes);
@@ -126,5 +133,10 @@ app.route('/api/calculo', calculoRoutes);
 app.route('/api/inventario', inventarioRoutes);
 app.route('/api/precios', precioRoutes);
 app.route('/api/export', exportRoutes);
+// Costeo unificado, el mismo que en server.ts. Ojo: inputRoutes NO esta montado
+// en este archivo, asi que /api/inputs/desglose-inteligente-producto no existe en
+// el deploy de Workers. Deriva preexistente entre los dos entrypoints, sin
+// resolver todavia.
+app.route('/api/costeo', costeoRoutes);
 
 export default app;
