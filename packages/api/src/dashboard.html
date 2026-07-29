@@ -2869,6 +2869,17 @@
 
       if (!descripcion) return alert('Por favor ingresa la descripción de la prenda.');
 
+      // Una prenda pertenece a UN colegio. Con el ambito en la empresa no hay a cual
+      // asignarla, y antes esto pegaba a /api/colegios/all/prendas y creaba una prenda
+      // huerfana con colegio_id = 'all'.
+      if (!colegioFiltroActual || colegioFiltroActual === 'all') {
+        return alert(
+          'Elegí un colegio antes de crear una prenda.\n\n' +
+          'Arriba a la derecha, en "Ámbito", ahora dice TODA LA EMPRESA. Las prendas son ' +
+          'de cada colegio, así que no hay a cuál asignarla.'
+        );
+      }
+
       try {
         const res = await fetch('/api/colegios/' + colegioFiltroActual + '/prendas', {
           method: 'POST',
@@ -2876,6 +2887,9 @@
           body: JSON.stringify({ itemNumero, descripcion, telaId, factorComplejidad })
         });
         const json = await res.json();
+        if (!json.success) {
+          return alert('No se pudo crear la prenda:\n\n' + (json.error || 'error desconocido'));
+        }
         if (json.success) {
           document.getElementById('form-nueva-prenda-container').style.display = 'none';
           document.getElementById('np-desc').value = '';

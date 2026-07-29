@@ -215,6 +215,29 @@ api.post('/:id/prendas', async (c) => {
   const colegioId = c.req.param('id');
   const body = await c.req.json();
 
+  // SE VALIDA QUE EL COLEGIO EXISTA, y no es una formalidad: sin esto la prenda queda
+  // HUERFANA y es invisible.
+  //
+  // El dashboard llama a /api/colegios/<ambitoActual>/prendas. Con el ambito en 'all'
+  // —que era el estado por defecto mientras el literal 'CAMBRIDGE' roto dejaba caer el
+  // selector ahi— eso pegaba a /api/colegios/all/prendas y la prenda nacia con
+  // colegio_id = 'all'. Ningun filtro por colegio la encuentra, pero el conteo sin filtro
+  // la cuenta: de ahi que 27 + 1 diera 29.
+  //
+  // SQLite no lo impide solo: las foreign keys estan APAGADAS por defecto y este proyecto
+  // solo las prende para el DDL de la migracion. Una FK que apunta a la nada se inserta
+  // sin protestar, asi que la validacion tiene que estar aca.
+  const [colegio] = await db.select().from(colegios).where(eq(colegios.id, colegioId)).limit(1);
+  if (!colegio) {
+    return c.json({
+      success: false,
+      error:
+        `No existe el colegio "${colegioId}". Una prenda tiene que pertenecer a un colegio ` +
+        `real: si se creara con este id quedaria huerfana, invisible en toda pantalla que ` +
+        `filtre por colegio y contada en los totales sin filtro.`,
+    }, 404);
+  }
+
   const existingProds = await db.select().from(productos).where(eq(productos.colegioId, colegioId));
   const nextItemNum = body.itemNumero || (existingProds.length + 1);
   const nextOrden = body.orden || nextItemNum;
