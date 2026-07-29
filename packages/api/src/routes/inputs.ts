@@ -48,12 +48,12 @@ function loadExcelInputs() {
 
     // 1. PesoMatPrima
     const pesoSheet = workbook.Sheets['PesoMatPrima'];
-    const pesoRows = pesoSheet ? parseXLSX.utils.sheet_to_json<any[]>(pesoSheet, { header: 1 }) : [];
+    const pesoRows: any[][] = pesoSheet ? parseXLSX.utils.sheet_to_json(pesoSheet, { header: 1 }) : [];
     const tallasHeaderPeso = pesoRows[1]?.slice(2) || [];
 
     // 2. Acc (Accesorios por prenda + Tabla Auxiliar)
     const accSheet = workbook.Sheets['Acc'];
-    const accRows = accSheet ? parseXLSX.utils.sheet_to_json<any[]>(accSheet, { header: 1 }) : [];
+    const accRows: any[][] = accSheet ? parseXLSX.utils.sheet_to_json(accSheet, { header: 1 }) : [];
     const accHeaders = accRows[1]?.slice(2, 40).map(h => String(h || '').trim()).filter(Boolean) || [];
 
     // Cargar Tabla Auxiliar (fila 31 en adelante)
@@ -62,15 +62,15 @@ function loadExcelInputs() {
 
     // 3. ManoDeObra
     const moSheet = workbook.Sheets['ManoDeObra'];
-    const moRows = moSheet ? parseXLSX.utils.sheet_to_json<any[]>(moSheet, { header: 1 }) : [];
+    const moRows: any[][] = moSheet ? parseXLSX.utils.sheet_to_json(moSheet, { header: 1 }) : [];
 
     // 4. fijosXprenda
     const fxpSheet = workbook.Sheets['fijosXprenda'];
-    const fxpRows = fxpSheet ? parseXLSX.utils.sheet_to_json<any[]>(fxpSheet, { header: 1 }) : [];
+    const fxpRows: any[][] = fxpSheet ? parseXLSX.utils.sheet_to_json(fxpSheet, { header: 1 }) : [];
 
     // 5. Fij&Var
     const fjvSheet = workbook.Sheets['Fij&Var'];
-    const fjvRows = fjvSheet ? parseXLSX.utils.sheet_to_json<any[]>(fjvSheet, { header: 1 }) : [];
+    const fjvRows: any[][] = fjvSheet ? parseXLSX.utils.sheet_to_json(fjvSheet, { header: 1 }) : [];
 
     inputsExcelCache = { pesoRows, tallasHeaderPeso, accRows, accHeaders, tablaAuxiliarRows, moRows, fxpRows, fjvRows };
     return inputsExcelCache;
@@ -278,7 +278,11 @@ api.get('/peso-mat-prima', async (c) => {
       const key = `${prod.itemNumero}_${talla.codigo}`;
 
       const recMerma = dbRec?.mermaPorcentaje || globalMermaPct;
-      const exacto = dbRec ? dbRec.pesoExactoGramos : (bottomMap.get(key) || 0);
+      // let, no const: mas abajo se deriva el peso exacto a partir del peso con
+      // merma cuando falta. Estaba declarado const, asi que esa rama lanzaba
+      // TypeError en runtime. Se dispara con conMerma > 0 y exacto === 0, que es
+      // el caso de 162 de las 432 filas de peso_mat_prima.
+      let exacto = dbRec ? dbRec.pesoExactoGramos : (bottomMap.get(key) || 0);
       let conMerma = dbRec ? dbRec.pesoGramos : (topMap.get(key) || 0);
 
       if (exacto > 0 && (!conMerma || conMerma === 0)) {
