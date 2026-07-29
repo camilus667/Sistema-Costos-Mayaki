@@ -60,6 +60,17 @@ const TABLA_PRINCIPAL: Record<string, string> = {
   'accesorio.ts': 'accesorios',
   'calculo.ts': 'productos',
   'colegio.ts': 'colegios',
+  // Copiar datos de una prenda a otra escribe CUATRO tablas —producto, peso_mat_prima,
+  // mano_obra y detalle_acc— asi que no tiene una tabla principal. Es 'varias', igual que
+  // export.ts e inputs.ts, y el barrido no le exige el patron de creacion porque no crea
+  // filas de catalogo: copia entre prendas que ya existen.
+  //
+  // Esta linea existe porque la salvaguarda del barrido FALLO al correrlo, y es la primera
+  // vez que sirvio de verdad: escribi copiaPrenda.ts hace dos horas y me olvide de
+  // clasificarlo. Sin esa guarda el barrido lo habria ignorado en silencio y habria
+  // reportado limpio sobre un universo incompleto, que es exactamente el error que la guarda
+  // existe para impedir y que ya cometi seis veces a mano en esta sesion.
+  'copiaPrenda.ts': 'varias',
   'costeo.ts': 'productos',
   'detalleAccesorio.ts': 'detalleAccesorio',
   'export.ts': 'varias',
@@ -86,6 +97,27 @@ function archivosDe(dir: string, ext: RegExp): string[] {
     }
   }
   return salida;
+}
+
+/**
+ * Una linea de COMENTARIO no es codigo, y este barrido tiene que analizar codigo.
+ *
+ * POR QUE HIZO FALTA. La primera corrida real del barrido reporto un unico hallazgo, y era
+ * una linea de comentario: la explicacion del bug historico dentro de
+ * crearPrenda.service.ts, que cita `where(eq(tallas.colegioId, id))` justamente para contar
+ * que ESE filtro devolvia cero filas. El barrido lo leyo como el defecto presente.
+ *
+ * O sea que cuanto mejor documentaba el defecto, mas lo denunciaba el chequeo. Y eso no es
+ * un detalle cosmetico: un verificador que dispara sobre las explicaciones se vuelve ruido,
+ * y un verificador ruidoso se deja de mirar. Un falso rojo repetido termina costando mas que
+ * no tener el chequeo, porque entrena a ignorarlo.
+ *
+ * Se acepta a proposito una consecuencia: si alguien deja codigo COMENTADO con el defecto,
+ * el barrido ya no lo ve. Es correcto, porque el codigo comentado no se ejecuta.
+ */
+function esComentario(linea: string): boolean {
+  const t = linea.trim();
+  return t.startsWith('//') || t.startsWith('*') || t.startsWith('/*');
 }
 
 function main() {
@@ -119,6 +151,7 @@ function main() {
     const rel = path.relative(SRC, p);
     const lineas = fs.readFileSync(p, 'utf8').split('\n');
     lineas.forEach((l, i) => {
+      if (esComentario(l)) return; // ver esComentario: un falso rojo repetido entrena a ignorar
       for (const t of COMPARTIDAS) {
         if (!new RegExp(`eq\\(${t}\\.colegioId`).test(l)) continue;
         comparaciones++;
@@ -142,6 +175,7 @@ function main() {
 
     const lineas = fs.readFileSync(path.join(dirRutas, archivo), 'utf8').split('\n');
     lineas.forEach((l, i) => {
+      if (esComentario(l)) return;
       if (!/colegioId\s*:\s*z\./.test(l)) return;
       const laxo = /nullable\(\)/.test(l) || /optional\(\)/.test(l);
       if (!laxo) {
@@ -157,6 +191,7 @@ function main() {
 
     // Defaults falsos: un literal en vez de NULL deja la fila invisible para todos.
     lineas.forEach((l, i) => {
+      if (esComentario(l)) return;
       const m = l.match(/colegioId\s*:\s*[^,;]*\|\|\s*'([^']+)'/);
       if (m) {
         hallazgos.push({
