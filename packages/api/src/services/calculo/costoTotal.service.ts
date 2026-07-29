@@ -1,5 +1,4 @@
 import { Decimal } from 'decimal.js';
-import { IVA_RATE } from '@sistema-uniformes/shared';
 
 /**
  * Motor de calculo del costo unitario.
@@ -292,7 +291,20 @@ export function calcularCostoTotal(inputs: CalculoInputs): CalculoResultado {
   const costoAntesImpuestos = costoBruto.plus(costoFijosVariable).plus(costoIndirecto);
 
   // La tasa se usa SOLO del lado del precio. El costo no lleva IVA.
-  const tasa = inputs.tasaIva != null ? D(inputs.tasaIva) : D(IVA_RATE || 0.13);
+  //
+  // Sin default hardcodeado, por la misma razon que la merma. Antes esto hacia
+  // `D(inputs.tasaIva ?? IVA_RATE ?? 0.13)`, o sea el default del IVA vivia en
+  // TRES lugares a la vez: configuracion_sistema.tasa_iva, la constante IVA_RATE
+  // del paquete shared, y el literal 0.13 de esta linea. Tres lugares que se
+  // desincronizan, que es exactamente el problema que se elimino con la merma.
+  // Ahora la unica fuente es configuracion_sistema, y si no llega, se avisa.
+  const tasa = D(inputs.tasaIva);
+  if (inputs.tasaIva == null && inputs.impuestosActivos === true) {
+    advertencias.push(
+      'Los impuestos estan activos pero no se recibio tasaIva; el ingreso con factura ' +
+      'se calculo sin descontar el debito fiscal.'
+    );
+  }
 
   // El costo neto es la suma de sus componentes y nada mas. Antes aca se le sumaba
   // el 13% para producir `costoTotal`, que era el error contable de fondo.
