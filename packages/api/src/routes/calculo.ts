@@ -14,21 +14,79 @@ const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
 
 const api = new Hono();
 
+/**
+ * Simulador instantaneo: expone la superficie REAL del motor.
+ *
+ * El schema anterior descartaba la mitad del motor. Como zValidator borra las
+ * claves que no estan declaradas, los campos faltantes no daban error: se
+ * perdian en silencio y el motor calculaba con undefined.
+ *
+ * Lo que faltaba y ahora esta:
+ *   precioBsG               el camino preferido de costo de tela, el que quedo
+ *                           verificado contra el Excel. Sin el, la unica via era
+ *                           precioTelaUnitario + rendimiento.
+ *   pesoConMermaGramos      peso que ya trae la merma, que es lo que guarda la base
+ *   pesoExactoGramos        peso limpio, al que el motor le aplica la merma
+ *   precioAdquisicion       prendas semiterminadas o de reventa
+ *   costoIndirectoUnitario  indirecto ya prorrateado, para poder usar un
+ *                           denominador anual en vez de la produccion del mes
+ *   tasaIva                 configurable, antes siempre caia en IVA_RATE
+ *
+ * Ademas:
+ * - `pesoGramos`, `precioTelaUnitario` y `rendimientoTela` pasan a opcionales.
+ *   Eran obligatorios y positivos, asi que era IMPOSIBLE simular una prenda
+ *   adquirida (no lleva peso) o usar el camino de precioBsG.
+ * - `factorComplejidad` deja de ser `.int()`. La columna del schema sigue siendo
+ *   integer, asi que 1,5 todavia no se puede persistir, pero al menos el
+ *   simulador deja probarlo. Cambiar la columna es Fase 4.
+ * - Se saca el `.default(8)` de la merma. Era el tercer lugar con el 8
+ *   hardcodeado, justo el que el motor elimino a proposito para que el default
+ *   viva solo en el schema de la base y en configuracion_sistema. Si no viene, el
+ *   motor avisa en su diagnostico.
+ */
 const calcularSchema = z.object({
   productoId: z.string().optional().default('demo-prod'),
   tallaId: z.string().optional().default('demo-talla'),
   colegioId: z.string().optional().default('demo-colegio'),
-  pesoGramos: z.number().positive(),
-  mermaPorcentaje: z.number().min(0).max(100).default(8),
-  precioTelaUnitario: z.number().positive(),
-  rendimientoTela: z.number().positive(),
+
+  // Peso. Tres formas, con la precedencia que documenta el motor.
+  pesoConMermaGramos: z.number().nonnegative().optional(),
+  pesoExactoGramos: z.number().nonnegative().optional(),
+  pesoGramos: z.number().nonnegative().optional(),
+  mermaPorcentaje: z.number().min(0).max(100).optional(),
+
+  // Precio de la tela. Dos caminos.
+  precioBsG: z.number().positive().optional(),
+  precioTelaUnitario: z.number().positive().optional(),
+  rendimientoTela: z.number().positive().optional(),
+
+  // Prendas adquiridas: reemplaza al costo de tela.
+  precioAdquisicion: z.number().positive().optional(),
+
   costoAccesorios: z.number().default(0),
   costoManoObra: z.number().default(0),
-  factorComplejidad: z.number().int().positive().default(1),
+  factorComplejidad: z.number().positive().default(1),
   costoFijo: z.number().default(0),
+
+  costoIndirectoUnitario: z.number().nonnegative().optional(),
   costoIndirectoMensual: z.number().default(0),
   produccionTotalMes: z.number().int().positive().default(1),
+
   precioVenta: z.number().optional().nullable(),
+
+  // FRACCION, no porcentaje. El tope de 1 lo hace cumplir en el borde: si alguien
+  // manda 13 pensando en el 13%, el motor calcularia 1300% de IVA sin lanzar
+  // nada. Es la trampa de unidades de todo el refactor, y aca se ataja con un
+  // mensaje que dice exactamente que hacer.
+  tasaIva: z
+    .number()
+    .min(0)
+    .max(1, {
+      message:
+        'tasaIva se expresa como fraccion, no como porcentaje: 0.13 para el 13%. ' +
+        'Enviar 13 daria 1300% de IVA.',
+    })
+    .optional(),
 });
 
 // Cache global compartido en memoria para sincronía 100% entre todas las pestañas
