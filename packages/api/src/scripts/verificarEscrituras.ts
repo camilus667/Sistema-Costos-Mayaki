@@ -121,7 +121,8 @@ async function main() {
   // Restos de una corrida anterior que murio a medias.
   const restos =
     Number(await unoDesdeDisco(`SELECT COUNT(*) FROM tela WHERE descripcion LIKE '${MARCA}%';`)) +
-    Number(await unoDesdeDisco(`SELECT COUNT(*) FROM talla WHERE codigo LIKE '${MARCA}%';`));
+    Number(await unoDesdeDisco(`SELECT COUNT(*) FROM talla WHERE codigo LIKE '${MARCA}%';`)) +
+    Number(await unoDesdeDisco(`SELECT COUNT(*) FROM accesorio WHERE descripcion LIKE '${MARCA}%';`));
   if (restos > 0) {
     console.log(`\nAviso: hay ${restos} fila(s) de una corrida anterior. Se limpian al final.`);
   }
@@ -443,6 +444,32 @@ async function main() {
     );
   }
 
+  // Alta de insumo, agregado cuando la pantalla gano el formulario de Nuevo Insumo.
+  // Verifica de paso que costoUnitario se DERIVA en el servidor: se manda solo
+  // cantidadXUd y costoUdCompra, y el resultado tiene que ser la division.
+  const insumoNuevo = await http('POST', '/api/accesorios', {
+    descripcion: `${MARCA} insumo`,
+    unidadCompra: 'bolsa',
+    cantidadXUd: 4,
+    costoUdCompra: 10,
+  });
+  const insumoEnDisco = await filasDesdeDisco(
+    `SELECT colegio_id, costo_unitario FROM accesorio WHERE descripcion = '${MARCA} insumo' LIMIT 1;`
+  );
+  const colInsumo = insumoEnDisco.length ? insumoEnDisco[0][0] : 'sin fila';
+  const costoInsumo = insumoEnDisco.length ? Number(insumoEnDisco[0][1]) : -1;
+  anotar(
+    'POST /api/accesorios sin colegio crea un insumo COMPARTIDO y deriva el costo',
+    insumoNuevo.status === 201 && colInsumo === null && Math.abs(costoInsumo - 2.5) < 0.0005,
+    `status ${insumoNuevo.status}; en disco colegio_id = ${JSON.stringify(colInsumo)}, ` +
+      `costo unitario = ${costoInsumo} (10 / 4 = 2.5). ` +
+      (colInsumo !== null && colInsumo !== 'sin fila'
+        ? 'Quedo con colegio: el insumo no seria del catalogo compartido.'
+        : Math.abs(costoInsumo - 2.5) >= 0.0005
+          ? 'El costo unitario no es la division: el servidor no lo derivo.'
+          : 'Correcto.')
+  );
+
   // ---------------------------------------------------------------- limpieza
   console.log('');
   console.log(SEP);
@@ -451,6 +478,7 @@ async function main() {
 
   const idsTela = (await filasDesdeDisco(`SELECT id FROM tela WHERE descripcion LIKE '${MARCA}%';`)).map((f) => String(f[0]));
   const idsTalla = (await filasDesdeDisco(`SELECT id FROM talla WHERE codigo LIKE '${MARCA}%';`)).map((f) => String(f[0]));
+  const idsAcc = (await filasDesdeDisco(`SELECT id FROM accesorio WHERE descripcion LIKE '${MARCA}%';`)).map((f) => String(f[0]));
 
   for (const id of idsTela) {
     const r = await http('DELETE', `/api/telas/${id}`);
@@ -460,14 +488,19 @@ async function main() {
     const r = await http('DELETE', `/api/tallas/${id}`);
     console.log(`  DELETE talla ${id}: ${r.status}`);
   }
+  for (const id of idsAcc) {
+    const r = await http('DELETE', `/api/accesorios/${id}`);
+    console.log(`  DELETE insumo ${id}: ${r.status}`);
+  }
 
   const quedanTela = Number(await unoDesdeDisco(`SELECT COUNT(*) FROM tela WHERE descripcion LIKE '${MARCA}%';`));
   const quedanTalla = Number(await unoDesdeDisco(`SELECT COUNT(*) FROM talla WHERE codigo LIKE '${MARCA}%';`));
+  const quedanAcc = Number(await unoDesdeDisco(`SELECT COUNT(*) FROM accesorio WHERE descripcion LIKE '${MARCA}%';`));
   anotar(
     'las filas de prueba quedaron borradas EN DISCO',
-    quedanTela === 0 && quedanTalla === 0,
-    `quedan ${quedanTela} tela(s) y ${quedanTalla} talla(s). ` +
-      (quedanTela + quedanTalla > 0
+    quedanTela === 0 && quedanTalla === 0 && quedanAcc === 0,
+    `quedan ${quedanTela} tela(s), ${quedanTalla} talla(s) y ${quedanAcc} insumo(s). ` +
+      (quedanTela + quedanTalla + quedanAcc > 0
         ? 'El DELETE respondio pero el disco no cambio: el flush no cubre DELETE.'
         : 'Tambien confirma que el flush cubre DELETE.')
   );

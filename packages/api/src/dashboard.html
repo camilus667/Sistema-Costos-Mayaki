@@ -322,6 +322,8 @@
               Colegio</button>
             <button class="admin-tab-btn" id="btn-atab-prendas" onclick="switchAdminTab('prendas')">👔 Prendas &
               Reordenamiento</button>
+            <button class="admin-tab-btn" id="btn-atab-insumos" onclick="switchAdminTab('insumos')">🧵 Insumos de la
+              Empresa</button>
             <button class="admin-tab-btn" id="btn-atab-tallas" onclick="switchAdminTab('tallas')">📏 Tallas
               Habilitadas</button>
             <button class="admin-tab-btn" id="btn-atab-colegios" onclick="switchAdminTab('colegios')">🏛️ Perfil &
@@ -344,8 +346,7 @@
 
             <div id="form-nueva-tela-container"
               style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
-              <h4 style="margin-top:0; margin-bottom:0.75rem; color:#34d399; font-size:0.9rem;">✨ Registrar Nueva Tela
-                para este Colegio</h4>
+              <h4 style="margin-top:0; margin-bottom:0.75rem; color:#34d399; font-size:0.9rem;">✨ Registrar Nueva Tela</h4>
               <div style="display:grid; grid-template-columns: 1fr auto; gap:0.75rem; align-items:end;">
                 <div>
                   <label style="font-size:0.72rem; color:#94a3b8;">Nombre / Descripción de la Tela *</label>
@@ -356,6 +357,16 @@
                   <button class="btn" style="padding:0.45rem 1rem;" onclick="crearNuevaTelaAdmin()">Guardar
                     Tela</button>
                 </div>
+              </div>
+              <div style="display:flex; align-items:center; gap:0.6rem; margin-top:0.8rem;">
+                <label style="font-size:0.78rem; color:#f59e0b; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                  <input type="checkbox" id="nt-exclusivo">
+                  Exclusiva de este colegio
+                </label>
+                <span style="font-size:0.72rem; color:#64748b;">
+                  Sin marcar, la tela es de la empresa y la ven todos los colegios. Es el caso normal:
+                  11 de las 12 telas del catálogo son compartidas y solo el Casimir Escocés es del colegio.
+                </span>
               </div>
             </div>
 
@@ -375,6 +386,89 @@
                   </tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- SUBTAB: INSUMOS DE LA EMPRESA -->
+          <div id="admin-sec-insumos" style="display:none;">
+            <div style="background:#0f172a; border:1px solid #334155; border-radius:10px; padding:0.85rem 1rem; margin-bottom:1rem;">
+              <div style="font-size:0.78rem; color:#94a3b8; line-height:1.5;">
+                Los insumos son <strong style="color:#f8fafc;">de la empresa</strong>: botones, cierres, elástico, hilo, etiquetas.
+                Los comparten todos los colegios, así que un cambio de precio se hace <strong style="color:#f8fafc;">una sola vez</strong>.
+                Solo lleva colegio lo que carga su identidad: bordados, serigrafías, vinilos, cuello y botamanga.
+                <br>
+                Para asignar un insumo a una prenda y decidir la cantidad, andá a la pestaña
+                <strong style="color:#38bdf8;">Prendas</strong> y usá el botón Receta de esa prenda.
+              </div>
+            </div>
+
+            <div style="display:flex; align-items:center; justify-content:flex-end; margin-bottom:0.75rem; gap:0.6rem;">
+              <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.45rem 0.85rem;"
+                onclick="mostrarFormNuevoInsumo()">+ Dar de Alta Nuevo Insumo</button>
+            </div>
+
+            <div id="form-nuevo-insumo-container"
+              style="display:none; background:#1e293b; padding:1rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
+              <h4 style="margin-top:0; margin-bottom:0.75rem; color:#34d399; font-size:0.9rem;">✨ Registrar Nuevo Insumo</h4>
+              <div style="display:grid; grid-template-columns: 1fr 130px 110px 130px; gap:0.75rem; align-items:end;">
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Nombre del insumo *</label>
+                  <input type="text" id="ni-desc" class="cell-editable-sm" style="width:100%; font-weight:600;"
+                    placeholder="Ej. Boton de 4 huecos">
+                </div>
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Unidad de compra *</label>
+                  <input type="text" id="ni-unidad" class="cell-editable-sm" style="width:100%;" placeholder="Ej. bolsa, rollo">
+                </div>
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Cantidad x unidad *</label>
+                  <input type="number" id="ni-cant" class="cell-editable-sm" style="width:100%; text-align:center;"
+                    step="0.01" min="0.01" value="1" oninput="previewCostoInsumo()">
+                </div>
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Costo de esa unidad, Bs *</label>
+                  <input type="number" id="ni-costo" class="cell-editable-sm" style="width:100%; text-align:right;"
+                    step="0.01" min="0.01" oninput="previewCostoInsumo()">
+                </div>
+              </div>
+
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-top:0.9rem; gap:1rem; flex-wrap:wrap;">
+                <div style="font-size:0.78rem; color:#94a3b8;">
+                  Costo unitario que va a quedar:
+                  <strong id="ni-preview" style="color:#34d399; font-size:0.95rem;">—</strong>
+                  <span style="color:#475569;">(lo calcula el servidor: costo de la unidad ÷ cantidad)</span>
+                </div>
+                <label style="font-size:0.78rem; color:#f59e0b; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                  <input type="checkbox" id="ni-exclusivo">
+                  Exclusivo de este colegio
+                </label>
+                <button class="btn" style="padding:0.45rem 1rem;" onclick="crearNuevoInsumoAdmin()">Guardar Insumo</button>
+              </div>
+              <div style="font-size:0.72rem; color:#64748b; margin-top:0.5rem;">
+                Dejá el check sin marcar si el insumo lo puede usar cualquier colegio. Es el caso normal:
+                27 de los 38 insumos del catálogo son de la empresa.
+              </div>
+            </div>
+
+            <div style="max-height: 620px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
+              <table class="table-compact-auto" style="width:100%; min-width:880px;">
+                <thead>
+                  <tr>
+                    <th style="text-align:left; padding-left:0.75rem; min-width:300px;">Insumo</th>
+                    <th style="width:120px; text-align:center;">Unid. compra</th>
+                    <th style="width:100px; text-align:center;">Cant. x ud</th>
+                    <th style="width:120px; text-align:right;">Costo ud, Bs</th>
+                    <th style="width:130px; text-align:right;">Costo unitario</th>
+                    <th style="width:110px; text-align:center;">Ámbito</th>
+                  </tr>
+                </thead>
+                <tbody id="tb-admin-insumos-body">
+                  <tr><td colspan="6" style="text-align:center; padding:2rem;">Cargando insumos...</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div style="font-size:0.72rem; color:#64748b; margin-top:0.6rem;">
+              Esta lista es de consulta. Los costos se editan en la pantalla de Inputs, en Tabla Auxiliar de Accesorios.
             </div>
           </div>
 
@@ -2043,8 +2137,11 @@
       if (secColegios) secColegios.style.display = tabName === 'colegios' ? 'block' : 'none';
       const secSistema = document.getElementById('admin-sec-sistema');
       if (secSistema) secSistema.style.display = tabName === 'sistema' ? 'block' : 'none';
+      const secInsumos = document.getElementById('admin-sec-insumos');
+      if (secInsumos) secInsumos.style.display = tabName === 'insumos' ? 'block' : 'none';
 
       if (tabName === 'sistema') cargarConfigSistemaAdmin();
+      if (tabName === 'insumos') cargarInsumosAdmin();
     }
 
     async function cargarConfigSistemaAdmin() {
@@ -2340,13 +2437,117 @@
             <button class="btn-move" onclick="moverTelaDown(${idx})" ${idx === telas.length - 1 ? 'disabled style="opacity:0.3;"' : ''}>▼</button>
           </td>
           <td style="padding: 0.35rem 0.5rem;">
-            <input type="text" id="at-desc-${t.id}" class="cell-editable-sm" style="width:100%; font-weight:600; font-size:0.92rem; padding:0.4rem 0.65rem; color:#f8fafc;" value="${t.descripcion}">
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+              <input type="text" id="at-desc-${t.id}" class="cell-editable-sm" style="flex:1; font-weight:600; font-size:0.92rem; padding:0.4rem 0.65rem; color:#f8fafc;" value="${t.descripcion}">
+              ${t.colegioId
+                ? '<span title="Exclusiva de este colegio" style="background:#78350f; color:#fbbf24; padding:0.15rem 0.5rem; border-radius:4px; font-size:0.68rem; font-weight:700; white-space:nowrap;">colegio</span>'
+                : '<span title="Del catalogo de la empresa: la comparten todos los colegios" style="background:#064e3b; color:#34d399; padding:0.15rem 0.5rem; border-radius:4px; font-size:0.68rem; font-weight:700; white-space:nowrap;">empresa</span>'}
+            </div>
           </td>
           <td style="text-align:center;">
             <input type="checkbox" id="at-act-${t.id}" ${t.activo !== false ? 'checked' : ''}>
           </td>
         </tr>
       `).join('');
+    }
+
+    // ---------------------------------------------------------------- insumos
+    //
+    // Alta de insumos del catalogo. No existia ninguna forma de crear un accesorio
+    // desde la pantalla: la Tabla Auxiliar solo editaba los que ya estaban, asi que
+    // dar de alta un colegio con un insumo nuevo era imposible sin tocar la base.
+
+    function previewCostoInsumo() {
+      const cant = parseFloat(document.getElementById('ni-cant').value) || 0;
+      const costo = parseFloat(document.getElementById('ni-costo').value) || 0;
+      const el = document.getElementById('ni-preview');
+      // Solo es una vista previa: el valor que se guarda lo calcula el servidor. Si
+      // esta cuenta y la del servidor se separaran, manda el servidor.
+      el.textContent = cant > 0 && costo > 0 ? (costo / cant).toFixed(4) + ' Bs' : '—';
+    }
+
+    function mostrarFormNuevoInsumo() {
+      const c = document.getElementById('form-nuevo-insumo-container');
+      c.style.display = c.style.display === 'none' ? 'block' : 'none';
+      if (c.style.display === 'block') document.getElementById('ni-desc').focus();
+    }
+
+    async function cargarInsumosAdmin() {
+      const tbody = document.getElementById('tb-admin-insumos-body');
+      if (!tbody) return;
+      try {
+        const url = colegioFiltroActual && colegioFiltroActual !== 'all'
+          ? '/api/accesorios?colegioId=' + encodeURIComponent(colegioFiltroActual)
+          : '/api/accesorios';
+        const res = await fetch(url);
+        const json = await res.json();
+        const lista = json.success ? (json.data || []) : [];
+
+        if (lista.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:2rem; color:#64748b;">No hay insumos cargados.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = lista.map(a => {
+          const propio = !!a.colegioId;
+          const badge = propio
+            ? '<span style="background:#78350f; color:#fbbf24; padding:0.15rem 0.5rem; border-radius:4px; font-size:0.68rem; font-weight:700;">colegio</span>'
+            : '<span style="background:#064e3b; color:#34d399; padding:0.15rem 0.5rem; border-radius:4px; font-size:0.68rem; font-weight:700;">empresa</span>';
+          return `
+          <tr>
+            <td style="padding:0.4rem 0.75rem; font-weight:600; color:#f8fafc;">${a.descripcion}</td>
+            <td style="text-align:center; color:#94a3b8;">${a.unidadCompra || '—'}</td>
+            <td style="text-align:center; color:#94a3b8;">${a.cantidadXUd ?? '—'}</td>
+            <td style="text-align:right; color:#94a3b8;">${Number(a.costoUdCompra || 0).toFixed(2)}</td>
+            <td style="text-align:right; font-weight:700; color:#38bdf8;">${Number(a.costoUnitario || 0).toFixed(4)}</td>
+            <td style="text-align:center;">${badge}</td>
+          </tr>`;
+        }).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:2rem; color:#f87171;">Error al cargar insumos: ' + e + '</td></tr>';
+      }
+    }
+
+    async function crearNuevoInsumoAdmin() {
+      const descripcion = document.getElementById('ni-desc').value.trim();
+      const unidadCompra = document.getElementById('ni-unidad').value.trim();
+      const cantidadXUd = parseFloat(document.getElementById('ni-cant').value);
+      const costoUdCompra = parseFloat(document.getElementById('ni-costo').value);
+      const exclusivo = document.getElementById('ni-exclusivo').checked;
+
+      if (!descripcion) return alert('Falta el nombre del insumo.');
+      if (!unidadCompra) return alert('Falta la unidad de compra: bolsa, rollo, metro, unidad.');
+      if (!(cantidadXUd > 0)) return alert('La cantidad por unidad tiene que ser mayor a cero.');
+      if (!(costoUdCompra > 0)) return alert('El costo de la unidad de compra tiene que ser mayor a cero.');
+
+      // Sin el check, colegioId va NULL y el insumo es de la empresa. NO se manda
+      // costoUnitario: lo deriva el servidor, para que la cuenta viva en un solo lado.
+      const cuerpo = { descripcion, unidadCompra, cantidadXUd, costoUdCompra };
+      if (exclusivo && colegioFiltroActual && colegioFiltroActual !== 'all') {
+        cuerpo.colegioId = colegioFiltroActual;
+      }
+
+      try {
+        const res = await fetch('/api/accesorios', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cuerpo)
+        });
+        const json = await res.json();
+        if (!json.success) return alert('No se pudo crear el insumo: ' + (json.error || 'error desconocido'));
+
+        document.getElementById('form-nuevo-insumo-container').style.display = 'none';
+        ['ni-desc', 'ni-unidad', 'ni-costo'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('ni-cant').value = '1';
+        document.getElementById('ni-exclusivo').checked = false;
+        previewCostoInsumo();
+
+        const ambito = json.data && json.data.colegioId ? 'exclusivo de este colegio' : 'de la empresa';
+        alert('Insumo creado (' + ambito + '). Costo unitario: ' + Number(json.data.costoUnitario).toFixed(4) + ' Bs.\n\nPara usarlo en una prenda, abrí su Receta en la pestaña Prendas.');
+        await cargarInsumosAdmin();
+      } catch (e) {
+        alert('Error al crear el insumo: ' + e);
+      }
     }
 
     function moverTelaUp(idx) {
@@ -2413,7 +2614,12 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            colegioId: colegioFiltroActual,
+            // Sin el check, la tela es de la empresa: colegioId va NULL.
+            //
+            // Antes mandaba colegioFiltroActual siempre, asi que toda tela creada desde
+            // la pantalla nacia del colegio, al revés de las once compartidas del
+            // catalogo, y un segundo colegio no la habria visto nunca.
+            colegioId: document.getElementById('nt-exclusivo').checked ? colegioFiltroActual : null,
             descripcion,
             anchoMts: 1.5,
             unid: 'kilo',

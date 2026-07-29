@@ -23,7 +23,14 @@ const crearAccesorioSchema = z.object({
   unidadCompra: z.string().min(1),
   cantidadXUd: z.number().positive(),
   costoUdCompra: z.number().positive(),
-  costoUnitario: z.number().positive(),
+  // costoUnitario es DERIVADO: costoUdCompra / cantidadXUd. Se acepta si viene, para
+  // no romper a quien ya lo manda, pero es opcional y el servidor lo calcula.
+  //
+  // Antes era obligatorio, y eso empujaba a cada pantalla a calcularlo por su cuenta
+  // antes de poder crear un insumo. Esa es la forma en que la formula de costeo llego
+  // a estar en cuatro lugares con dos copias mal: un campo derivado que el cliente
+  // tiene que completar es una invitacion a duplicar la cuenta.
+  costoUnitario: z.number().positive().optional(),
 });
 
 // GET /api/accesorios - Listar accesorios
@@ -76,9 +83,17 @@ api.post('/', zValidator('json', crearAccesorioSchema), async (c) => {
   const body = c.req.valid('json');
 
   // Explicito: sin colegio, el accesorio es del catalogo de la empresa.
+  // Y el costo unitario se deriva si no vino, en un solo lugar.
+  const cantidadXUd = body.cantidadXUd;
+  const costoUnitario = body.costoUnitario ?? (cantidadXUd > 0 ? body.costoUdCompra / cantidadXUd : 0);
+
   const [newAccesorio] = await db
     .insert(accesorios)
-    .values({ ...body, colegioId: body.colegioId || null })
+    .values({
+      ...body,
+      colegioId: body.colegioId || null,
+      costoUnitario: Math.round(costoUnitario * 10000) / 10000,
+    })
     .returning();
 
   return c.json({
