@@ -17,10 +17,29 @@
  * mas grave: ahi el dato al menos entraba a la base en memoria. Aca nunca entra.
  *
  * POR QUE COMPARAR ANTES DE CAMBIAR. La correccion es que la pantalla lea y escriba
- * detalle_acc. Pero al cambiar la fuente, los numeros que se ven se van a mover en
- * toda celda donde el Excel y la base no coincidan. Antes de mover nada hay que
- * saber donde y cuanto. Es la regla que el usuario fijo para la Fase 2 y que
- * funciono: paridad primero, borrado despues.
+ * detalle_acc. Pero al cambiar la fuente, los numeros que se ven se moverian en toda
+ * celda donde el Excel y la base no coincidan. Antes de mover nada hay que saber
+ * donde y cuanto. Es la regla que el usuario fijo para la Fase 2: paridad primero,
+ * borrado despues.
+ *
+ * CUIDADO CON LAS UNIDADES, que la primera version de este script se comio y por eso
+ * reporto que las 27 prendas diferian:
+ *
+ *   la celda del Excel es un COSTO EN BS
+ *   detalle_acc.cantidadUso es una CANTIDAD EN UNIDADES
+ *
+ * y el endpoint deriva una de la otra dividiendo:
+ *
+ *   qty = (costoDelExcel / costoUnitario).toFixed(2)
+ *
+ * Compararlas de frente da diferencias en todas las filas que no significan nada.
+ * Aca se compara Bs contra Bs: cantidadUso x costoUnitario contra la celda del Excel.
+ *
+ * Y el .toFixed(2) de esa division es el mecanismo exacto del descuadre de 0,03 Bs
+ * que el usuario ya adjudico en la reja: Entretela para pantalon vale 0,75 Bs, sale
+ * 0,75/18 = 0,041666, se redondea a 0,04, y 0,04 x 18 = 0,72. Repuntar la pantalla a
+ * detalle_acc elimina esa deriva, porque usa la cantidad guardada en vez de
+ * derivarla.
  *
  * SOLO LEE. Abre la base con skipSeed y no escribe una sola fila.
  *
@@ -34,6 +53,8 @@ import { loadExcelInputs } from '../routes/inputs';
 
 const SEP = '='.repeat(78);
 const TOL = 0.001;
+/** Un centavo: por debajo de eso es redondeo, no una diferencia de datos. */
+const CENTAVO = 0.011;
 const bs = (n: number) => (n >= 0 ? ' ' : '') + n.toFixed(2);
 
 /** Misma logica que el endpoint: "19-20" en la columna de item significa 19 y 20. */
@@ -176,14 +197,21 @@ async function main() {
     let deltaPrenda = 0;
 
     for (const nom of nombres) {
-      const qExcel = excel.get(`${item}_${nom}`) || 0;
-      const qBase = enBase.get(nom) || 0;
-      if (Math.abs(qExcel - qBase) <= TOL) continue;
+      // La celda del Excel ya viene en Bs. La base guarda cantidad, asi que se
+      // multiplica por el costo unitario para poder comparar en la misma unidad.
+      const costoExcel = excel.get(`${item}_${nom}`) || 0;
+      const cantBase = enBase.get(nom) || 0;
+      const costoUnit = Number(porNombre.get(nom)?.costoUnitario) || 0;
+      const costoBase = cantBase * costoUnit;
 
-      const costo = Number(porNombre.get(nom)?.costoUnitario) || 0;
-      const delta = (qBase - qExcel) * costo;
+      const delta = costoBase - costoExcel;
+      if (Math.abs(delta) <= CENTAVO) continue;
+
+      // La cantidad que la pantalla MUESTRA hoy, derivada por division y redondeada.
+      const cantDerivada = costoUnit > 0 ? Math.round((costoExcel / costoUnit) * 100) / 100 : 0;
+
       deltaPrenda += delta;
-      difs.push({ nom, qExcel, qBase, costo, delta });
+      difs.push({ nom, costoExcel, costoBase, cantBase, cantDerivada, costoUnit, delta });
     }
 
     if (difs.length === 0) {
@@ -201,9 +229,14 @@ async function main() {
     console.log(`  item ${String(f.item).padStart(2)}  ${f.desc}${marca}`);
     console.log(`        efecto en el costo de accesorios: ${bs(f.deltaPrenda)} Bs`);
     for (const d of f.difs) {
+      const porRedondeo = Math.abs(d.cantDerivada - d.cantBase) <= TOL;
       console.log(
-        `        ${d.nom.padEnd(34).slice(0, 34)}  excel ${String(d.qExcel).padStart(6)}` +
-          `   base ${String(d.qBase).padStart(6)}   x ${d.costo.toFixed(4)} Bs = ${bs(d.delta)}`
+        `        ${d.nom.padEnd(30).slice(0, 30)}  excel ${d.costoExcel.toFixed(2).padStart(8)} Bs` +
+          `   base ${d.costoBase.toFixed(2).padStart(8)} Bs   dif ${bs(d.delta)}` +
+          (porRedondeo ? '   (solo redondeo de la cantidad derivada)' : '')
+      );
+      console.log(
+        `        ${''.padEnd(30)}  cantidad: la pantalla deriva ${d.cantDerivada}, la base guarda ${d.cantBase}`
       );
     }
   }
@@ -221,10 +254,14 @@ async function main() {
   console.log(`  Efecto neto si la pantalla pasa a leer detalle_acc: ${bs(deltaTotalBs)} Bs`);
   console.log('  sumado sobre todas las prendas, en costo de accesorios por unidad.');
   console.log('');
-  console.log('  COMO LEERLO. Un delta POSITIVO significa que la base cobra mas que lo que');
-  console.log('  muestra el Excel, o sea que la pantalla viene mostrando de menos. El motor');
-  console.log('  ya costea con la base, asi que estos numeros NO son un cambio de costos:');
-  console.log('  son la parte del costo que la pantalla no venia mostrando.');
+  console.log('  COMO LEERLO. Todo esta en Bs a esta altura, las dos fuentes en la misma');
+  console.log('  unidad. Un delta POSITIVO significa que la base cobra mas que lo que muestra');
+  console.log('  el Excel. El motor ya costea con la base, asi que estos numeros NO son un');
+  console.log('  cambio de costos: son la parte que la pantalla no venia mostrando.');
+  console.log('');
+  console.log('  Las diferencias marcadas "solo redondeo" salen del .toFixed(2) que el');
+  console.log('  endpoint aplica a la cantidad derivada, no de datos distintos. Repuntar la');
+  console.log('  pantalla a detalle_acc las elimina, porque usa la cantidad guardada.');
   console.log('');
   console.log('  Las prendas SIN RECETA EN LA BASE son las importantes: el Excel les asigna');
   console.log('  accesorios y detalle_acc no tiene ninguna linea, asi que hoy se costean con');
