@@ -74,6 +74,10 @@ export interface MetaCosteo {
 
   /** De donde salio el peso que se le paso al motor. */
   origenPeso: 'pesoGramos' | 'pesoExactoGramos' | 'ninguno';
+  /** Valores crudos de peso_mat_prima, tal como estan en la base. */
+  pesoGramos: number;
+  pesoExactoGramos: number;
+  mermaPorcentaje: number | null;
   telaVinculada: boolean;
   telaNombre: string | null;
   precioBsG: number | null;
@@ -534,6 +538,9 @@ export function ensamblarInputs(
     tallaNombre: talla.nombre,
     modoCosteo,
     origenPeso,
+    pesoGramos,
+    pesoExactoGramos: pesoExacto,
+    mermaPorcentaje: mermaPct ?? null,
     telaVinculada: !!tela,
     telaNombre: tela ? tela.descripcion : null,
     precioBsG,
