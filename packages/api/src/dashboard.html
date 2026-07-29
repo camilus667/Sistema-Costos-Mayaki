@@ -516,8 +516,77 @@
               </div>
             </div>
 
+            <!-- Receta de accesorios de UNA prenda. La API existia desde antes
+                 (detalleAccesorio.ts) y la pantalla no la llamaba nunca: la unica
+                 forma de tocar la receta era la matriz de todas las prendas contra
+                 todos los insumos. -->
+            <div id="panel-receta"
+              style="display:none; background:#0f172a; padding:1rem 1.15rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:0.85rem;">
+                <h4 style="margin:0; color:#34d399; font-size:0.95rem;">
+                  🧵 Receta de <span id="receta-titulo" style="color:#f8fafc;"></span>
+                </h4>
+                <button class="btn" style="background:#334155; font-size:0.75rem; padding:0.35rem 0.8rem;"
+                  onclick="cerrarReceta()">Cerrar</button>
+              </div>
+
+              <table class="table-compact-auto" style="width:100%; margin-bottom:0.9rem;">
+                <thead>
+                  <tr>
+                    <th style="text-align:left; padding-left:0.6rem; min-width:260px;">Insumo</th>
+                    <th style="width:110px; text-align:center;">Cantidad</th>
+                    <th style="width:120px; text-align:right;">Costo unit.</th>
+                    <th style="width:120px; text-align:right;">Costo total</th>
+                    <th style="width:80px; text-align:center;">Quitar</th>
+                  </tr>
+                </thead>
+                <tbody id="tb-receta-body"></tbody>
+                <tfoot>
+                  <tr style="border-top:2px solid #334155;">
+                    <td colspan="3" style="padding:0.5rem 0.6rem; font-weight:700; color:#94a3b8;">SUBTOTAL DE ACCESORIOS</td>
+                    <td id="receta-subtotal" style="text-align:right; font-weight:800; color:#f59e0b;">0.00</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+
+              <div style="display:grid; grid-template-columns: 1fr 110px auto; gap:0.6rem; align-items:end; padding-top:0.85rem; border-top:1px solid #1e293b;">
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Agregar insumo</label>
+                  <select id="receta-nuevo-acc" class="cell-editable-sm" style="width:100%; padding:0.4rem;"></select>
+                </div>
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Cantidad</label>
+                  <input type="number" id="receta-nueva-cant" class="cell-editable-sm"
+                    style="width:100%; text-align:center;" step="0.01" min="0.01" value="1">
+                </div>
+                <div>
+                  <button class="btn" style="padding:0.45rem 1rem;" onclick="agregarLineaReceta()">Agregar</button>
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1fr auto auto; gap:0.6rem; align-items:end; margin-top:0.9rem; padding-top:0.85rem; border-top:1px solid #1e293b;">
+                <div>
+                  <label style="font-size:0.72rem; color:#94a3b8;">Copiar la receta de otra prenda</label>
+                  <select id="receta-origen" class="cell-editable-sm" style="width:100%; padding:0.4rem;"></select>
+                </div>
+                <label style="font-size:0.75rem; color:#f59e0b; display:flex; align-items:center; gap:0.4rem; cursor:pointer; padding-bottom:0.5rem;">
+                  <input type="checkbox" id="receta-reemplazar">
+                  Reemplazar lo que ya tiene
+                </label>
+                <div>
+                  <button class="btn" style="background:#7c3aed; padding:0.45rem 1rem;" onclick="copiarRecetaDe()">Copiar</button>
+                </div>
+              </div>
+              <div style="font-size:0.72rem; color:#64748b; margin-top:0.5rem;">
+                Copiar es la operación que hace barato dar de alta un colegio: se crea la prenda, se copia la receta
+                de la prenda equivalente, y solo se ajusta lo distinto. Los insumos exclusivos de otro colegio no
+                viajan, y la respuesta dice cuáles quedaron sin copiar.
+              </div>
+            </div>
+
             <div style="max-height: 680px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 8px;">
-              <table class="table-compact-auto" style="width:100%; min-width:1100px;">
+              <table class="table-compact-auto" style="width:100%; min-width:1200px;">
                 <thead>
                   <tr>
                     <th style="width:60px; text-align:center;">Orden</th>
@@ -526,6 +595,7 @@
                     <th style="width:420px; text-align:left; padding-left:0.5rem;">Tela Asignada (Selector)</th>
                     <th style="width:90px; text-align:center;">Factor Comp.</th>
                     <th style="width:70px; text-align:center;">Activo</th>
+                    <th style="width:95px; text-align:center;">Receta</th>
                   </tr>
                 </thead>
                 <tbody id="tb-admin-prendas-body">
@@ -2328,8 +2398,196 @@
           <td style="text-align:center;">
             <input type="checkbox" id="ap-act-${p.id}" ${p.activo ? 'checked' : ''}>
           </td>
+          <td style="text-align:center;">
+            <button class="btn" style="background:#065f46; padding:0.25rem 0.6rem; font-size:0.72rem; white-space:nowrap;"
+              onclick="abrirReceta('${p.id}', ${p.itemNumero}, '${String(p.descripcion).replace(/'/g, "\\'")}')"
+              title="Ver y editar los insumos que lleva esta prenda">🧵 Receta</button>
+          </td>
         </tr>
       `).join('');
+    }
+
+    // ---------------------------------------------------------------- receta
+    //
+    // Asignar insumos a UNA prenda. La API vive en detalleAccesorio.ts desde antes y
+    // la pantalla no la llamaba nunca: se editaba la matriz de todas las prendas
+    // contra todos los insumos, que servia para ajustar cantidades pero no para
+    // responder "que lleva esta prenda".
+
+    let recetaProductoActual = null;
+
+    function cerrarReceta() {
+      document.getElementById('panel-receta').style.display = 'none';
+      recetaProductoActual = null;
+    }
+
+    async function abrirReceta(productoId, itemNumero, descripcion) {
+      recetaProductoActual = productoId;
+      document.getElementById('receta-titulo').textContent = 'item ' + itemNumero + ' — ' + descripcion;
+      document.getElementById('panel-receta').style.display = 'block';
+
+      // Las prendas de origen para copiar: todas menos esta.
+      const prods = (adminConfigData && adminConfigData.productos) || [];
+      document.getElementById('receta-origen').innerHTML =
+        '<option value="">-- elegí una prenda --</option>' +
+        prods.filter(p => p.id !== productoId)
+          .map(p => `<option value="${p.id}">item ${p.itemNumero} — ${p.descripcion}</option>`).join('');
+
+      await cargarReceta();
+      document.getElementById('panel-receta').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    async function cargarReceta() {
+      if (!recetaProductoActual) return;
+      const tbody = document.getElementById('tb-receta-body');
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:1rem; color:#64748b;">Cargando...</td></tr>';
+
+      try {
+        const res = await fetch('/api/productos/' + recetaProductoActual + '/accesorios');
+        const json = await res.json();
+        if (!json.success) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:1rem; color:#f87171;">' + (json.error || 'Error') + '</td></tr>';
+          return;
+        }
+
+        const lineas = json.data || [];
+        tbody.innerHTML = lineas.length === 0
+          ? '<tr><td colspan="5" style="text-align:center; padding:1rem; color:#64748b; font-style:italic;">Esta prenda todavía no lleva ningún insumo. Se costea con accesorios en 0.</td></tr>'
+          : lineas.map(l => `
+            <tr>
+              <td style="padding:0.4rem 0.6rem; font-weight:600; color:#f8fafc;">${l.descripcion}
+                <span style="color:#475569; font-size:0.72rem;">${l.unidadCompra ? '(' + l.unidadCompra + ')' : ''}</span>
+              </td>
+              <td style="text-align:center;">
+                <input type="number" id="rec-cant-${l.id}" class="cell-editable-sm"
+                  style="width:85px; text-align:center;" step="0.01" min="0.01" value="${l.cantidadUso}"
+                  onchange="cambiarCantidadReceta('${l.id}')">
+              </td>
+              <td style="text-align:right; color:#94a3b8;">${Number(l.costoUnitario || 0).toFixed(4)}</td>
+              <td style="text-align:right; font-weight:700; color:#38bdf8;">${Number(l.costoTotalBs || 0).toFixed(2)}</td>
+              <td style="text-align:center;">
+                <button class="btn" style="background:#7f1d1d; padding:0.2rem 0.55rem; font-size:0.72rem;"
+                  onclick="quitarLineaReceta('${l.id}', '${String(l.descripcion).replace(/'/g, "\\'")}')">✕</button>
+              </td>
+            </tr>`).join('');
+
+        document.getElementById('receta-subtotal').textContent =
+          Number(json.subtotalAccesoriosBs || 0).toFixed(2);
+
+        // Los insumos que se pueden agregar: los del catalogo que no estan ya puestos.
+        const yaPuestos = new Set(lineas.map(l => l.accesorioId));
+        const url = colegioFiltroActual && colegioFiltroActual !== 'all'
+          ? '/api/accesorios?colegioId=' + encodeURIComponent(colegioFiltroActual)
+          : '/api/accesorios';
+        const resAcc = await fetch(url);
+        const jsonAcc = await resAcc.json();
+        const disponibles = (jsonAcc.data || []).filter(a => !yaPuestos.has(a.id));
+
+        document.getElementById('receta-nuevo-acc').innerHTML = disponibles.length === 0
+          ? '<option value="">(la prenda ya lleva todos los insumos del catálogo)</option>'
+          : '<option value="">-- elegí un insumo --</option>' + disponibles.map(a =>
+              `<option value="${a.id}">${a.descripcion} — ${Number(a.costoUnitario || 0).toFixed(4)} Bs${a.colegioId ? ' [colegio]' : ''}</option>`
+            ).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:1rem; color:#f87171;">Error: ' + e + '</td></tr>';
+      }
+    }
+
+    async function agregarLineaReceta() {
+      if (!recetaProductoActual) return;
+      const accesorioId = document.getElementById('receta-nuevo-acc').value;
+      const cantidadUso = parseFloat(document.getElementById('receta-nueva-cant').value);
+
+      if (!accesorioId) return alert('Elegí un insumo de la lista.');
+      if (!(cantidadUso > 0)) return alert('La cantidad tiene que ser mayor a cero.');
+
+      try {
+        const res = await fetch('/api/productos/' + recetaProductoActual + '/accesorios', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accesorioId, cantidadUso })
+        });
+        const json = await res.json();
+        if (!json.success) return alert('No se pudo agregar: ' + (json.error || 'error desconocido'));
+        document.getElementById('receta-nueva-cant').value = '1';
+        await cargarReceta();
+        await refrescarCosteoTrasReceta();
+      } catch (e) { alert('Error al agregar el insumo: ' + e); }
+    }
+
+    async function cambiarCantidadReceta(detalleId) {
+      if (!recetaProductoActual) return;
+      const cantidadUso = parseFloat(document.getElementById('rec-cant-' + detalleId).value);
+      if (!(cantidadUso > 0)) {
+        alert('La cantidad tiene que ser mayor a cero. Para sacar el insumo usá la X.');
+        await cargarReceta();
+        return;
+      }
+      try {
+        const res = await fetch('/api/productos/' + recetaProductoActual + '/accesorios/' + detalleId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cantidadUso })
+        });
+        const json = await res.json();
+        if (!json.success) return alert('No se pudo guardar la cantidad: ' + (json.error || 'error'));
+        await cargarReceta();
+        await refrescarCosteoTrasReceta();
+      } catch (e) { alert('Error al guardar la cantidad: ' + e); }
+    }
+
+    async function quitarLineaReceta(detalleId, descripcion) {
+      if (!recetaProductoActual) return;
+      if (!confirm('¿Quitar "' + descripcion + '" de esta prenda?')) return;
+      try {
+        const res = await fetch('/api/productos/' + recetaProductoActual + '/accesorios/' + detalleId, {
+          method: 'DELETE'
+        });
+        const json = await res.json();
+        if (!json.success) return alert('No se pudo quitar: ' + (json.error || 'error'));
+        await cargarReceta();
+        await refrescarCosteoTrasReceta();
+      } catch (e) { alert('Error al quitar el insumo: ' + e); }
+    }
+
+    async function copiarRecetaDe() {
+      if (!recetaProductoActual) return;
+      const origenId = document.getElementById('receta-origen').value;
+      if (!origenId) return alert('Elegí la prenda de la que querés copiar.');
+      const reemplazar = document.getElementById('receta-reemplazar').checked;
+
+      try {
+        const res = await fetch(
+          '/api/productos/' + recetaProductoActual + '/accesorios/copiar-de/' + origenId +
+          (reemplazar ? '?reemplazar=true' : ''),
+          { method: 'POST' }
+        );
+        const json = await res.json();
+        if (!json.success) return alert('No se pudo copiar: ' + (json.error || 'error'));
+
+        // La copia NO es todo o nada a proposito: los insumos exclusivos de otro
+        // colegio no pueden viajar, y hay que decir cuales quedaron afuera.
+        let msg = json.mensaje || 'Receta copiada.';
+        const omitidos = json.omitidosPorSerExclusivosDeOtroColegio || [];
+        if (omitidos.length > 0) {
+          msg += '\n\nSin copiar por ser de otro colegio:\n' +
+            omitidos.map(o => '  · ' + o.descripcion + ' (cantidad ' + o.cantidadUso + ')').join('\n') +
+            '\n\nHay que crear el equivalente para este colegio y agregarlo a mano.';
+        }
+        alert(msg);
+        document.getElementById('receta-reemplazar').checked = false;
+        await cargarReceta();
+        await refrescarCosteoTrasReceta();
+      } catch (e) { alert('Error al copiar la receta: ' + e); }
+    }
+
+    /** El costo de accesorios cambio, asi que las pantallas que lo muestran quedaron viejas. */
+    async function refrescarCosteoTrasReceta() {
+      try {
+        await cargarMatrizConsolidada();
+        if (currentInputConcept === 'Accesorios') await cargarInputConcept('Accesorios');
+        generarMatrizPrenda();
+      } catch (e) { /* refrescar es cortesia, no debe romper la edicion */ }
     }
 
     function moverPrendaUp(idx) {
