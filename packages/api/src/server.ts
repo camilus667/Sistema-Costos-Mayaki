@@ -22,6 +22,7 @@ import inventarioRoutes from './routes/inventario';
 import precioRoutes from './routes/precio';
 import exportRoutes from './routes/export';
 import inputRoutes from './routes/inputs';
+import costeoRoutes from './routes/costeo';
 import { asc, eq } from 'drizzle-orm';
 
 const app = new Hono();
@@ -119,15 +120,15 @@ app.use(
 app.get('/health', async (c) => {
   try {
     await getDb();
-    return c.json({ 
-      status: 'ok', 
-      timestamp: new Date().toISOString(), 
+    return c.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
       database: 'sql-js-local',
       excel: 'CAMBRIDGE.xlsx cargado'
     });
   } catch (error) {
-    return c.json({ 
-      status: 'error', 
+    return c.json({
+      status: 'error',
       timestamp: new Date().toISOString(),
       error: String(error)
     }, 500);
@@ -151,7 +152,7 @@ app.get('/api/dashboard-resumen', async (c) => {
   const anio = (await db.select().from(schema.aniosEscolares).limit(1))[0];
   const admin = (await db.select().from(schema.usuarios).limit(1))[0];
   const tallas = await db.select().from(schema.tallas).orderBy(asc(schema.tallas.orden));
-  
+
   let prodQuery = db.select().from(schema.productos);
   if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(schema.productos.colegioId, colegioId));
   const productos = await prodQuery.orderBy(asc(schema.productos.orden), asc(schema.productos.itemNumero));
@@ -276,22 +277,25 @@ app.route('/api/inventario', inventarioRoutes);
 app.route('/api/precios', precioRoutes);
 app.route('/api/export', exportRoutes);
 app.route('/api/inputs', inputRoutes);
+// Costeo unificado. Se monta AL LADO de /api/inputs y /api/calculo, sin
+// reemplazar nada, para poder comparar paridad antes de tocar esas pantallas.
+app.route('/api/costeo', costeoRoutes);
 
 // Iniciar servidor si se ejecuta directamente
 async function start() {
   const PORT = 3000;
-  
+
   console.log(`🚀 Iniciando servidor local en http://localhost:${PORT}`);
   console.log('📊 Base de datos: sql.js (en memoria con datos de CAMBRIDGE.xlsx)');
   console.log(`🔗 Dashboard UI: http://localhost:${PORT}/`);
   console.log(`🔗 Health check: http://localhost:${PORT}/health`);
   console.log(`🔗 API base: http://localhost:${PORT}/api/`);
-  
+
   await getDb();
   console.log('✅ Base de datos inicializada y poblada desde CAMBRIDGE.xlsx');
-  
+
   const { serve } = await import('@hono/node-server');
-  
+
   serve(
     {
       fetch: app.fetch.bind(app),
