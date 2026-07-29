@@ -56,6 +56,12 @@ const SOLO_OFRECIDAS = argv.includes('--solo-ofrecidas');
 const TOL = flag('--tolerancia') ? Number(flag('--tolerancia')) : 0.01;
 /** Cuantas filas de ejemplo mostrar por cada grupo de diferencias. */
 const TOP = flag('--top') ? Number(flag('--top')) : 4;
+/**
+ * Baseline de diferencias ya falladas por el usuario. Ver la nota sobre por que
+ * es un snapshot y no una lista de predicados.
+ */
+const BASELINE = flag('--baseline') || 'src/scripts/paridad.baseline.json';
+const APROBAR = argv.includes('--aprobar-baseline');
 const SEP = '='.repeat(78);
 
 const num = (v: any): number => {
@@ -116,9 +122,59 @@ interface Dif {
   nuevo: number;
   viejo: number;
   delta: number;
-  clase: 'ESPERADA' | 'NO_OFRECIDA' | 'NUEVA';
+  clase: 'ESPERADA' | 'NO_OFRECIDA' | 'ACEPTADA' | 'NUEVA';
   reglaId?: string;
+  /** Si es ACEPTADA o NUEVA: el delta que tenia en el baseline aprobado. */
+  deltaBaseline?: number;
 }
+
+/** Clave estable de una diferencia, para casarla contra el baseline. */
+const claveDif = (banda: string, item: number, talla: string, campo: string) =>
+  `${banda}|${item}|${talla}|${campo}`;
+
+/**
+ * BASELINE DE DIFERENCIAS FALLADAS.
+ *
+ * Por que un snapshot y no mas predicados. Las cinco reglas ESPERADAS de arriba
+ * describen causas con una explicacion mecanica: se pueden expresar como
+ * condicion y siguen siendo verdad si los datos cambian. Las 590 que el usuario
+ * fallo el 29-jul-2026 no son asi. Varias son problemas de datos puntuales — el
+ * +1,00 de la Blusa manga larga, el +2,00 de la Calza corta en las tallas
+ * grandes, el 0,03 de redondeo de accesorios. Escribirlas como predicados
+ * obligaria a algo del tipo "aceptar cualquier diferencia en los items 1, 5, 6,
+ * 10, 12, 13 y 14", que es justamente la goma de borrar universal que se evito al
+ * disenar el arnes: taparia una regresion futura en esas mismas prendas.
+ *
+ * Un snapshot con el delta exacto de cada celda no tiene ese problema:
+ *   - misma celda y mismo delta  -> ACEPTADA, ya fallada
+ *   - misma celda y delta distinto -> NUEVA, algo se movio
+ *   - celda que no estaba        -> NUEVA, bloquea
+ *   - celda del baseline que ya no aparece -> RESUELTA, buena noticia
+ *
+ * El ultimo caso es el que hace util el baseline mas alla de la reja: cuando se
+ * arreglen las bandas de mano de obra, el arnes lo va a decir solo.
+ */
+interface Baseline {
+  generado: string;
+  fallos: Record<string, number>;
+  rulings?: string[];
+}
+
+/** Los fallos del usuario del 29-jul-2026, tal como se decidieron. */
+const RULINGS = [
+  'Causa 1 — items 19 y 20, desglose viejo: GANA EL NUEVO. El desglose no conoce ' +
+    'modoCosteo ni precio_adquisicion y daba 7,84 donde el Excel dice hasta 147,84. ' +
+    'El nuevo coincide con el Excel en las 28 celdas, el viejo en 0.',
+  'Causa 2 — matriz-prenda y matriz-consolidada no calculan el costo de tela, lo ' +
+    'despejan del Excel por resta, asi que donde la planilla calla reportan tela ' +
+    'gratis: GANA EL NUEVO.',
+  'Causa 3 — subtotal de accesorios corrido 0,03 Bs en items 1, 6 y 12: SE DEJA COMO ' +
+    'ESTA. Se prefiere que el desglose en pantalla sume exactamente su propio ' +
+    'subtotal, aunque el total quede 0,03 apartado del total de la columna 41.',
+  'Causas 4, 5 y 6 — bandas de talla de la mano de obra, el +1,00 de la Blusa manga ' +
+    'larga y el peso copiado de la Polera Bullying: FRENTE APARTE de calidad de datos. ' +
+    'Son problemas de datos que existen con o sin el refactor, y la unificacion avanza.',
+];
 
 /**
  * Valor de la hoja del Excel correspondiente al campo, o null si esa hoja no
@@ -403,6 +459,20 @@ async function main() {
     });
   }
 
+  // ---------- Baseline ----------
+  let baseline: Baseline | null = null;
+  if (!APROBAR && fs.existsSync(BASELINE)) {
+    try {
+      baseline = JSON.parse(fs.readFileSync(BASELINE, 'utf8'));
+      const n = Object.keys(baseline!.fallos || {}).length;
+      console.log(`\nBaseline: ${n} diferencias ya falladas, aprobadas el ${baseline!.generado?.slice(0, 10)}.`);
+    } catch (e: any) {
+      console.log(`\nNo se pudo leer el baseline ${BASELINE}: ${e.message}`);
+    }
+  } else if (!APROBAR) {
+    console.log(`\nSin baseline en ${BASELINE}. Toda diferencia va a salir como NUEVA.`);
+  }
+
   // ---------- Clasificacion ----------
   const difs: Dif[] = [];
   let comparaciones = 0;
@@ -425,13 +495,19 @@ async function main() {
         // si la prenda se ofrece en esa talla. Una combinacion que no se ofrece
         // no existe, asi que un descuadre ahi no puede bloquear nada. Se cuenta
         // aparte y se reporta, no se esconde.
+        const k = claveDif(banda, fila.item, fila.tallaCodigo, campo);
+        const dBase = baseline?.fallos?.[k];
+        const yaFallada = dBase !== undefined && Math.abs(delta - dBase) <= TOL;
+
         const clase: Dif['clase'] = regla
           ? 'ESPERADA'
           : !fila.seOfrece
           ? 'NO_OFRECIDA'
+          : yaFallada
+          ? 'ACEPTADA'
           : 'NUEVA';
 
-        difs.push({ ...base, clase, reglaId: regla?.id });
+        difs.push({ ...base, clase, reglaId: regla?.id, deltaBaseline: dBase });
       }
     }
   }
@@ -556,6 +632,18 @@ async function main() {
         } else if (nuevoEnCero > 0) {
           console.log(`    -> El nuevo devuelve 0 en ${nuevoEnCero} de ${grupo.length}.`);
         }
+        // La senal mas fuerte de regresion: la celda ya estaba fallada, pero el
+        // numero se movio. No es una diferencia nueva, es una que cambio.
+        const movidas = grupo.filter((d) => d.deltaBaseline !== undefined);
+        if (movidas.length > 0) {
+          console.log(`    -> ATENCION: ${movidas.length} ya estaban en el baseline con OTRO delta. Algo cambio.`);
+          for (const d of movidas.slice(0, TOP)) {
+            console.log(
+              `       item ${d.fila.item} ${d.fila.tallaCodigo}: baseline ${d.deltaBaseline!.toFixed(2)} -> ahora ${d.delta.toFixed(2)}`
+            );
+          }
+        }
+
         const items = [...new Set(grupo.map((d) => d.fila.item))].sort((a, b) => a - b);
         console.log(`    items afectados (${items.length}): ${items.join(', ')}`);
 
@@ -586,6 +674,52 @@ async function main() {
     for (const campo of CAMPOS) {
       const n = noOfrecidas.filter((d) => d.campo === campo).length;
       if (n) console.log(`    ${campo.padEnd(22)} ${String(n).padStart(5)}`);
+    }
+  }
+
+  // ---------- Aceptadas y resueltas ----------
+  const aceptadas = difs.filter((d) => d.clase === 'ACEPTADA');
+  const vistas = new Set(
+    difs.map((d) => claveDif(d.banda, d.fila.item, d.fila.tallaCodigo, d.campo))
+  );
+  const resueltas = baseline
+    ? Object.keys(baseline.fallos || {}).filter((k) => !vistas.has(k))
+    : [];
+
+  if (baseline) {
+    console.log('');
+    console.log(SEP);
+    console.log(`  YA FALLADAS POR EL USUARIO: ${aceptadas.length}  —  no bloquean`);
+    console.log(SEP);
+    for (const r of baseline.rulings || []) console.log(`  ${r}`);
+    if (aceptadas.length > 0) {
+      const porBandaCampo = new Map<string, number>();
+      for (const d of aceptadas) {
+        const k = `${d.banda} / ${d.campo}`;
+        porBandaCampo.set(k, (porBandaCampo.get(k) || 0) + 1);
+      }
+      console.log('');
+      for (const [k, n] of [...porBandaCampo.entries()].sort()) {
+        console.log(`    ${k.padEnd(40)} ${String(n).padStart(5)}`);
+      }
+    }
+
+    if (resueltas.length > 0) {
+      console.log('');
+      console.log(SEP);
+      console.log(`  RESUELTAS: ${resueltas.length}  —  estaban en el baseline y ya no aparecen`);
+      console.log(SEP);
+      console.log('  Buena noticia: estas celdas dejaron de discrepar. Si fue a proposito, conviene');
+      console.log('  regenerar el baseline con --aprobar-baseline para que la reja quede ajustada.');
+      const porGrupo = new Map<string, number>();
+      for (const k of resueltas) {
+        const [banda, , , campo] = k.split('|');
+        const g = `${banda} / ${campo}`;
+        porGrupo.set(g, (porGrupo.get(g) || 0) + 1);
+      }
+      for (const [g, n] of [...porGrupo.entries()].sort()) {
+        console.log(`    ${g.padEnd(40)} ${String(n).padStart(5)}`);
+      }
     }
   }
 
@@ -621,6 +755,8 @@ async function main() {
   console.log(`  Iguales (dentro de ${TOL.toFixed(2)}): ${comparaciones - difs.length}`);
   console.log(`  Esperadas:               ${difs.filter((d) => d.clase === 'ESPERADA').length}`);
   console.log(`  En combinaciones que no se ofrecen: ${noOfrecidas.length}`);
+  console.log(`  Ya falladas por el usuario: ${aceptadas.length}`);
+  if (resueltas.length) console.log(`  Resueltas desde el baseline: ${resueltas.length}`);
   console.log(`  NUEVAS:                  ${nuevas.length}`);
   console.log('');
   for (const banda of BANDAS) {
@@ -631,9 +767,26 @@ async function main() {
   console.log('');
   console.log(
     nuevas.length === 0
-      ? '  Sin diferencias nuevas. Igual NADA se borra hasta que el usuario falle cada caso esperado.'
+      ? '  Sin diferencias nuevas. La reja esta en verde.'
       : '  Hay diferencias nuevas. No se borra ninguna copia hasta explicarlas una por una.'
   );
+
+  // ---------- Aprobar baseline ----------
+  if (APROBAR) {
+    const fallos: Record<string, number> = {};
+    for (const d of nuevas) {
+      fallos[claveDif(d.banda, d.fila.item, d.fila.tallaCodigo, d.campo)] = d.delta;
+    }
+    const contenido: Baseline = {
+      generado: new Date().toISOString(),
+      rulings: RULINGS,
+      fallos,
+    };
+    fs.writeFileSync(BASELINE, JSON.stringify(contenido, null, 2), 'utf8');
+    console.log('');
+    console.log(`  BASELINE APROBADO: ${Object.keys(fallos).length} diferencias escritas en ${BASELINE}.`);
+    console.log('  De aca en adelante estas no bloquean, y cualquier otra sale como NUEVA.');
+  }
 
   // ---------- CSV ----------
   if (CSV) {
