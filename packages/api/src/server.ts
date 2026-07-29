@@ -24,6 +24,7 @@ import exportRoutes from './routes/export';
 import inputRoutes from './routes/inputs';
 import costeoRoutes from './routes/costeo';
 import { asc, eq } from 'drizzle-orm';
+import { costearLote } from './services/calculo/costeoInputs.service';
 
 const app = new Hono();
 
@@ -175,23 +176,60 @@ app.use('/api/*', async (c, next) => {
 });
 
 // API resumen dashboard avanzado con KPIs financieros completos de prendas, precios y costos
+//
+// EL COSTO SALE DEL MOTOR. Antes salia del cache de CAMBRIDGE.xlsx:
+//
+//   const ct = excelData ? (excelData.costoTotal.get(key) || 0) : 0;
+//
+// con key = `${itemNumero}_${tallaCodigo}`. Para una prenda de un colegio que no tiene
+// hoja en ese workbook, esa busqueda devolvia undefined y el costo quedaba en CERO.
+//
+// Lo delator era que el precio y el stock SI aparecian: los dos PUT de la matriz
+// escriben en ese mismo Map, asi que quedaban cargados. La pantalla mostraba
+// "Venta Total Proyectada 8.160" con "Inversion Total 0,00" y una ganancia del 100%.
+//
+// Este era el QUINTO consumidor de la formula de costeo y estaba en server.ts, no en
+// routes/. Todas las auditorias de la Fase 2 buscaron copias en routes/ y midieron TRES
+// bandas nombradas; esta nunca declaro huella y nunca se comparo. La afirmacion "una
+// sola formula" era cierta para lo medido y falsa para lo que no se miro.
 app.get('/api/dashboard-resumen', async (c) => {
   const db = await getDb();
-  const colegioId = c.req.query('colegioId');
+  const colegioIdRaw = c.req.query('colegioId');
+  const colegioId = colegioIdRaw && colegioIdRaw !== 'all' ? colegioIdRaw : undefined;
 
-  const colegio = (await db.select().from(schema.colegios).limit(1))[0];
+  // El encabezado tiene que mostrar el colegio ELEGIDO, no el primero de la tabla.
+  // Con dos colegios, `limit(1)` mostraba siempre el mismo nombre.
+  const colegio = colegioId
+    ? (await db.select().from(schema.colegios).where(eq(schema.colegios.id, colegioId)).limit(1))[0]
+    : (await db.select().from(schema.colegios).limit(1))[0];
+
   const anio = (await db.select().from(schema.aniosEscolares).limit(1))[0];
   const admin = (await db.select().from(schema.usuarios).limit(1))[0];
   const tallas = await db.select().from(schema.tallas).orderBy(asc(schema.tallas.orden));
 
   let prodQuery = db.select().from(schema.productos);
-  if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(schema.productos.colegioId, colegioId));
+  if (colegioId) prodQuery = prodQuery.where(eq(schema.productos.colegioId, colegioId));
   const productos = await prodQuery.orderBy(asc(schema.productos.orden), asc(schema.productos.itemNumero));
 
   const telas = await db.select().from(schema.telas);
   const accesorios = await db.select().from(schema.accesorios);
 
-  const excelData = loadExcelMatrices();
+  // Costeo y precios: del motor, la misma fuente que las matrices.
+  const { filas } = await costearLote(db, { colegioId });
+  const costeo = new Map<string, { costo: number; precio: number }>();
+  for (const f of filas) {
+    costeo.set(`${f.meta.productoId}_${f.meta.tallaId}`, {
+      costo: Number(f.resultado.costoUnitarioNeto) || 0,
+      precio: Number(f.meta.precioVentaBs) || 0,
+    });
+  }
+
+  // Stock: de la tabla, que es su fuente de verdad.
+  const invList = await db.select().from(schema.inventario);
+  const stockPorClave = new Map<string, number>();
+  for (const i of invList) {
+    stockPorClave.set(`${i.productoId}_${i.tallaId}`, Number(i.cantidad) || 0);
+  }
 
   let totalStockUnidades = 0;
   let totalValorCostoBs = 0;
@@ -206,25 +244,32 @@ app.get('/api/dashboard-resumen', async (c) => {
     let maxCosto = 0;
     let minPrecio = Infinity;
     let maxPrecio = 0;
+    const margenes: number[] = [];
 
     tallas.forEach((t: any) => {
-      const key = `${p.itemNumero}_${t.codigo}`;
-      const inv = excelData ? (excelData.inventarioUnidades.get(key) || 0) : 0;
-      const ct = excelData ? (excelData.costoTotal.get(key) || 0) : 0;
-      const pv = excelData ? (excelData.precioVenta.get(key) || 0) : 0;
+      const clave = `${p.id}_${t.id}`;
+      const c2 = costeo.get(clave);
+      if (!c2) return;
+
+      const ct = c2.costo;
+      const pv = c2.precio;
+      const inv = stockPorClave.get(clave) || 0;
 
       if (ct > 0) {
         if (ct < minCosto) minCosto = ct;
         if (ct > maxCosto) maxCosto = ct;
       }
-
       if (pv > 0) {
         if (pv < minPrecio) minPrecio = pv;
         if (pv > maxPrecio) maxPrecio = pv;
+        // El margen sobre venta se promedia solo donde hay precio Y costo: con costo 0
+        // el margen sale 100% y ensucia el promedio sin informar nada.
+        if (ct > 0) margenes.push(((pv - ct) / pv) * 100);
       }
 
       prodStock += inv;
       prodCostoBs += inv * ct;
+      // Sin precio de venta se valoriza al costo, igual que antes.
       prodVentaBs += inv * (pv > 0 ? pv : ct);
     });
 
@@ -232,24 +277,9 @@ app.get('/api/dashboard-resumen', async (c) => {
     totalValorCostoBs += prodCostoBs;
     totalValorVentaBs += prodVentaBs;
 
-    // Calcular el promedio real unitario (%Margen en Venta: (PV - CT)/PV * 100) iterando directamente el mapa de Excel
-    let unitMarginList: number[] = [];
-    if (excelData && excelData.costoTotal && excelData.precioVenta) {
-      excelData.costoTotal.forEach((ct: number, key: string) => {
-        const parts = key.split('_');
-        if (parts[0] === String(p.itemNumero) && ct > 0) {
-          const pv = excelData.precioVenta.get(key) || 0;
-          if (pv > 0) {
-            const marginOnSale = ((pv - ct) / pv) * 100;
-            unitMarginList.push(marginOnSale);
-          }
-        }
-      });
-    }
-
     const gananciaBs = prodVentaBs - prodCostoBs;
-    const margenPct = unitMarginList.length > 0
-      ? (unitMarginList.reduce((a, b) => a + b, 0) / unitMarginList.length)
+    const margenPct = margenes.length > 0
+      ? margenes.reduce((a, b) => a + b, 0) / margenes.length
       : 0;
 
     return {
@@ -265,17 +295,21 @@ app.get('/api/dashboard-resumen', async (c) => {
       valorVentaTotalBs: parseFloat(prodVentaBs.toFixed(2)),
       gananciaEstimadaBs: parseFloat(gananciaBs.toFixed(2)),
       margenPromedioPct: parseFloat(margenPct.toFixed(2)),
+      // Si el motor no pudo costear ninguna talla, la fila lo dice en vez de mostrar 0.
+      sinCosteo: maxCosto === 0,
     };
   });
 
   const gananciaTotalBs = totalValorVentaBs - totalValorCostoBs;
   const margenPromedioGlobalPct = totalValorCostoBs > 0 ? (gananciaTotalBs / totalValorCostoBs) * 100 : 0;
 
+  const sinCosteo = resumenPrendas.filter((p: any) => p.sinCosteo).map((p: any) => p.itemNumero);
+
   return c.json({
     success: true,
-    colegio: colegio?.nombre || 'CAMBRIDGE',
+    colegio: colegio?.nombre || 'Sin colegio',
     anio: anio?.anio || '2026',
-    admin: admin?.email || 'admin@cambridge.edu',
+    admin: admin?.email || '',
     tallasCount: tallas.length,
     productosCount: productos.length,
     variacionesCount: productos.length * tallas.length,
@@ -289,6 +323,12 @@ app.get('/api/dashboard-resumen', async (c) => {
     margenPromedioGlobalPct: parseFloat(margenPromedioGlobalPct.toFixed(2)),
     // Lista de Prendas con Resumen Financiero
     prendas: resumenPrendas,
+    // Huella, como las tres bandas de la reja. Si esta pantalla vuelve a leer del Excel,
+    // este campo lo delata.
+    fuenteCosto: 'motor-de-costeo',
+    avisos: sinCosteo.length > 0
+      ? [`Sin costeo en ninguna talla: item(s) ${sinCosteo.join(', ')}. Revisar tela vinculada, peso de materia prima y mano de obra.`]
+      : [],
   });
 });
 
