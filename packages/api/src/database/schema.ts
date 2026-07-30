@@ -268,6 +268,23 @@ export const preciosVenta = sqliteTable('precio_venta', {
   precioBs: real('precio_bs').notNull(),
   vigenteDesde: text('vigente_desde').default(sql`CURRENT_TIMESTAMP`),
   vigenteHasta: text('vigente_hasta'),
+  /**
+   * Codigo del producto-talla en el sistema POS. Lo escribe el importador.
+   *
+   * VIVE ACA Y NO EN `producto` porque el POS codifica la combinacion prenda+talla, no
+   * la prenda: `001-cc` es el pantalon de varon de Cambridge en UNA talla, y cada talla
+   * trae el suyo. La unica tabla del sistema con esa granularidad y con el precio al
+   * lado es esta.
+   *
+   * Va JUNTO AL PRECIO a proposito, y eso tiene una consecuencia que el importador hace
+   * cumplir: una fila del POS sin precio no puede aportar su codigo, porque no habria
+   * fila donde ponerlo. Por eso el parseo exige "Precio POS" en todas.
+   *
+   * Es NULLABLE: las 297 filas que ya existen no tienen codigo y no lo van a tener
+   * hasta que se importen. Nada del sistema lo lee todavia; es la llave para la proxima
+   * importacion, que va a poder emparejar por codigo en vez de por descripcion.
+   */
+  codigoExterno: text('codigo_externo'),
 });
 
 // ============================================

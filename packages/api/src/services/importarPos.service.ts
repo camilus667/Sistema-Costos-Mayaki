@@ -121,7 +121,7 @@ const ABREVIATURAS: [RegExp, string][] = [
 
 /** Quita acentos y pasa a minusculas, sin tocar la puntuacion util. */
 function sinAcentos(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
 /**

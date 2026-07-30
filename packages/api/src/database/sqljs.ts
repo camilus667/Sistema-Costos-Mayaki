@@ -219,7 +219,10 @@ CREATE TABLE IF NOT EXISTS "precio_venta" (
  "talla_id" text NOT NULL,
  "precio_bs" real NOT NULL,
  "vigente_desde" text DEFAULT CURRENT_TIMESTAMP,
- "vigente_hasta" text
+ "vigente_hasta" text,
+ -- Codigo del producto-talla en el POS. Nullable: las filas que ya existen no lo
+ -- tienen. Ver el comentario del schema para por que vive aca y no en "producto".
+ "codigo_externo" text
 );
 CREATE TABLE IF NOT EXISTS "inventario" (
  "id" text PRIMARY KEY NOT NULL,
@@ -363,6 +366,24 @@ export async function getDb(opciones: OpcionesGetDb = {}) {
   // las tablas se crean con IF NOT EXISTS: en una base ya existente el CREATE no
   // se vuelve a ejecutar y la columna nunca apareceria.
   try { dbInstance.run("ALTER TABLE \"producto\" ADD COLUMN \"modo_costeo\" TEXT DEFAULT 'confeccion';"); } catch (e) {}
+
+  // Codigo del POS en precio_venta. Va como ALTER ademas del CREATE por la misma razon
+  // que modo_costeo: las tablas se crean con IF NOT EXISTS, asi que en una base que ya
+  // existe el CREATE no se vuelve a ejecutar y la columna nunca apareceria. El try vacio
+  // es correcto aca: si la columna ya esta, ALTER tira y no hay nada que hacer.
+  try { dbInstance.run('ALTER TABLE "precio_venta" ADD COLUMN "codigo_externo" TEXT;'); } catch (e) {}
+
+  // Un codigo del POS no puede apuntar a dos producto-talla distintos. El indice es
+  // PARCIAL —solo sobre las filas que tienen codigo— porque las 297 que ya existen lo
+  // tienen en NULL y un unique normal las tomaria como duplicadas entre si.
+  try {
+    dbInstance.run('CREATE UNIQUE INDEX IF NOT EXISTS "idx_precio_venta_codigo_externo" ON "precio_venta" ("codigo_externo") WHERE "codigo_externo" IS NOT NULL;');
+  } catch (e) {
+    // No se silencia: si falla es porque ya hay dos filas con el mismo codigo del POS, y
+    // eso significa que una importacion escribio el mismo codigo en dos lugares. Hay que
+    // resolverlo antes de volver a importar.
+    console.warn('No se pudo crear el indice unico de codigo_externo en precio_venta. Probablemente haya dos filas con el mismo codigo del POS. Revisar antes de importar de nuevo.', e);
+  }
 
   // Tallas activas por colegio. Se crea vacia a proposito: sin fila la talla esta
   // activa, asi que una base existente no cambia de comportamiento.

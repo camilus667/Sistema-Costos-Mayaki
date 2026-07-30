@@ -18,7 +18,7 @@ import {
   colegios,
   tallas
 } from '../database/schema';
-import { saveDbToDisk } from '../database/sqljs';
+import { saveDbToDisk, getDbFilePath } from '../database/sqljs';
 
 const api = new Hono();
 
@@ -211,10 +211,10 @@ api.post('/:id/restaurar', async (c) => {
   let respaldo: string | null = null;
   try {
     const fs = await import('fs');
-    const path = await import('path');
-    const { fileURLToPath } = await import('url');
-    const dir = path.dirname(fileURLToPath(import.meta.url));
-    const rutaDb = path.resolve(dir, '../../sistema_inventario.db');
+    // Igual que en el importador: la ruta sale de getDbFilePath() y no se calcula a mano.
+    // Calcularla ignora SISTEMA_DB_PATH y el respaldo terminaria apuntando a la base real
+    // mientras la restauracion escribe en la copia.
+    const rutaDb = getDbFilePath();
     if (fs.existsSync(rutaDb)) {
       const sello = new Date().toISOString().replace(/[:.]/g, '-');
       respaldo = rutaDb.replace(/\.db$/, '') + `.antes-de-restaurar-${sello}.db`;
