@@ -144,20 +144,21 @@
     <!-- TAB 2: COSTOS DE PRODUCCION -->
     <div id="tab-inputs-excel" class="tab-content">
       <div class="panel">
-        <div
-          style="display: flex; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1.25rem;">
-          <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0; white-space: nowrap;">Costos de
-            Producción</h2>
-          <div class="excel-tabs-bar" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">
-            <button class="excel-tab active" onclick="switchInputConcept('Tela', this)">Tela</button>
-            <button class="excel-tab" onclick="switchInputConcept('PesoMatPrima', this)">PesoMatPrima</button>
-            <button class="excel-tab" onclick="switchInputConcept('Acc', this)">Uso de Accesorios</button>
-            <button class="excel-tab" onclick="switchInputConcept('PreciosAdquisicion', this)">Precios Adquisición (Semiterminados)</button>
-            <button class="excel-tab" onclick="switchInputConcept('ManoDeObra', this)">ManoDeObra</button>
-            <button class="excel-tab" onclick="switchInputConcept('fijosXprenda', this)">fijosXprenda &
-              Indirectos</button>
+        <div class="panel-toolbar">
+          <div class="panel-toolbar-top">
+            <h2 class="panel-toolbar-h2">Costos de Producción</h2>
+            <button class="btn-pdf" onclick="reporteCostosProduccion()" title="Exportar la hoja activa a PDF (una hoja)">PDF</button>
           </div>
-          <button class="btn-pdf" onclick="reporteCostosProduccion()" title="Exportar la hoja activa a PDF (una hoja)">PDF</button>
+          <!-- De paso se van los nombres en camelCase, que eran nombres de HOJA de
+               Excel y no de concepto: PesoMatPrima, ManoDeObra, fijosXprenda. -->
+          <div class="excel-tabs-bar">
+            <button class="excel-tab active" onclick="switchInputConcept('Tela', this)" title="Telas y precio por gramo">Tela</button>
+            <button class="excel-tab" onclick="switchInputConcept('PesoMatPrima', this)" title="Peso de materia prima por talla">Pesos</button>
+            <button class="excel-tab" onclick="switchInputConcept('Acc', this)" title="Uso de accesorios e insumos">Accesorios</button>
+            <button class="excel-tab" onclick="switchInputConcept('PreciosAdquisicion', this)" title="Precios de adquisición · semiterminados">Adquisición</button>
+            <button class="excel-tab" onclick="switchInputConcept('ManoDeObra', this)" title="Mano de obra por prenda y talla">Mano de obra</button>
+            <button class="excel-tab" onclick="switchInputConcept('fijosXprenda', this)" title="Costos fijos por prenda e indirectos">Fijos e indir.</button>
+          </div>
         </div>
 
         <div id="acc-view-selector"
@@ -189,26 +190,31 @@
     <!-- TAB 3: MATRICES CONSOLIDADAS -->
     <div id="tab-matriz-excel" class="tab-content">
       <div class="panel">
-        <div
-          style="display: flex; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1.25rem;">
-          <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0; white-space: nowrap;">Matrices
-            Consolidadas</h2>
-          <div class="excel-tabs-bar" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">
-            <button class="excel-tab active" onclick="switchExcelConcept('costoBruto', this)">COSTO DIRECTO
-              TOTAL</button>
-            <button class="excel-tab" onclick="switchExcelConcept('precioVenta', this)">Precio de Venta al
-              Público</button>
-            <button class="excel-tab" onclick="switchExcelConcept('costoUnitarioNeto', this)">Costo unitario
-              neto</button>
-            <button class="excel-tab" onclick="switchExcelConcept('utilidadConFactura', this)">Utilidad (precio lista)</button>
-            <button class="excel-tab" onclick="switchExcelConcept('margenConFactura', this)">Margen (precio lista)</button>
-            <button class="excel-tab" onclick="switchExcelConcept('utilidadSinFactura', this)">Utilidad (con descuento)</button>
-            <button class="excel-tab" onclick="switchExcelConcept('margenSinFactura', this)">Margen (con descuento)</button>
-            <button class="excel-tab" onclick="switchExcelConcept('inventarioUnidades', this)">INVENTARIO</button>
-            <button class="excel-tab" onclick="switchExcelConcept('costoInventario', this)">Costo Inventario</button>
-            <button class="excel-tab" onclick="switchExcelConcept('precioInventario', this)">Precio Inventario</button>
+        <!-- Barra en DOS filas explicitas. Antes era una sola fila flexible con
+             `flex-wrap`, y el resultado era el peor de los dos mundos: el titulo se
+             iba a una linea propia, las pestañas desbordaban por la derecha —Costo
+             Inventario y Precio Inventario quedaban FUERA del borde, invisibles y
+             solo alcanzables arrastrando— y el boton PDF terminaba en una tercera
+             linea. 136 px de alto para una barra de titulo. -->
+        <div class="panel-toolbar">
+          <div class="panel-toolbar-top">
+            <h2 class="panel-toolbar-h2">Matrices Consolidadas</h2>
+            <button class="btn-pdf" onclick="reporteConsolidada()" title="Exportar la matriz del concepto activo a PDF (una hoja, horizontal)">PDF</button>
           </div>
-          <button class="btn-pdf" onclick="reporteConsolidada()" title="Exportar la matriz del concepto activo a PDF (una hoja, horizontal)">PDF</button>
+          <!-- Rotulos cortos, con el nombre completo en el tooltip. El nombre largo
+               sigue vivo donde hay lugar para leerlo: el titulo del reporte en PDF. -->
+          <div class="excel-tabs-bar">
+            <button class="excel-tab active" onclick="switchExcelConcept('costoBruto', this)" title="Costo directo total">Costo directo</button>
+            <button class="excel-tab" onclick="switchExcelConcept('precioVenta', this)" title="Precio de venta al público">Precio venta</button>
+            <button class="excel-tab" onclick="switchExcelConcept('costoUnitarioNeto', this)" title="Costo unitario neto">Costo neto</button>
+            <button class="excel-tab" onclick="switchExcelConcept('utilidadConFactura', this)" title="Utilidad a precio de lista">Utilidad lista</button>
+            <button class="excel-tab" onclick="switchExcelConcept('margenConFactura', this)" title="Margen a precio de lista">Margen lista</button>
+            <button class="excel-tab" onclick="switchExcelConcept('utilidadSinFactura', this)" title="Utilidad con descuento comercial">Utilidad desc.</button>
+            <button class="excel-tab" onclick="switchExcelConcept('margenSinFactura', this)" title="Margen con descuento comercial">Margen desc.</button>
+            <button class="excel-tab" onclick="switchExcelConcept('inventarioUnidades', this)" title="Inventario en unidades">Inventario</button>
+            <button class="excel-tab" onclick="switchExcelConcept('costoInventario', this)" title="Costo del inventario">Costo inv.</button>
+            <button class="excel-tab" onclick="switchExcelConcept('precioInventario', this)" title="Precio del inventario">Precio inv.</button>
+          </div>
         </div>
 
         <div class="table-container">
