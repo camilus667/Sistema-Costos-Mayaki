@@ -39,9 +39,10 @@
         <option value="actual">🔴 Actual</option>
       </select>
 
-      <label style="font-size: 0.75rem; color: #cbd5e1; cursor: pointer; display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 600; background:#1e293b; padding:0.25rem 0.5rem; height:28px; border-radius:6px; border:1px solid #334155;" title="Activar Modalidad F (Régimen extender)">
-        <input type="checkbox" id="global-modalidad-f-select" onchange="cambiarModalidadFGlobal(this.checked)" style="cursor: pointer; accent-color: #3b82f6;">
-        <span>Modalidad F</span>
+      <!-- Interruptor de escenario de precios, sin rotulo. Desmarcado aplica el
+           descuento comercial configurado; marcado usa el precio de lista. -->
+      <label class="chk-escenario" title="Escenario de precios">
+        <input type="checkbox" id="global-modalidad-f-select" onchange="cambiarModalidadFGlobal(this.checked)">
       </label>
 
       <button class="btn-icon-admin" onclick="switchTab('admin-colegio')" style="height:28px; padding:0 0.5rem; font-size:0.78rem;" title="Configuración de la empresa y colegio">⚙️ Config</button>
@@ -150,6 +151,7 @@
             <button class="excel-tab" onclick="switchInputConcept('fijosXprenda', this)">fijosXprenda &
               Indirectos</button>
           </div>
+          <button class="btn-pdf" onclick="reporteCostosProduccion()" title="Exportar la hoja activa a PDF (una hoja)">PDF</button>
         </div>
 
         <div id="acc-view-selector"
@@ -192,14 +194,10 @@
               Público</button>
             <button class="excel-tab" onclick="switchExcelConcept('costoUnitarioNeto', this)">Costo unitario
               neto</button>
-            <button class="excel-tab" onclick="switchExcelConcept('utilidadConFactura', this)">Utilidad con
-              factura</button>
-            <button class="excel-tab" onclick="switchExcelConcept('margenConFactura', this)">Margen con factura
-              (%)</button>
-            <button class="excel-tab" onclick="switchExcelConcept('utilidadSinFactura', this)">Utilidad sin
-              factura</button>
-            <button class="excel-tab" onclick="switchExcelConcept('margenSinFactura', this)">Margen sin factura
-              (%)</button>
+            <button class="excel-tab" onclick="switchExcelConcept('utilidadConFactura', this)">Utilidad (precio lista)</button>
+            <button class="excel-tab" onclick="switchExcelConcept('margenConFactura', this)">Margen (precio lista)</button>
+            <button class="excel-tab" onclick="switchExcelConcept('utilidadSinFactura', this)">Utilidad (con descuento)</button>
+            <button class="excel-tab" onclick="switchExcelConcept('margenSinFactura', this)">Margen (con descuento)</button>
             <button class="excel-tab" onclick="switchExcelConcept('inventarioUnidades', this)">INVENTARIO</button>
             <button class="excel-tab" onclick="switchExcelConcept('costoInventario', this)">Costo Inventario</button>
             <button class="excel-tab" onclick="switchExcelConcept('precioInventario', this)">Precio Inventario</button>
@@ -232,12 +230,16 @@
     <!-- TAB 4: COSTEO INDIVIDUAL -->
     <div id="tab-costeo-individual" class="tab-content">
       <div class="panel">
+        <div style="display: flex; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 0.5rem; margin-bottom: 1.25rem; gap: 1.25rem;">
+          <h2 style="font-size: 1.35rem; font-weight: 700; color: #f8fafc; margin: 0; white-space: nowrap;">Costeo Individual</h2>
+          <button class="btn-pdf" onclick="reporteCosteoIndividual()" title="Exportar a PDF (una hoja, vertical)">PDF</button>
+        </div>
         <div style="display: flex; gap: 1.25rem; align-items: flex-start; flex-wrap: wrap;">
           
           <!-- Columna Izquierda Independiente: Selector de Prenda y Talla -->
           <div style="width: 280px; flex-shrink: 0; background: #1e293b; border-radius: 12px; border: 1px solid #334155; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
-            <h3 style="font-size: 1.05rem; font-weight: 700; color: #f8fafc; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
-              <span>📌</span> Costeo Individual
+            <h3 style="font-size: 0.95rem; font-weight: 700; color: #94a3b8; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+              <span>📌</span> Selección
             </h3>
             
             <div style="display: flex; flex-direction: column; gap: 0.4rem;">
@@ -254,9 +256,7 @@
               </select>
             </div>
 
-            <div style="display:flex; justify-content:flex-end;">
-              <button class="btn-pdf" onclick="reporteCosteoIndividual()" title="Exportar el costeo de esta prenda a PDF (una hoja, vertical)">PDF</button>
-            </div>
+
           </div>
 
           <!-- Columna Derecha: Contenedor Principal de Desglose -->
@@ -286,12 +286,11 @@
                  check cambiaba de aspecto y no pasaba absolutamente nada: ni aca
                  ni en el resto de las pantallas, y encima quedaba desincronizado
                  del interruptor del header. -->
-            <label style="font-size: 0.8rem; color: #94a3b8; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 500; margin-left: 0.75rem;" title="Venta con factura: precio de lista con IVA por dentro. Sin factura: precio de lista menos el descuento configurado.">
-              <input type="checkbox" id="chk-matriz-regimen-fiscal" onchange="cambiarModalidadFGlobal(this.checked)" style="cursor: pointer; accent-color: #3b82f6;">
-              <span>Modalidad F</span>
+            <label class="chk-escenario" title="Escenario de precios">
+              <input type="checkbox" id="chk-matriz-regimen-fiscal" onchange="cambiarModalidadFGlobal(this.checked)">
             </label>
-            <button class="btn-pdf" onclick="reporteMultitalla()" title="Exportar la matriz multitalla de esta prenda a PDF (una hoja, horizontal)">PDF</button>
           </div>
+          <button class="btn-pdf" onclick="reporteMultitalla()" title="Exportar a PDF (una hoja, horizontal)">PDF</button>
         </div>
 
         <div id="matriz-container" class="table-container" style="display:none; overflow-x: auto;">
@@ -1198,12 +1197,11 @@
 
         const titleEl = document.getElementById('resumen-panel-title');
         if (titleEl) {
+          // Sin rotulo de escenario. El unico indicio es un punto de color, que
+          // distingue los dos estados sin nombrarlos.
           const descPct = typeof data.descuentoSinFacturaPct === 'number' ? data.descuentoSinFacturaPct : 10;
-          const ivaPct = typeof data.tasaIvaPct === 'number' ? data.tasaIvaPct : 13;
-          const etiqueta = modalidadFActual
-            ? `Modo: Con Factura (precio de lista, IVA ${ivaPct.toFixed(0)}% por dentro)`
-            : `Modo: Sin Factura (precio de lista − ${descPct.toFixed(0)}%)`;
-          titleEl.innerHTML = `Resumen Ejecutivo de Prendas, Precios y Valorización <span style="background:${modalidadFActual ? '#064e3b' : '#334155'}; color:${modalidadFActual ? '#34d399' : '#fbbf24'}; padding:0.25rem 0.6rem; border-radius:6px; font-size:0.75rem; margin-left:0.5rem; font-weight:700; border:1px solid ${modalidadFActual ? '#059669' : '#475569'};">${etiqueta}</span>`;
+          titleEl.innerHTML = `Resumen Ejecutivo de Prendas, Precios y Valorización`
+            + `<span class="pt-escenario ${modalidadFActual ? 'pt-on' : ''}" title="${modalidadFActual ? 'Precio de lista' : 'Precio con descuento comercial del ' + descPct.toFixed(0) + '%'}"></span>`;
         }
 
         const tbody = document.getElementById('tb-resumen-prendas');
@@ -1434,8 +1432,8 @@
                 <div style="font-size:0.72rem; color:#94a3b8; text-transform:uppercase; letter-spacing:1px; font-weight:700;">Subtotal antes de impuestos</div>
                 <div style="font-size:2rem; font-weight:900; color:#fbbf24; line-height:1.1;">Bs. ${subtotalAntesImp.toFixed(2)}</div>
                 <div style="font-size:0.78rem; color:#94a3b8; font-weight:600; margin-top:0.35rem;">Costo unitario neto, sin IVA</div>
-                <div style="font-size:0.78rem; color:#34d399; font-weight:700; margin-top:0.35rem;">${typeof ingresoCon === 'number' ? 'Ingreso con factura: <strong>Bs. ' + ingresoCon.toFixed(2) + '</strong>' : 'Sin precio de venta cargado'}</div>
-                <div style="font-size:0.78rem; color:#34d399; font-weight:700;">${typeof ingresoSin === 'number' ? 'Ingreso sin factura: <strong>Bs. ' + ingresoSin.toFixed(2) + '</strong>' : ''}</div>
+                <div style="font-size:0.78rem; color:#34d399; font-weight:700; margin-top:0.35rem;">${typeof ingresoCon === 'number' ? 'Ingreso a precio de lista: <strong>Bs. ' + ingresoCon.toFixed(2) + '</strong>' : 'Sin precio de venta cargado'}</div>
+                <div style="font-size:0.78rem; color:#34d399; font-weight:700;">${typeof ingresoSin === 'number' ? 'Ingreso con descuento: <strong>Bs. ' + ingresoSin.toFixed(2) + '</strong>' : ''}</div>
               </div>
             </div>
 
@@ -2509,18 +2507,16 @@
               // al Publico" y mostraba siempre el de lista, asi que el interruptor
               // no movia el unico numero que el usuario venia a mirar.
               title: showFacturaSection
-                ? 'Precio al Público — Con Factura (precio de lista)'
-                : `Precio al Público — Sin Factura (lista − ${descuentoPct.toFixed(0)}%)`,
+                ? 'Precio al Público'
+                : `Precio al Público (lista − ${descuentoPct.toFixed(0)}% descuento comercial)`,
               color: '#38bdf8',
               bg: 'linear-gradient(90deg, #0369a133, #0f172a)',
               rows: [
                 {
-                  name: showFacturaSection
-                    ? 'Precio de Venta al Público (Bs.)'
-                    : `Precio de Venta Sin Factura (Bs.)`,
+                  name: 'Precio de Venta al Público (Bs.)',
                   desc: showFacturaSection
-                    ? 'Precio de lista de venta al público. Es el precio con factura: el IVA va por dentro.'
-                    : `Precio de lista menos el descuento por venta directa sin factura (${descuentoPct.toFixed(0)}%).`,
+                    ? 'Precio de lista de venta al público. El IVA va por dentro.'
+                    : `Precio de lista menos el descuento comercial configurado (${descuentoPct.toFixed(0)}%).`,
                   key: 'precioVenta', isPrice: true,
                   fmt: v => v ? `<strong style="color:#38bdf8; font-size:0.92rem;">${v.toFixed(2)}</strong>` : '-'
                 },
@@ -2530,23 +2526,23 @@
               ]
             },
             ...(showFacturaSection ? [{
-              title: 'Canal Con Factura (Venta Oficial - Con Débito Fiscal IVA 13%)',
+              title: 'Resultado a Precio de Lista (neto de débito fiscal IVA 13%)',
               color: '#34d399',
               bg: 'linear-gradient(90deg, #064e3b44, #0f172a)',
               rows: [
-                { name: 'Ingreso Neto Con Factura', desc: 'Lo que queda del precio de lista después del débito fiscal IVA (13%). De 100 Bs quedan 87 Bs.', key: 'ingresoNetoConFactura', fmt: v => v ? v.toFixed(2) : '-' },
-                { name: 'Utilidad Con Factura (Bs.)', desc: 'Ingreso neto con factura menos el costo unitario neto.', key: 'utilidadConFactura', fmt: v => v !== null && v !== 0 ? `<strong style="color:#34d399; font-weight:700;">${v.toFixed(2)}</strong>` : '-' },
-                { name: 'Margen Con Factura (%)', desc: 'Utilidad sobre el ingreso efectivamente cobrado (con factura).', key: 'margenConFactura', fmt: v => v !== null && v !== 0 ? `<strong style="color:${getMarginColor(v)}; font-weight:800; font-size:0.9rem;">${v.toFixed(2)}%</strong>` : '-' }
+                { name: 'Ingreso Neto (Bs.)', desc: 'Lo que queda del precio de lista después del débito fiscal IVA (13%). De 100 Bs quedan 87 Bs.', key: 'ingresoNetoConFactura', fmt: v => v ? v.toFixed(2) : '-' },
+                { name: 'Utilidad por Unidad (Bs.)', desc: 'Ingreso neto a precio de lista menos el costo unitario neto.', key: 'utilidadConFactura', fmt: v => v !== null && v !== 0 ? `<strong style="color:#34d399; font-weight:700;">${v.toFixed(2)}</strong>` : '-' },
+                { name: 'Margen (%)', desc: 'Utilidad sobre el ingreso efectivamente cobrado.', key: 'margenConFactura', fmt: v => v !== null && v !== 0 ? `<strong style="color:${getMarginColor(v)}; font-weight:800; font-size:0.9rem;">${v.toFixed(2)}%</strong>` : '-' }
               ]
             }] : []),
             {
-              title: showFacturaSection ? 'Canal Sin Factura (Venta Directa - Con Descuento Configurado)' : 'Resultados de Venta Directa / Margen Efectivo',
+              title: showFacturaSection ? 'Resultado con Descuento Comercial' : 'Resultado Comercial Efectivo',
               color: '#fbbf24',
               bg: 'linear-gradient(90deg, #78350f44, #0f172a)',
               rows: [
-                { name: 'Ingreso Neto Efectivo', desc: 'Precio de lista menos el descuento por venta directa sin factura.', key: 'ingresoNetoSinFactura', fmt: v => v ? v.toFixed(2) : '-' },
-                { name: 'Utilidad Neta (Bs.)', desc: 'Ingreso neto sin factura menos el costo unitario neto.', key: 'utilidadSinFactura', fmt: v => v !== null && v !== 0 ? `<strong style="color:#fbbf24; font-weight:700;">${v.toFixed(2)}</strong>` : '-' },
-                { name: 'Margen de Ganancia (%)', desc: 'Margen de ganancia efectivo para la venta directa sin factura.', key: 'margenSinFactura', fmt: v => v !== null && v !== 0 ? `<strong style="color:${getMarginColor(v)}; font-weight:800; font-size:0.9rem;">${v.toFixed(2)}%</strong>` : '-' }
+                { name: 'Ingreso Neto Efectivo', desc: 'Precio de lista menos el descuento comercial configurado.', key: 'ingresoNetoSinFactura', fmt: v => v ? v.toFixed(2) : '-' },
+                { name: 'Utilidad Neta (Bs.)', desc: 'Ingreso neto efectivo menos el costo unitario neto.', key: 'utilidadSinFactura', fmt: v => v !== null && v !== 0 ? `<strong style="color:#fbbf24; font-weight:700;">${v.toFixed(2)}</strong>` : '-' },
+                { name: 'Margen de Ganancia (%)', desc: 'Margen de ganancia sobre el ingreso efectivamente cobrado.', key: 'margenSinFactura', fmt: v => v !== null && v !== 0 ? `<strong style="color:${getMarginColor(v)}; font-weight:800; font-size:0.9rem;">${v.toFixed(2)}%</strong>` : '-' }
               ]
             }
           ];
@@ -4224,7 +4220,12 @@
       return Object.assign({
         ambito,
         snapshot: snap.replace(/^🔴\s*/, ''),
-        modalidad: modalidadFActual ? 'Con Factura' : 'Sin Factura',
+        // Escenario de precios, en terminos comerciales. El encabezado no lo
+        // rotula; lo que si queda dicho, en el pie y en el subtitulo, es la BASE
+        // de calculo: que el precio lleva un descuento comercial y de cuanto es.
+        // Quitar el rotulo es cosmetico; quitar la base de calculo convertiria un
+        // reporte de financiamiento en un numero sin procedencia.
+        escenario: modalidadFActual ? 'lista' : 'descuento',
         emitido: new Date().toLocaleString('es-BO', {
           day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
         }),
@@ -4234,7 +4235,6 @@
     function encabezadoReporte(titulo, subtitulo, ctx, kpis) {
       const meta = [
         ['Ámbito', ctx.ambito],
-        ['Modalidad', ctx.modalidad],
         ['Escenario', ctx.snapshot],
         ['Emitido', ctx.emitido],
       ].map(([k, v]) => `<div class="rp-meta-item"><span>${esc(k)}</span><strong>${esc(v)}</strong></div>`).join('');
@@ -4367,7 +4367,9 @@
             </tr></tfoot>
           </table>
           ${(d.avisos && d.avisos.length) ? `<div class="rp-avisos"><strong>Observaciones:</strong> ${d.avisos.map(esc).join(' · ')}</div>` : ''}
-          ${pieReporte(ctx.modalidad === 'Sin Factura' ? 'Precios de venta directa, con el descuento sin factura aplicado.' : 'Precios de lista con factura.')}`;
+          ${pieReporte(ctx.escenario === 'descuento'
+            ? `Precios netos de un descuento comercial del ${(Number(d.descuentoSinFacturaPct) || 10).toFixed(0)}%.`
+            : 'Precios de lista.')}`;
 
         emitirReporte('vertical', html);
       } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
@@ -4427,18 +4429,18 @@
               ${fila('Mano de obra directa', x => num(x.costoManoObra))}
               ${fila('Costos indirectos prorrateados', x => num(x.costoIndirecto))}
               ${fila('Costo unitario neto', x => num(x.costoUnitarioNeto), 'rp-total')}
-              ${seccion(conF ? 'Precio al público · Con factura (precio de lista)' : 'Precio al público · Sin factura (lista − ' + descPct.toFixed(0) + '%)')}
-              ${fila(conF ? 'Precio de venta (Bs.)' : 'Precio sin factura (Bs.)', x => num(x.precioVenta), 'rp-precio')}
+              ${seccion(conF ? 'Precio al público (precio de lista)' : 'Precio al público (lista − ' + descPct.toFixed(0) + '% descuento comercial)')}
+              ${fila('Precio de venta (Bs.)', x => num(x.precioVenta), 'rp-precio')}
               ${conF ? '' : fila('Precio de lista (referencia)', x => num(x.precioLista), 'rp-tenue')}
               ${seccion('Resultado por unidad')}
               ${fila('Ingreso neto efectivo', x => num(x.ingresoNetoEfectivo))}
-              ${conF ? fila('Utilidad con factura (Bs.)', x => num(x.utilidadConFactura)) : fila('Utilidad sin factura (Bs.)', x => num(x.utilidadSinFactura))}
-              ${conF ? fila('Margen con factura', x => pct(x.margenConFactura), 'rp-total') : fila('Margen sin factura', x => pct(x.margenSinFactura), 'rp-total')}
+              ${conF ? fila('Utilidad por unidad (Bs.)', x => num(x.utilidadConFactura)) : fila('Utilidad por unidad (Bs.)', x => num(x.utilidadSinFactura))}
+              ${conF ? fila('Margen de ganancia', x => pct(x.margenConFactura), 'rp-total') : fila('Margen de ganancia', x => pct(x.margenSinFactura), 'rp-total')}
               ${seccion('Existencias')}
               ${fila('Se ofrece en esta talla', x => x.seOfrece ? 'Sí' : '—', 'rp-tenue')}
             </tbody>
           </table>
-          ${pieReporte('Las tallas sin precio vigente no se ofrecen y se muestran sin costo prorrateado.')}`;
+          ${pieReporte((conF ? '' : `Precios netos de un descuento comercial del ${descPct.toFixed(0)}%. `) + 'Las tallas sin precio vigente no se ofrecen y se muestran sin costo prorrateado.')}`;
 
         emitirReporte('horizontal', html);
       } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
@@ -4465,7 +4467,7 @@
 
         const kpis = [
           { titulo: 'Costo unitario neto', valor: 'Bs. ' + nBs(p.costoUnitarioNetoBs) },
-          { titulo: conF ? 'Precio con factura' : 'Precio sin factura', valor: 'Bs. ' + nBs(p.precioVentaEfectivoBs) },
+          { titulo: 'Precio de venta', valor: 'Bs. ' + nBs(p.precioVentaEfectivoBs) },
           { titulo: 'Ingreso neto efectivo', valor: 'Bs. ' + nBs(p.ingresoNetoEfectivoBs) },
           { titulo: 'Margen efectivo', valor: (Number(p.margenEfectivoPct) || 0).toFixed(1) + '%', destacado: true },
         ];
@@ -4498,7 +4500,8 @@
           </tr>`).join('');
 
         const html = `
-          ${encabezadoReporte('Costeo Individual · ' + p.descripcion, 'Ítem #' + p.itemNumero + ' · Talla ' + tallaTxt, ctx, kpis)}
+          ${encabezadoReporte('Costeo Individual · ' + p.descripcion,
+            'Ítem #' + p.itemNumero + ' · Talla ' + tallaTxt + (conF ? '' : ' · precios netos de descuento comercial'), ctx, kpis)}
           <div class="rp-dos">
             <section>
               <h2 class="rp-h2">Composición del costo unitario</h2>
@@ -4512,7 +4515,7 @@
               <table class="rp-tabla">
                 <tbody>
                   <tr><td>Precio de lista</td><td class="rp-r">${nBs(p.precioListaBs)}</td></tr>
-                  <tr class="rp-precio"><td>${conF ? 'Precio con factura' : 'Precio sin factura'}</td><td class="rp-r">${nBs(p.precioVentaEfectivoBs)}</td></tr>
+                  <tr class="rp-precio"><td>${conF ? 'Precio de venta' : 'Precio de venta (con descuento)'}</td><td class="rp-r">${nBs(p.precioVentaEfectivoBs)}</td></tr>
                   <tr><td>Ingreso neto efectivo</td><td class="rp-r">${nBs(p.ingresoNetoEfectivoBs)}</td></tr>
                   <tr><td>Costo unitario neto</td><td class="rp-r">−${nBs(p.costoUnitarioNetoBs)}</td></tr>
                   <tr class="rp-total"><td>Utilidad por unidad</td><td class="rp-r rp-pos">${nBs((Number(p.ingresoNetoEfectivoBs) || 0) - (Number(p.costoUnitarioNetoBs) || 0))}</td></tr>
@@ -4520,10 +4523,10 @@
                 </tbody>
               </table>
               <table class="rp-tabla rp-comparativo">
-                <thead><tr><th>Comparativo de canales</th><th class="rp-r">Ingreso</th><th class="rp-r">Margen</th></tr></thead>
+                <thead><tr><th>Comparativo de escenarios</th><th class="rp-r">Ingreso</th><th class="rp-r">Margen</th></tr></thead>
                 <tbody>
-                  <tr><td>Con factura</td><td class="rp-r">${nBs(p.ingresoNetoConFacturaBs)}</td><td class="rp-r">${(Number(p.margenConFacturaPct) || 0).toFixed(2)}%</td></tr>
-                  <tr><td>Sin factura</td><td class="rp-r">${nBs(p.ingresoNetoSinFacturaBs)}</td><td class="rp-r">${(Number(p.margenSinFacturaPct) || 0).toFixed(2)}%</td></tr>
+                  <tr><td>A precio de lista</td><td class="rp-r">${nBs(p.ingresoNetoConFacturaBs)}</td><td class="rp-r">${(Number(p.margenConFacturaPct) || 0).toFixed(2)}%</td></tr>
+                  <tr><td>Con descuento comercial</td><td class="rp-r">${nBs(p.ingresoNetoSinFacturaBs)}</td><td class="rp-r">${(Number(p.margenSinFacturaPct) || 0).toFixed(2)}%</td></tr>
                 </tbody>
               </table>
             </section>
@@ -4631,7 +4634,8 @@
         const html = `
           ${encabezadoReporte(
             'Inventario Real · Costo y Precio de Existencias',
-            'Valorización consolidada por prenda · solo referencias con stock físico mayor a cero',
+            'Valorización consolidada por prenda · solo referencias con stock físico mayor a cero'
+              + (modalidadFActual ? '' : ` · precios netos de descuento comercial del ${(Number(j.descuentoSinFacturaPct) || 10).toFixed(0)}%`),
             ctx, kpis)}
           <table class="rp-tabla rp-densa">
             <thead><tr>
@@ -4658,6 +4662,131 @@
       } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
     }
 
+
+    /* ---------------- REPORTE 6 · COSTOS DE PRODUCCIÓN ---------------- */
+    /**
+     * SE LEE DE LA PANTALLA, y es el unico reporte que lo hace.
+     *
+     * Esta pestaña no tiene UN endpoint: tiene seis conceptos —tela, pesos, uso de
+     * accesorios, precios de adquisicion, mano de obra, fijos e indirectos— que
+     * salen de seis rutas distintas, con seis formas de tabla distintas, y
+     * `fijosXprenda` ni siquiera usa la tabla principal sino un contenedor propio
+     * con dos tablas adentro.
+     *
+     * Reimplementar las seis consultas seria duplicar seis veces una logica de
+     * presentacion que ya existe y ya funciona, y garantizar que el dia que alguien
+     * agregue una columna a la pantalla el reporte quede desactualizado en silencio.
+     * Leer la tabla ya renderizada hace imposible esa deriva: lo que se imprime es,
+     * por construccion, lo que el usuario esta viendo.
+     *
+     * El costo aceptado es que el reporte depende del estado de la pantalla. Por eso
+     * avisa si la hoja todavia no cargo, en vez de emitir una hoja vacia.
+     */
+    const HOJAS_PRODUCCION = {
+      Tela: 'Telas y Precio por Gramo',
+      PesoMatPrima: 'Peso de Materia Prima por Talla',
+      Acc: 'Accesorios e Insumos',
+      PreciosAdquisicion: 'Precios de Adquisición · Semiterminados',
+      ManoDeObra: 'Mano de Obra por Prenda y Talla',
+      fijosXprenda: 'Costos Fijos por Prenda e Indirectos',
+    };
+
+    /** Texto imprimible de una celda: si tiene control de edicion, vale su valor. */
+    function _textoCelda(celda) {
+      const campo = celda.querySelector('input, select, textarea');
+      if (campo) {
+        if (campo.tagName === 'SELECT') {
+          const o = campo.options[campo.selectedIndex];
+          return o ? o.textContent.trim() : '';
+        }
+        return (campo.value || '').trim();
+      }
+      // Los botones de accion no son dato: en papel no se pueden apretar.
+      const copia = celda.cloneNode(true);
+      copia.querySelectorAll('button').forEach((b) => b.remove());
+      return copia.textContent.replace(/\s+/g, ' ').trim();
+    }
+
+    function _tablaAReporte(tabla) {
+      const filaCeldas = (tr, etiqueta) =>
+        [...tr.children].map((c) => {
+          const span = Number(c.getAttribute('colspan') || 1);
+          const alineaDer = /^[\s\-—]*[\d.,()%-]+[\s%]*$/.test(_textoCelda(c)) && _textoCelda(c) !== '';
+          return `<${etiqueta}${span > 1 ? ` colspan="${span}"` : ''} class="${alineaDer ? 'rp-r' : ''}">${esc(_textoCelda(c))}</${etiqueta}>`;
+        }).join('');
+
+      const cab = [...tabla.querySelectorAll('thead tr')]
+        .map((tr) => `<tr>${filaCeldas(tr, 'th')}</tr>`).join('');
+      const cuerpo = [...tabla.querySelectorAll('tbody tr')]
+        .filter((tr) => tr.offsetParent !== null || tr.getClientRects().length > 0)
+        .map((tr) => `<tr>${filaCeldas(tr, 'td')}</tr>`).join('');
+      const pie = [...tabla.querySelectorAll('tfoot tr')]
+        .map((tr) => `<tr>${filaCeldas(tr, 'td')}</tr>`).join('');
+
+      const cols = Math.max(
+        0,
+        ...[...tabla.querySelectorAll('tr')].map((tr) =>
+          [...tr.children].reduce((n, c) => n + Number(c.getAttribute('colspan') || 1), 0))
+      );
+      const filas = tabla.querySelectorAll('tbody tr').length;
+
+      return {
+        cols,
+        filas,
+        html: `<table class="rp-tabla rp-densa">
+          ${cab ? `<thead>${cab}</thead>` : ''}
+          <tbody>${cuerpo}</tbody>
+          ${pie ? `<tfoot>${pie}</tfoot>` : ''}
+        </table>`,
+      };
+    }
+
+    function reporteCostosProduccion() {
+      try {
+        const tab = document.getElementById('tab-inputs-excel');
+        if (!tab) return _sinDatos('Costos de Producción');
+
+        // Solo lo que esta a la vista: en fijosXprenda la tabla principal se oculta
+        // y el contenido vive en otro contenedor.
+        const tablas = [...tab.querySelectorAll('table')].filter((t) => {
+          const r = t.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && t.querySelectorAll('tbody tr').length > 0;
+        });
+        if (!tablas.length) {
+          return alert('La hoja todavía no terminó de cargar.\n\nEsperá a que aparezcan los datos y volvé a intentar.');
+        }
+
+        const partes = tablas.map(_tablaAReporte).filter((p) => p.filas > 0);
+        if (!partes.length) return _sinDatos('Costos de Producción');
+
+        const maxCols = Math.max(...partes.map((p) => p.cols));
+        const totalFilas = partes.reduce((s, p) => s + p.filas, 0);
+        // Mas de ocho columnas no entran comodas en vertical. La matriz de pesos por
+        // talla tiene diecisiete.
+        const orientacion = maxCols > 8 ? 'horizontal' : 'vertical';
+
+        const ctx = contextoReporte();
+        const nombreHoja = HOJAS_PRODUCCION[currentInputConcept] || currentInputConcept;
+        const sub = currentInputConcept === 'Acc'
+          ? (currentAccSubView === 'aux' ? 'Tabla auxiliar de costos' : 'Matriz de uso por prenda')
+          : null;
+
+        const kpis = [
+          { titulo: 'Hoja', valor: nombreHoja },
+          { titulo: 'Registros', valor: nInt(totalFilas) },
+          { titulo: 'Columnas', valor: nInt(maxCols) },
+        ];
+
+        const html = `
+          ${encabezadoReporte('Costos de Producción · ' + nombreHoja,
+            sub || 'Insumos y parámetros que alimentan el motor de costeo', ctx, kpis)}
+          ${partes.map((p) => p.html).join('')}
+          ${pieReporte('Datos de entrada del motor de costeo.')}`;
+
+        emitirReporte(orientacion, html);
+      } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
+    }
+
     /* ---------------- REPORTE 5 · MATRICES CONSOLIDADAS (horizontal) ---------------- */
     /**
      * Cubre los DIEZ conceptos de la pestaña con un solo reporte, incluidos Costo
@@ -4669,10 +4798,10 @@
       costoBruto:         { t: 'Costo Directo Total',            money: true },
       precioVenta:        { t: 'Precio de Venta al Público',     money: true },
       costoUnitarioNeto:  { t: 'Costo Unitario Neto',            money: true },
-      utilidadConFactura: { t: 'Utilidad con Factura',           money: true },
-      margenConFactura:   { t: 'Margen con Factura',             money: false, pct: true },
-      utilidadSinFactura: { t: 'Utilidad sin Factura',           money: true },
-      margenSinFactura:   { t: 'Margen sin Factura',             money: false, pct: true },
+      utilidadConFactura: { t: 'Utilidad a Precio de Lista',     money: true },
+      margenConFactura:   { t: 'Margen a Precio de Lista',       money: false, pct: true },
+      utilidadSinFactura: { t: 'Utilidad con Descuento',         money: true },
+      margenSinFactura:   { t: 'Margen con Descuento',           money: false, pct: true },
       inventarioUnidades: { t: 'Inventario en Unidades',         money: false, entero: true },
       costoInventario:    { t: 'Costo del Inventario',           money: true },
       precioInventario:   { t: 'Precio del Inventario',          money: true },
