@@ -119,6 +119,17 @@ CREATE TABLE IF NOT EXISTS "talla" (
  "orden" integer NOT NULL,
  "activo" integer DEFAULT true NOT NULL
 );
+-- Que tallas ofrece cada colegio. SIN FILA = ACTIVA, para que una base existente
+-- no cambie de comportamiento el dia que aparece la tabla. El unico por par impide
+-- dos verdades sobre la misma combinacion.
+CREATE TABLE IF NOT EXISTS "colegio_talla" (
+ "id" text PRIMARY KEY NOT NULL,
+ "colegio_id" text NOT NULL,
+ "talla_id" text NOT NULL,
+ "activo" integer DEFAULT true NOT NULL,
+ "orden" integer
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "colegio_talla_unico" ON "colegio_talla" ("colegio_id", "talla_id");
 CREATE TABLE IF NOT EXISTS "producto" (
  "id" text PRIMARY KEY NOT NULL,
  "colegio_id" text NOT NULL,
@@ -352,6 +363,19 @@ export async function getDb(opciones: OpcionesGetDb = {}) {
   // las tablas se crean con IF NOT EXISTS: en una base ya existente el CREATE no
   // se vuelve a ejecutar y la columna nunca apareceria.
   try { dbInstance.run("ALTER TABLE \"producto\" ADD COLUMN \"modo_costeo\" TEXT DEFAULT 'confeccion';"); } catch (e) {}
+
+  // Tallas activas por colegio. Se crea vacia a proposito: sin fila la talla esta
+  // activa, asi que una base existente no cambia de comportamiento.
+  try {
+    dbInstance.run(`CREATE TABLE IF NOT EXISTS "colegio_talla" (
+      "id" text PRIMARY KEY NOT NULL,
+      "colegio_id" text NOT NULL,
+      "talla_id" text NOT NULL,
+      "activo" integer DEFAULT true NOT NULL,
+      "orden" integer
+    );`);
+    dbInstance.run('CREATE UNIQUE INDEX IF NOT EXISTS "colegio_talla_unico" ON "colegio_talla" ("colegio_id", "talla_id");');
+  } catch (e) {}
 
   // Integridad de la asignacion de accesorios a prendas (detalle_acc).
   // Las tablas se crean con "CREATE TABLE IF NOT EXISTS", asi que agregar la

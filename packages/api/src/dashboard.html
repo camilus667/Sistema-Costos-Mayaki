@@ -763,6 +763,16 @@
 
           <!-- SUBTAB 3: TALLAS HABILITADAS -->
           <div id="admin-sec-tallas" style="display:none;">
+            <!-- El alcance se DICE. Hasta ahora esta pantalla escribia un flag global
+                 aunque estuviera dentro de la configuracion de un colegio: apagar una
+                 talla aca la apagaba en todos. Ahora es por colegio de verdad, y el
+                 usuario tiene que poder saber cual esta editando sin adivinarlo. -->
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:0.75rem;">
+              <div style="font-size:0.78rem; color:#94a3b8;">
+                Tallas que ofrece <strong id="tallas-ambito-nombre" style="color:#cbd5e1;">este colegio</strong>.
+                Apagar una talla aquí no la apaga en los demás colegios.
+              </div>
+            </div>
             <div style="display:flex; justify-content:flex-end; margin-bottom:0.75rem;">
               <button class="btn"
                 style="background:#38bdf8; color:#0f172a; font-weight:800; font-size:0.78rem; padding:0.45rem 0.95rem;"
@@ -2808,6 +2818,12 @@
      * y no se ejecutaba nunca, y por eso la pantalla se quedaba cargando.
      */
     async function cargarConfigAdminColegio() {
+      // El nombre del colegio que se esta editando, en la pantalla de tallas. Sale de
+      // `nombreAmbito()`, que deriva de la variable de estado y no del DOM: es la
+      // misma fuente de verdad que usan los reportes.
+      const rotuloTallas = document.getElementById('tallas-ambito-nombre');
+      if (rotuloTallas) rotuloTallas.textContent = nombreAmbito();
+
       // Lo de la empresa, siempre. No necesita colegio y no debe esperarlo.
       await cargarCatalogoEmpresa();
       cargarInsumosAdmin();

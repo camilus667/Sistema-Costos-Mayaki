@@ -100,6 +100,43 @@ export const tallas = sqliteTable('talla', {
 });
 
 // ============================================
+// TALLAS ACTIVAS POR COLEGIO
+// ============================================
+/**
+ * Que tallas ofrece CADA colegio.
+ *
+ * POR QUE HACE FALTA UNA TABLA Y NO ALCANZA UN FLAG. `talla.activo` es un booleano
+ * en la fila de la talla, y las tallas del sistema tienen `colegio_id` nulo: son
+ * COMPARTIDAS. Un flag en una fila compartida no puede decir "activa en Cambridge y
+ * apagada en Saint Jude"; solo puede decir "activa" o "apagada" para todos.
+ *
+ * Y el sistema ya ofrecia ese control como si existiera:
+ *
+ *   PUT /api/colegios/:id/tallas-config
+ *      -> db.update(tallas).set({ activo }).where(eq(tallas.id, t.id))
+ *
+ * El handler recibe el colegio en la ruta y NO LO USA. Apagar una talla "en
+ * Cambridge" la apagaba en los dos colegios. Es la misma clase de defecto que el
+ * proyecto ya documento en export.ts: un endpoint que acepta un filtro y lo ignora
+ * es peor que uno que no lo acepta, porque el usuario cree que acoto y no acoto.
+ *
+ * REGLA DE COMPATIBILIDAD: SIN FILA = ACTIVA. Es deliberado y es lo que hace que
+ * este cambio no mueva ningun costo el dia que se aplica. Una base existente no
+ * tiene ninguna fila aca, asi que todos los colegios siguen viendo todas las tallas
+ * exactamente como antes. La tabla solo habla cuando alguien decide apagar algo.
+ *
+ * El `orden` es opcional y por colegio: dos colegios pueden querer su curva en otra
+ * secuencia. Si es nulo, manda el `orden` global de la talla.
+ */
+export const colegioTallas = sqliteTable('colegio_talla', {
+  id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
+  colegioId: text('colegio_id').notNull().references(() => colegios.id),
+  tallaId: text('talla_id').notNull().references(() => tallas.id),
+  activo: integer('activo', { mode: 'boolean' }).default(true).notNull(),
+  orden: integer('orden'),
+});
+
+// ============================================
 // PESO MATERIA PRIMA
 // ============================================
 export const pesoMateriaPrima = sqliteTable('peso_mat_prima', {

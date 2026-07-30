@@ -236,10 +236,39 @@ api.get('/matriz-consolidada', async (c) => {
     const invMap = new Map<string, number>();
     invList.forEach((i: any) => invMap.set(`${i.productoId}_${i.tallaId}`, i.cantidad));
 
-    // PRESERVADO A PROPOSITO: la lista de tallas se trae global, sin filtro de
-    // colegio, igual que antes. Es la cabecera de columnas de la grilla, y
-    // filtrarla cambiaria la forma de la tabla. Corresponde a la Fase 6.
-    const allTallas = await db.select().from(tallas).orderBy(asc(tallas.orden));
+    // LA CABECERA RESPETA LAS TALLAS ACTIVAS DE CADA COLEGIO.
+    //
+    // Antes esta lista se traia global, con una nota que decia que filtrarla
+    // "cambiaria la forma de la tabla" y quedaba para mas adelante. Ese mas adelante
+    // es ahora: con la configuracion por colegio, una columna de una talla apagada no
+    // es solo ruido visual — es una columna que la pantalla ofrece para editar precio
+    // y stock de una combinacion que ese colegio decidio no ofrecer.
+    //
+    // Con el ambito en un colegio, se usa su juego. Con el ambito en la empresa, la
+    // UNION de los juegos de los colegios presentes: una talla que algun colegio
+    // ofrece tiene que poder verse en la vista consolidada.
+    //
+    // Si el motor no devolvio ningun juego —base sin prendas— se cae a la lista
+    // global, que es el comportamiento anterior y evita una grilla sin columnas.
+    // LA UNION SE TOMA SOLO DE LOS COLEGIOS DEL AMBITO, no de todo el mapa.
+    //
+    // `ctx.tallasPorColegio` tiene una entrada por cada colegio que tenga prendas O
+    // configuracion de tallas, para que se pueda consultar el juego de un colegio sin
+    // prendas todavia. Unir sobre TODAS sus entradas filtraba mal: con el ambito en
+    // Internacional SM, la cabecera igual mostraba la talla 03 porque Cambridge la
+    // tiene activa. Medido: los tres ambitos devolvian 17 tallas cuando Internacional
+    // SM ofrece 16.
+    const colegiosEnAmbito = new Set(
+      ctx.productos.map((p: any) => String(p.colegioId)).filter((x: string) => x && x !== 'null')
+    );
+    const idsActivos = new Set<string>();
+    for (const cid of colegiosEnAmbito) {
+      for (const t of (ctx.tallasPorColegio.get(cid) || [])) idsActivos.add(String(t.id));
+    }
+    const tallasGlobales = await db.select().from(tallas).orderBy(asc(tallas.orden));
+    const allTallas = idsActivos.size > 0
+      ? tallasGlobales.filter((t: any) => idsActivos.has(String(t.id)))
+      : tallasGlobales;
 
     const porProducto = new Map<string, any[]>();
     for (const f of filas) {
