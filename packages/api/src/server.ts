@@ -207,9 +207,20 @@ app.get('/api/dashboard-resumen', async (c) => {
 
   // El encabezado tiene que mostrar el colegio ELEGIDO, no el primero de la tabla.
   // Con dos colegios, `limit(1)` mostraba siempre el mismo nombre.
+  //
+  // Y SIN COLEGIO NO HAY COLEGIO QUE DEVOLVER. El `else` de esta expresion seguia
+  // haciendo `limit(1)` cuando el ambito era TODA LA EMPRESA, asi que la respuesta
+  // afirmaba "Col. Cambridge" sobre un conjunto de datos que abarca los dos
+  // colegios. La pantalla no lo mostraba y el defecto quedo invisible hasta que el
+  // reporte en PDF empezo a imprimir ese campo como subtitulo: una hoja que se
+  // entrega, con las cifras de toda la empresa y el nombre de un solo colegio.
+  //
+  // Devolver null es la respuesta honesta. `ambito` da el rotulo ya resuelto para
+  // quien solo quiera mostrarlo.
   const colegio = colegioId
     ? (await db.select().from(schema.colegios).where(eq(schema.colegios.id, colegioId)).limit(1))[0]
-    : (await db.select().from(schema.colegios).limit(1))[0];
+    : undefined;
+  const totalColegios = (await db.select().from(schema.colegios)).length;
 
   const anio = (await db.select().from(schema.aniosEscolares).limit(1))[0];
   const admin = (await db.select().from(schema.usuarios).limit(1))[0];
@@ -358,7 +369,9 @@ app.get('/api/dashboard-resumen', async (c) => {
 
   return c.json({
     success: true,
-    colegio: colegio?.nombre || 'Sin colegio',
+    colegio: colegio?.nombre ?? null,
+    ambito: colegio?.nombre ?? 'Toda la empresa',
+    colegiosIncluidos: colegioId ? 1 : totalColegios,
     anio: anio?.anio || '2026',
     admin: admin?.email || '',
     tallasCount: tallas.length,

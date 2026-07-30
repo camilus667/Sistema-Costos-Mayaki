@@ -35,8 +35,12 @@
         <option value="all">TODA LA EMPRESA</option>
       </select>
 
-      <select id="global-snapshot-select" class="colegio-selector" style="font-size:0.75rem; padding:0.25rem 0.5rem; height:28px; background:#1e293b; border:1px solid #f59e0b55; color:#fbbf24; font-weight:600; border-radius:6px; max-width:140px;" onchange="cambiarSnapshotGlobal(this.value)" title="Simulación por Instantánea">
-        <option value="actual">🔴 Actual</option>
+      <!-- Sin `max-width`. El recorte que dejaba "Datos Ac" no era del texto sino de
+           la caja: 140 px no alcanzan para la etiqueta mas el espacio que el navegador
+           reserva para la flecha, asi que el nombre se cortaba contra ella. Ahora la
+           etiqueta es corta y la caja crece con su contenido. -->
+      <select id="global-snapshot-select" class="colegio-selector" style="font-size:0.75rem; padding:0.25rem 1.6rem 0.25rem 0.6rem; height:28px; background:#1e293b; border:1px solid #f59e0b55; color:#fbbf24; font-weight:600; border-radius:6px;" onchange="cambiarSnapshotGlobal(this.value)" title="Escenario de datos">
+        <option value="actual">Vigente</option>
       </select>
 
       <!-- Interruptor de escenario de precios, sin rotulo. Desmarcado aplica el
@@ -53,8 +57,8 @@
   </header>
 
   <div id="banner-modo-simulacion" style="display:none; background:linear-gradient(90deg, #78350f, #92400e); color:#fef3c7; padding:0.6rem 1.25rem; font-size:0.85rem; font-weight:700; text-align:center; border-bottom:1px solid #f59e0b; box-shadow:0 2px 8px rgba(0,0,0,0.3);">
-    📸 MODO SIMULACIÓN HISTÓRICA: Mostrando todo el sistema costeado con la instantánea <span id="banner-snap-nombre" style="text-decoration:underline;"></span>.
-    <button onclick="cambiarSnapshotGlobal('actual')" style="margin-left:1rem; background:#f59e0b; color:#0f172a; border:none; padding:0.25rem 0.65rem; border-radius:4px; font-weight:800; cursor:pointer; font-size:0.75rem;">Volver a Datos en Vivo (Actual)</button>
+    📸 ESCENARIO HISTÓRICO: el sistema completo está costeado con la instantánea <span id="banner-snap-nombre" style="text-decoration:underline;"></span>.
+    <button onclick="cambiarSnapshotGlobal('actual')" style="margin-left:1rem; background:#f59e0b; color:#0f172a; border:none; padding:0.25rem 0.65rem; border-radius:4px; font-weight:800; cursor:pointer; font-size:0.75rem;">Volver al escenario vigente</button>
   </div>
 
   <nav class="tabs">
@@ -74,15 +78,17 @@
 
       <!-- FILA DE KPIS EJECUTIVOS FINANCIEROS -->
       <div class="grid-stats">
-        <div class="stat-card">
-          <span class="stat-title">PRENDAS EN CATÁLOGO</span>
-          <span class="stat-value" id="st-prendas-kpi">-</span>
-          <span class="stat-subtext" id="st-variaciones-sub">- variaciones por talla</span>
-        </div>
         <div class="stat-card stat-card-info">
           <span class="stat-title">STOCK FÍSICO DISPONIBLE</span>
           <span class="stat-value" id="st-stock-kpi">-</span>
           <span class="stat-subtext">prendas disponibles en almacén</span>
+        </div>
+        <!-- La cifra grande pasa a ser la de variaciones por talla, que es el tamaño
+             real del catalogo costeado; el conteo de prendas queda de apoyo. -->
+        <div class="stat-card">
+          <span class="stat-title">VARIACIONES POR TALLA</span>
+          <span class="stat-value" id="st-variaciones-kpi">-</span>
+          <span class="stat-subtext" id="st-prendas-sub">- prendas en catálogo</span>
         </div>
         <div class="stat-card stat-card-warning">
           <span class="stat-title">INVERSIÓN TOTAL EN PRODUCCIÓN</span>
@@ -117,7 +123,7 @@
               <tr>
                 <th>Item #</th>
                 <th>Descripción del Uniforme</th>
-                <th>Stock Total (u)</th>
+                <th>Stock Total (Unid.)</th>
                 <th>Rango Costo Prod. (Bs.)</th>
                 <th>Rango Precio Venta (Bs.)</th>
                 <th>Valor Inv. Costo (Bs.)</th>
@@ -882,12 +888,40 @@
     let snapshotFiltroActual = 'actual';
     let modalidadFActual = false;
     let snapshotsGuardadosCache = [];
+    let colegiosCache = [];
     let rawConsolidadaData = null;
     let currentExcelConcept = 'costoBruto';
     let currentInputConcept = 'Tela';
     let currentAccSubView = 'aux';
     let _desgloseCache = null;
     let _desgloseCacheColegioId = null;
+
+    /**
+     * Nombre del ambito ACTUAL, derivado de `colegioFiltroActual`.
+     *
+     * SALE DE LA VARIABLE, NO DEL SELECT. Los reportes leian el texto de la opcion
+     * seleccionada en el DOM, y eso da el rotulo equivocado en cuanto el select y la
+     * variable se separan —que es exactamente lo que pasaba al cambiar de ambito por
+     * codigo—. Peor: el Resumen General no usaba ni una ni otra, usaba el campo
+     * `colegio` que devuelve el backend, y ese campo traia el PRIMER colegio de la
+     * tabla cuando el ambito era toda la empresa. O sea que un reporte de los dos
+     * colegios se titulaba con el nombre de uno solo.
+     *
+     * Un rotulo de ambito equivocado es de los peores errores posibles en una hoja
+     * que se entrega: las cifras son correctas y describen otra cosa.
+     */
+    function nombreAmbito() {
+      const id = String(colegioFiltroActual || 'all');
+      if (id === 'all') return 'Toda la empresa';
+      const c = colegiosCache.find(x => String(x.id) === id);
+      if (c) return c.nombre;
+      const sel = document.getElementById('global-colegio-select');
+      if (sel) {
+        const o = [...sel.options].find(x => x.value === id);
+        if (o) return o.textContent.trim();
+      }
+      return 'Ámbito ' + id;
+    }
 
     function getSnapshotQueryParam() {
       return (snapshotFiltroActual && snapshotFiltroActual !== 'actual') ? ('&snapshotId=' + snapshotFiltroActual) : '';
@@ -970,6 +1004,14 @@
     function cambiarColegioGlobal(val) {
       colegioFiltroActual = val;
       _desgloseCache = null; // invalida caché al cambiar colegio
+
+      // Se sincroniza el selector, igual que hacen cambiarSnapshotGlobal y
+      // cambiarModalidadFGlobal. Cuando la funcion se llama desde el propio select
+      // esto no cambia nada; cuando se la llama desde codigo, evita que la pantalla
+      // muestre un ambito y calcule con otro. Es la misma desincronizacion que tenia
+      // el checkbox de Multitalla.
+      const selAmbito = document.getElementById('global-colegio-select');
+      if (selAmbito && selAmbito.value !== String(val)) selAmbito.value = String(val);
       cargarResumen();
       cargarInventario();
       cargarMatrizConsolidada();
@@ -1174,9 +1216,9 @@
         const res = await fetch('/api/dashboard-resumen?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam());
         const data = await res.json();
 
-        document.getElementById('st-prendas-kpi').textContent = data.productosCount || 0;
-        document.getElementById('st-variaciones-sub').textContent = `${data.variacionesCount || 0} variaciones por talla`;
-        document.getElementById('st-stock-kpi').textContent = fmtNum(data.totalStockUnidades) + ' u';
+        document.getElementById('st-variaciones-kpi').textContent = fmtNum(data.variacionesCount || 0);
+        document.getElementById('st-prendas-sub').textContent = `${data.productosCount || 0} prendas en catálogo`;
+        document.getElementById('st-stock-kpi').textContent = fmtNum(data.totalStockUnidades) + ' Unid.';
         document.getElementById('st-costo-inv-kpi').textContent = fmtMoney(data.totalValorCostoBs);
         document.getElementById('st-venta-inv-kpi').textContent = fmtMoney(data.totalValorVentaBs);
         document.getElementById('st-ganancia-kpi').textContent = fmtMoney(data.gananciaTotalBs);
@@ -1210,7 +1252,7 @@
             <tr>
               <td><span class="col-item">${p.itemNumero}</span></td>
               <td><strong>${p.descripcion}</strong></td>
-              <td><strong style="color:var(--primary);">${fmtNum(p.stockTotal)} u</strong></td>
+              <td><strong style="color:var(--primary);">${fmtNum(p.stockTotal)} Unid.</strong></td>
               <td>Bs. ${p.costoMin.toFixed(2)} - ${p.costoMax.toFixed(2)}</td>
               <td><strong style="color:#38bdf8;">Bs. ${p.precioMin.toFixed(2)} - ${p.precioMax.toFixed(2)}</strong></td>
               <td>${fmtMoney(p.valorCostoTotalBs)}</td>
@@ -2591,7 +2633,7 @@
               <td><span class="col-item">${i.itemNumero || '-'}</span></td>
               <td><strong>${i.producto || '-'}</strong></td>
               <td>Talla ${i.talla || '-'}</td>
-              <td><strong style="color:var(--primary);">${fmtNum(i.cantidad)} unidades</strong></td>
+              <td><strong style="color:var(--primary);">${fmtNum(i.cantidad)} Unid.</strong></td>
               <td>Bs. ${(i.costoUnitario || 0).toFixed(2)}</td>
               <td><strong style="color:var(--success);">Bs. ${(i.precioVenta || 0).toFixed(2)}</strong></td>
               <td><strong>${fmtMoney(i.valorTotalStock)}</strong></td>
@@ -3724,6 +3766,7 @@
      * "Colegio Col. Cambridge", porque el nombre ya lo traia.
      */
     function construirSelectorAmbito(lista) {
+      colegiosCache = Array.isArray(lista) ? lista : [];
       const select = document.getElementById('global-colegio-select');
       if (!select) return;
 
@@ -3978,7 +4021,7 @@
         if (json.success && json.data) {
           snapshotsGuardadosCache = json.data;
 
-          const optsHeader = '<option value="actual">🔴 Datos Actuales (En Vivo)</option>' +
+          const optsHeader = '<option value="actual">Vigente</option>' +
             json.data.map(s => `<option value="${s.id}">📸 ${s.nombre} (${new Date(s.creadoEn).toLocaleDateString('es-BO')})</option>`).join('');
 
           const selectHeader = document.getElementById('global-snapshot-select');
@@ -4207,10 +4250,7 @@
 
     /** Contexto que encabeza TODO reporte: sin esto una hoja suelta no dice de que es. */
     function contextoReporte(extra) {
-      const selColegio = document.getElementById('global-colegio-select');
-      const ambito = selColegio && selColegio.selectedIndex >= 0
-        ? selColegio.options[selColegio.selectedIndex].textContent.trim()
-        : 'Toda la empresa';
+      const ambito = nombreAmbito();
 
       const selSnap = document.getElementById('global-snapshot-select');
       const snap = selSnap && selSnap.selectedIndex >= 0
@@ -4219,7 +4259,7 @@
 
       return Object.assign({
         ambito,
-        snapshot: snap.replace(/^🔴\s*/, ''),
+        snapshot: snap,
         // Escenario de precios, en terminos comerciales. El encabezado no lo
         // rotula; lo que si queda dicho, en el pie y en el subtitulo, es la BASE
         // de calculo: que el precio lleva un descuento comercial y de cuanto es.
@@ -4246,6 +4286,11 @@
           ${k.sub ? `<span class="rp-kpi-s">${esc(k.sub)}</span>` : ''}
         </div>`).join('');
 
+      // El escenario de precios queda a la vista tambien en la hoja impresa: un
+      // cuadrito lleno o vacio en el extremo del encabezado. Sin leyenda, igual que
+      // en pantalla.
+      const chk = `<span class="rp-chk ${ctx.escenario === 'lista' ? 'rp-chk-on' : ''}"></span>`;
+
       return `
         <div class="rp-head">
           <div class="rp-head-top">
@@ -4255,6 +4300,7 @@
               ${subtitulo ? `<div class="rp-sub">${esc(subtitulo)}</div>` : ''}
             </div>
             <div class="rp-meta">${meta}</div>
+            <div class="rp-meta-chk">${chk}</div>
           </div>
           ${tiras ? `<div class="rp-kpis">${tiras}</div>` : ''}
         </div>`;
@@ -4322,12 +4368,12 @@
         const d = await res.json();
         if (!d || !d.prendas || !d.prendas.length) return _sinDatos('Resumen General');
 
-        const ctx = contextoReporte({ ambito: d.colegio || 'Toda la empresa' });
+        const ctx = contextoReporte();
         const conIva = Number(d.ivaDebitoTotalBs) > 0.005;
 
         const kpis = [
-          { titulo: 'Prendas del catálogo', valor: nInt(d.productosCount), sub: nInt(d.variacionesCount) + ' variaciones por talla' },
-          { titulo: 'Stock físico', valor: nInt(d.totalStockUnidades) + ' u' },
+          { titulo: 'Stock físico', valor: nInt(d.totalStockUnidades) + ' Unid.' },
+          { titulo: 'Variaciones por talla', valor: nInt(d.variacionesCount), sub: nInt(d.productosCount) + ' prendas en catálogo' },
           { titulo: 'Inversión en producción', valor: 'Bs. ' + nBs(d.totalValorCostoBs) },
           { titulo: 'Venta proyectada', valor: 'Bs. ' + nBs(d.totalValorVentaBs), sub: conIva ? 'neto de IVA: Bs. ' + nBs(d.totalIngresoNetoBs) : null },
           { titulo: 'Ganancia bruta proyectada', valor: 'Bs. ' + nBs(d.gananciaTotalBs), sub: '+' + (Number(d.margenPromedioGlobalPct) || 0).toFixed(1) + '% sobre la inversión', destacado: true },
@@ -4347,7 +4393,7 @@
           </tr>`).join('');
 
         const html = `
-          ${encabezadoReporte('Resumen Ejecutivo de Costeo y Valorización', `${esc(d.colegio || '')} · Gestión ${esc(d.anio || '')}`, ctx, kpis)}
+          ${encabezadoReporte('Resumen Ejecutivo de Costeo y Valorización', `${esc(ctx.ambito)} · Gestión ${esc(d.anio || '')}`, ctx, kpis)}
           <table class="rp-tabla">
             <thead><tr>
               <th class="rp-c">Ítem</th><th>Detalle del uniforme</th><th class="rp-r">Stock</th>
@@ -4601,7 +4647,7 @@
 
         const kpis = [
           { titulo: 'Prendas con stock', valor: nInt(grupos.length), sub: nInt(filas.length) + ' referencias por talla' },
-          { titulo: 'Unidades en existencia', valor: nInt(totUnid) + ' u' },
+          { titulo: 'Unidades en existencia', valor: nInt(totUnid) + ' Unid.' },
           { titulo: 'Costo del inventario', valor: 'Bs. ' + nBs(totCosto) },
           { titulo: 'Precio del inventario', valor: 'Bs. ' + nBs(totPrecio) },
           { titulo: 'Margen potencial', valor: 'Bs. ' + nBs(totPrecio - totCosto),

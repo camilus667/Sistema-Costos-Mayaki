@@ -153,7 +153,18 @@ header {
   background: var(--bg-input);
   border: 1px solid var(--primary-border);
   color: var(--text-main);
-  padding: 0.45rem 2.8rem 0.45rem 0.9rem !important;
+  /* EL RELLENO VERTICAL CORTABA EL TEXTO. Los selectores del encabezado miden
+     28 px de alto, y 0.45rem arriba y abajo mas los dos bordes se comen 16,4 px:
+     quedaban 11,6 px de caja para una linea de 14 px, asi que la parte baja de las
+     letras —la cola de la g de "Vigente"— se recortaba contra el borde inferior.
+     Es un recorte de CAJA, no de fuente, y por eso no se arreglaba cambiando el
+     texto. Con 0.2rem quedan 19,6 px y la linea entra entera.
+
+     El relleno derecho tambien baja: 2.8rem son 44,8 px reservados para la flecha,
+     casi un tercio del ancho util en un selector angosto, y era lo que empujaba la
+     etiqueta contra el borde. */
+  padding: 0.2rem 1.8rem 0.2rem 0.7rem !important;
+  line-height: 1.35;
   border-radius: var(--radius-sm);
   font-size: 0.82rem;
   font-weight: 600;
@@ -1091,100 +1102,141 @@ footer {
     #rp-root td { transition: none !important; }
     #rp-root table { border-collapse: collapse; border-spacing: 0; }
     #rp-root tbody tr:nth-child(odd) td { background: #ffffff; }
-    #rp-root tbody tr:nth-child(even) td { background: #f8fafc; }
-    #rp-root tfoot td { background: #0f172a !important; color: #fff; }
-    #rp-root .rp-matriz td.rp-concepto { background: #f1f5f9 !important; }
-    /* Solo en el CUERPO. En el pie la celda de total general quedaba con el fondo
-       gris claro de la columna y el texto blanco del pie encima: el numero mas
-       importante de la hoja, invisible. */
-    #rp-root tbody td.rp-total-col { background: #f1f5f9 !important; }
-    #rp-root thead th { background: #1e293b !important; color: #ffffff !important; }
-    #rp-root tr.rp-seccion td { background: #334155 !important; color: #fff; }
-    #rp-root tr.rp-total td { background: #fef3c7 !important; }
-    #rp-root tr.rp-precio td { background: #dbeafe !important; }
-    #rp-root tr.rp-alerta td { background: #fee2e2 !important; }
+    #rp-root tbody tr:nth-child(even) td { background: #f6f7f7; }
+    #rp-root tfoot td { background: #ffffff !important; color: var(--rp-tinta) !important; }
+    /* Las cifras del cierre, en guindo. Va con !important porque la regla de arriba
+       tambien lo lleva y sin el gana por orden. */
+    #rp-root tfoot td.rp-r { color: var(--rp-guindo-osc) !important; }
+    #rp-root .rp-matriz td.rp-concepto { background: #f0f2f2 !important; }
+    #rp-root tbody td.rp-total-col { background: #f0f2f2 !important; }
+    #rp-root thead th { background: #f0f2f2 !important; color: var(--rp-tinta) !important; }
+    #rp-root tr.rp-seccion td { background: #e7eaea !important; color: var(--rp-guindo) !important; }
+    #rp-root tr.rp-total td { background: #ffffff !important; }
+    #rp-root tr.rp-precio td { background: var(--rp-guindo-tenue) !important; }
+    #rp-root tr.rp-alerta td { background: #f9edf1 !important; }
     #rp-root tr:hover td { background: inherit !important; }
 
+    /* PALETA DEL REPORTE. Sale del isotipo de la marca, no de la interfaz: guindo
+       #9E0D3D y los grises #829094 / #4D5456.
+
+       SIN FONDOS OSCUROS, y no es solo estetica. Una hoja con bandas negras y texto
+       en blanco consume tinta a chorros, sale sucia en una laser comun, y si el
+       driver descarta los fondos —cosa que pasa— el texto blanco queda invisible
+       sobre papel blanco. La jerarquia se arma con NEGRITA, filetes gruesos y el
+       guindo reservado para lo importante: titulos, encabezados de seccion y las
+       cifras de cierre. */
     #rp-root {
+      --rp-guindo: #9E0D3D;
+      --rp-guindo-osc: #8C0931;
+      --rp-guindo-tenue: #fbf2f5;
+      --rp-gris: #829094;
+      --rp-gris-osc: #4D5456;
+      --rp-linea: #cfd5d6;
+      --rp-tinta: #22282a;
+
       background: #fff;
-      color: #0f172a;
+      color: var(--rp-tinta);
       font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
       font-size: 9pt;
       line-height: 1.32;
     }
 
     /* ---- Encabezado ejecutivo ---- */
-    .rp-head { border-bottom: 2.5pt solid #0f172a; padding-bottom: 6pt; margin-bottom: 8pt; }
+    .rp-head { border-bottom: 2.5pt solid var(--rp-guindo); padding-bottom: 6pt; margin-bottom: 8pt; }
     .rp-head-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16pt; }
-    .rp-marca { font-size: 7.5pt; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #64748b; }
-    .rp-titulo { font-size: 16pt; font-weight: 800; margin: 2pt 0 0; letter-spacing: -0.015em; color: #0f172a; }
-    .rp-sub { font-size: 9.5pt; color: #475569; margin-top: 1pt; font-weight: 500; }
+    .rp-marca { font-size: 7.5pt; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--rp-guindo); }
+    .rp-titulo { font-size: 16pt; font-weight: 800; margin: 2pt 0 0; letter-spacing: -0.015em; color: var(--rp-tinta); }
+    .rp-sub { font-size: 9.5pt; color: var(--rp-gris-osc); margin-top: 1pt; font-weight: 600; }
 
     .rp-meta { display: grid; grid-template-columns: repeat(2, auto); gap: 2pt 14pt; text-align: right; flex-shrink: 0; }
-    .rp-meta-item span { display: block; font-size: 6.5pt; text-transform: uppercase; letter-spacing: 0.07em; color: #94a3b8; font-weight: 700; }
-    .rp-meta-item strong { display: block; font-size: 8.5pt; color: #1e293b; font-weight: 700; }
+    .rp-meta-chk { flex-shrink: 0; padding-top: 1pt; padding-left: 2pt; }
+    .rp-meta-item span { display: block; font-size: 6.5pt; text-transform: uppercase; letter-spacing: 0.07em; color: var(--rp-gris); font-weight: 700; }
+    .rp-meta-item strong { display: block; font-size: 8.5pt; color: var(--rp-tinta); font-weight: 800; }
 
     /* ---- Tira de indicadores ---- */
     .rp-kpis { display: flex; gap: 6pt; margin-top: 8pt; }
-    .rp-kpi { flex: 1; border: 0.75pt solid #cbd5e1; border-radius: 3pt; padding: 5pt 7pt; background: #f8fafc; }
-    .rp-kpi-dest { background: #0f172a; border-color: #0f172a; }
-    .rp-kpi-dest .rp-kpi-t { color: #94a3b8 !important; }
-    .rp-kpi-dest .rp-kpi-v, .rp-kpi-dest .rp-kpi-s { color: #fff !important; }
-    .rp-kpi-t { display: block; font-size: 6.5pt; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; font-weight: 700; }
-    .rp-kpi-v { display: block; font-size: 12pt; font-weight: 800; color: #0f172a; margin-top: 1.5pt; letter-spacing: -0.02em; }
-    .rp-kpi-s { display: block; font-size: 6.8pt; color: #64748b; margin-top: 0.5pt; }
+    .rp-kpi {
+      flex: 1; border: 0.5pt solid var(--rp-linea); border-left: 2pt solid var(--rp-gris);
+      padding: 5pt 7pt; background: #fff;
+    }
+    /* El indicador principal se distingue por un filete guindo mas grueso y la cifra
+       en guindo, no por invertir el fondo. */
+    .rp-kpi-dest { border-left: 3.5pt solid var(--rp-guindo); background: var(--rp-guindo-tenue); }
+    .rp-kpi-dest .rp-kpi-v { color: var(--rp-guindo-osc); }
+    .rp-kpi-t { display: block; font-size: 6.5pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--rp-gris); font-weight: 800; }
+    .rp-kpi-v { display: block; font-size: 12pt; font-weight: 800; color: var(--rp-tinta); margin-top: 1.5pt; letter-spacing: -0.02em; }
+    .rp-kpi-s { display: block; font-size: 6.8pt; color: var(--rp-gris-osc); margin-top: 0.5pt; font-weight: 600; }
+
+    /* Indicador de escenario de precios: un cuadrito, sin leyenda. */
+    .rp-chk { display: inline-block; width: 8pt; height: 8pt; border: 0.75pt solid var(--rp-gris); background: #fff; }
+    .rp-chk-on { background: var(--rp-guindo); border-color: var(--rp-guindo); }
 
     /* ---- Tablas ---- */
     .rp-h2 { font-size: 9.5pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
-             color: #334155; margin: 9pt 0 3pt; padding-bottom: 2pt; border-bottom: 0.75pt solid #cbd5e1; }
+             color: var(--rp-guindo); margin: 9pt 0 3pt; padding-bottom: 2pt;
+             border-bottom: 1.5pt solid var(--rp-guindo); }
 
     .rp-tabla { width: 100%; border-collapse: collapse; margin-bottom: 4pt; }
+    /* Encabezado: gris muy claro, tinta oscura en negrita y un filete guindo grueso
+       debajo. Antes era una banda negra con texto blanco. */
     .rp-tabla th {
-      background: #1e293b; color: #fff; font-size: 7pt; font-weight: 700; text-align: left;
+      background: #f0f2f2; color: var(--rp-tinta); font-size: 7pt; font-weight: 800; text-align: left;
       padding: 3.5pt 4pt; text-transform: uppercase; letter-spacing: 0.03em;
-      border-right: 0.5pt solid #334155;
+      border-right: 0.4pt solid var(--rp-linea);
+      border-top: 0.5pt solid var(--rp-linea);
+      border-bottom: 1.5pt solid var(--rp-guindo);
     }
-    .rp-tabla td { padding: 2.6pt 4pt; border-bottom: 0.4pt solid #e2e8f0; border-right: 0.4pt solid #eef2f7; }
-    .rp-tabla tbody tr:nth-child(even) td { background: #f8fafc; }
+    .rp-tabla td { padding: 2.6pt 4pt; border-bottom: 0.4pt solid #e6e9ea; border-right: 0.4pt solid #eff1f1; }
+    .rp-tabla tbody tr:nth-child(even) td { background: #f6f7f7; }
+    /* Cierre sin fondo, con doble filete arriba: la convencion contable, y no gasta
+       tinta. Las cifras del cierre van en guindo. */
     .rp-tabla tfoot td {
-      background: #0f172a; color: #fff; font-weight: 800; font-size: 8.5pt;
-      padding: 4pt; border: none; border-right: 0.5pt solid #334155;
+      background: #fff; color: var(--rp-tinta); font-weight: 800; font-size: 8.5pt;
+      padding: 4pt; border: none;
+      border-top: 1.75pt solid var(--rp-gris-osc);
+      border-bottom: 0.75pt solid var(--rp-gris-osc);
     }
+    .rp-tabla tfoot td.rp-r { color: var(--rp-guindo-osc); }
     .rp-densa { font-size: 7.4pt; }
     .rp-densa td { padding: 1.9pt 3pt; }
     .rp-densa th { font-size: 6.4pt; padding: 2.6pt 3pt; }
 
     .rp-r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .rp-c { text-align: center; white-space: nowrap; }
-    .rp-pos { color: #047857; font-weight: 700; }
-    .rp-tenue td, td.rp-tenue { color: #94a3b8; }
-    .rp-nota { font-size: 6.5pt; color: #94a3b8; font-weight: 400; margin-top: 0.5pt; }
+    .rp-pos { color: var(--rp-guindo-osc); font-weight: 800; }
+    .rp-tenue td, td.rp-tenue { color: var(--rp-gris); }
+    .rp-nota { font-size: 6.5pt; color: var(--rp-gris); font-weight: 400; margin-top: 0.5pt; }
 
     /* Matriz de conceptos por talla. La primera columna se ancla porque es la
        única que dice QUÉ se está leyendo. */
-    .rp-matriz .rp-concepto { width: 26%; font-weight: 600; background: #f1f5f9; }
+    .rp-matriz .rp-concepto { width: 26%; font-weight: 700; background: #f0f2f2; }
     .rp-matriz .rp-desc { width: 22%; }
     .rp-seccion td {
-      background: #334155 !important; color: #fff; font-size: 6.8pt; font-weight: 800;
+      background: #e7eaea !important; color: var(--rp-guindo) !important; font-size: 6.8pt; font-weight: 800;
       text-transform: uppercase; letter-spacing: 0.07em; padding: 3pt 4pt;
+      border-top: 1pt solid var(--rp-gris) !important; border-bottom: 0.5pt solid var(--rp-gris) !important;
     }
-    .rp-total td, tr.rp-total td { background: #fef3c7 !important; font-weight: 800; }
-    .rp-precio td, tr.rp-precio td { background: #dbeafe !important; font-weight: 700; }
-    .rp-total-col { background: #f1f5f9; font-weight: 800; }
-    .rp-alerta td { background: #fee2e2 !important; }
+    .rp-total td, tr.rp-total td {
+      font-weight: 800;
+      border-top: 1pt solid var(--rp-gris-osc) !important;
+      border-bottom: 1pt solid var(--rp-gris-osc) !important;
+    }
+    .rp-precio td, tr.rp-precio td { font-weight: 800; border-bottom: 0.5pt solid var(--rp-guindo) !important; }
+    .rp-total-col { font-weight: 800; }
+    .rp-alerta td { background: #f9edf1 !important; }
 
     .rp-dos { display: grid; grid-template-columns: 1.15fr 1fr; gap: 12pt; align-items: start; }
     .rp-comparativo { margin-top: 6pt; }
 
     .rp-avisos {
-      margin-top: 5pt; padding: 4pt 6pt; border-left: 2.5pt solid #f59e0b;
-      background: #fffbeb; font-size: 7.5pt; color: #78350f;
+      margin-top: 5pt; padding: 4pt 6pt; border-left: 2.5pt solid var(--rp-guindo);
+      background: var(--rp-guindo-tenue); font-size: 7.5pt; color: var(--rp-guindo-osc);
     }
 
     .rp-pie {
-      margin-top: 8pt; padding-top: 4pt; border-top: 0.75pt solid #cbd5e1;
+      margin-top: 8pt; padding-top: 4pt; border-top: 0.75pt solid var(--rp-gris);
       display: flex; justify-content: space-between; gap: 10pt;
-      font-size: 6.8pt; color: #94a3b8;
+      font-size: 6.8pt; color: var(--rp-gris-osc);
     }
     .rp-pie-d { white-space: nowrap; }
 
