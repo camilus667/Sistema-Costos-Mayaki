@@ -108,6 +108,7 @@
       <div class="panel">
         <div class="panel-header">
           <h2 class="panel-title" id="resumen-panel-title">Resumen Ejecutivo de Prendas, Precios, Costos y Valorización de Inventario</h2>
+          <button class="btn-pdf" onclick="reporteResumenGeneral()" title="Exportar el Resumen Ejecutivo a PDF (una hoja, vertical)">PDF</button>
         </div>
         <div class="table-container">
           <table>
@@ -203,6 +204,7 @@
             <button class="excel-tab" onclick="switchExcelConcept('costoInventario', this)">Costo Inventario</button>
             <button class="excel-tab" onclick="switchExcelConcept('precioInventario', this)">Precio Inventario</button>
           </div>
+          <button class="btn-pdf" onclick="reporteConsolidada()" title="Exportar la matriz del concepto activo a PDF (una hoja, horizontal)">PDF</button>
         </div>
 
         <div class="table-container">
@@ -251,6 +253,10 @@
                 <option value="">— seleccione —</option>
               </select>
             </div>
+
+            <div style="display:flex; justify-content:flex-end;">
+              <button class="btn-pdf" onclick="reporteCosteoIndividual()" title="Exportar el costeo de esta prenda a PDF (una hoja, vertical)">PDF</button>
+            </div>
           </div>
 
           <!-- Columna Derecha: Contenedor Principal de Desglose -->
@@ -284,6 +290,7 @@
               <input type="checkbox" id="chk-matriz-regimen-fiscal" onchange="cambiarModalidadFGlobal(this.checked)" style="cursor: pointer; accent-color: #3b82f6;">
               <span>Modalidad F</span>
             </label>
+            <button class="btn-pdf" onclick="reporteMultitalla()" title="Exportar la matriz multitalla de esta prenda a PDF (una hoja, horizontal)">PDF</button>
           </div>
         </div>
 
@@ -307,6 +314,7 @@
       <div class="panel">
         <div class="panel-header">
           <h2 class="panel-title">Stock e Inventario por Colegio (Solo Artículos Disponible > 0)</h2>
+          <button class="btn-pdf" onclick="reporteInventario()" title="Exportar el inventario valorizado a PDF (una hoja, vertical)">PDF</button>
         </div>
         <div class="table-container">
           <table>
@@ -4061,6 +4069,682 @@
       } catch (e) {
         tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:2rem; color:#f87171;">Error al calcular comparativa: ' + e + '</td></tr>';
       }
+    }
+
+
+    /* ==================================================================
+     * REPORTES EJECUTIVOS EN PDF
+     *
+     * PARA QUE. Estas pantallas se muestran a inversores y a bancos para
+     * financiamiento. Ahi el requisito no es "que se vea": es que el numero se
+     * pueda leer, que se sepa de que fecha y de que colegio es, y que entre en
+     * una hoja que alguien pueda dejar sobre un escritorio.
+     *
+     * POR QUE LA HOJA DE IMPRESION Y NO UNA LIBRERIA DE PDF. Se evaluaron tres
+     * caminos y este gana por razones concretas, no por comodidad:
+     *
+     *   html2canvas + jsPDF   rasteriza. El texto deja de ser texto: no se puede
+     *                         buscar ni copiar, y en una tabla de 19 columnas a
+     *                         escala reducida se ve borroso. Para un banco es el
+     *                         peor de los tres.
+     *   pdfkit en el servidor texto vectorial, pero hay que posicionar cada celda
+     *                         a mano en coordenadas, y ademas NO corre en
+     *                         Cloudflare Workers, que es el destino de deploy que
+     *                         declara el README. Dos motores de reporte, uno por
+     *                         entrypoint, es la clase de duplicacion que este
+     *                         proyecto ya pago cara con la formula de costeo.
+     *   @page + window.print  texto VECTORIAL, seleccionable y buscable en el PDF,
+     *                         cero dependencias nuevas, funciona sin internet y es
+     *                         identico en local y en Workers porque todo pasa en
+     *                         el navegador.
+     *
+     * El costo del camino elegido es que el usuario tiene que elegir "Guardar como
+     * PDF" en el dialogo de impresion. Es un clic mas a cambio de un PDF de calidad
+     * tipografica. La orientacion ya va fijada por CSS, asi que el dialogo abre con
+     * la correcta puesta.
+     *
+     * UNA SOLA PAGINA, MEDIDA Y NO PROMETIDA. `ajustarAUnaPagina()` hace una
+     * busqueda binaria sobre la escala: maqueta el contenido a un ancho mayor que
+     * la hoja, lo mide de verdad con scrollHeight, y busca el factor mas grande que
+     * todavia entra en el alto util. No es un `zoom: 0.8` a ojo.
+     *
+     * Y TIENE PISO. Por debajo de 0,42 el texto deja de ser legible impreso, asi
+     * que el reporte prefiere DESBORDAR a una segunda hoja antes que producir una
+     * primera ilegible. Una hoja que no se puede leer no cumple el pedido, solo lo
+     * aparenta.
+     * ================================================================== */
+
+    /** Milimetros a pixeles CSS a 96 dpi, que es la referencia que usa @page. */
+    const MM = 96 / 25.4;
+
+    /** A4 con margen de 8 mm. El alto util se recorta 2 mm por el redondeo del driver. */
+    const HOJA = {
+      vertical:   { anchoMm: 210, altoMm: 297, margenMm: 8 },
+      horizontal: { anchoMm: 297, altoMm: 210, margenMm: 8 },
+    };
+
+    const ESCALA_MINIMA = 0.42;
+
+    function _utilPx(orientacion) {
+      const h = HOJA[orientacion];
+      return {
+        ancho: (h.anchoMm - h.margenMm * 2) * MM,
+        alto: (h.altoMm - h.margenMm * 2 - 2) * MM,
+      };
+    }
+
+    /**
+     * Busca la escala mas grande que hace entrar el contenido en una hoja.
+     *
+     * El contenido se maqueta a `ancho/escala` y despues se reduce por `escala`, de
+     * modo que termina midiendo exactamente el ancho de la hoja. Maquetar al ancho
+     * final y despues encoger dejaria una franja blanca a la derecha proporcional a
+     * la reduccion, que en una tabla ancha es justamente donde hacen falta los
+     * milimetros.
+     *
+     * Como cambiar el ancho hace refluir el texto y por lo tanto cambia el alto, no
+     * hay formula cerrada: se buscan doce bisecciones, que dejan el error por debajo
+     * del 0,02 y cuestan menos de 20 ms.
+     */
+    function ajustarAUnaPagina(hoja, contenido, orientacion) {
+      const util = _utilPx(orientacion);
+
+      // LAS DOS DIMENSIONES, no solo el alto. Mirar unicamente el alto dejaba pasar
+      // el caso que rompe de verdad: una tabla financiera de nueve columnas con
+      // celdas `nowrap` como "162,00 - 225,00" entra sobrada en alto y se sale 53 px
+      // por la derecha, o sea la columna de margen se imprime cortada. Medido en el
+      // Resumen General antes de esta correccion.
+      //
+      // Las dos condiciones mejoran al bajar k —una escala menor maqueta a un ancho
+      // MAYOR, que da lugar horizontal y ademas acorta el contenido— asi que la
+      // busqueda binaria sigue siendo valida con el predicado compuesto.
+      // LA HOLGURA VA EN EL ANCHO DISPONIBLE, NO EN LA COMPARACION. Restarsela al
+      // `clientWidth` del propio elemento es insatisfacible: como el ancho se fija
+      // por estilo, sin desborde `scrollWidth` es EXACTAMENTE `clientWidth`, y
+      // pedir `<= clientWidth - 3` nunca se cumple. Con ese predicado la busqueda
+      // binaria cae siempre al piso y los cinco reportes salen a 3 pt. Se maqueta
+      // entonces contra un ancho ya recortado, y el desborde se detecta con la
+      // igualdad natural.
+      const anchoCaja = util.ancho - 2;
+      const altoCaja = util.alto - 2;
+
+      const entra = (k) => {
+        contenido.style.width = (anchoCaja / k) + 'px';
+        contenido.style.transform = 'scale(' + k + ')';
+        const cabeAlto = contenido.scrollHeight * k <= altoCaja;
+        const cabeAncho = contenido.scrollWidth <= contenido.clientWidth;
+        return cabeAlto && cabeAncho;
+      };
+
+      let k = 1;
+      if (entra(1)) {
+        hoja.dataset.escala = '1';
+      } else {
+        let lo = ESCALA_MINIMA, hi = 1;
+        for (let i = 0; i < 12; i++) {
+          const mid = (lo + hi) / 2;
+          if (entra(mid)) lo = mid; else hi = mid;
+        }
+        k = lo;
+        entra(k);
+        hoja.dataset.escala = k.toFixed(3);
+      }
+
+      // El alto de la hoja se fija al del contenido ya escalado. Sin esto el
+      // elemento conserva su caja sin transformar y empuja una segunda pagina en
+      // blanco, que es el error clasico de escalar con transform para imprimir.
+      const altoReal = Math.min(contenido.scrollHeight * k, altoCaja);
+      hoja.style.width = util.ancho + 'px';
+      hoja.style.height = altoReal + 'px';
+      return k;
+    }
+
+    /** Escapa texto que viene de la base antes de meterlo al HTML del reporte. */
+    function esc(v) {
+      return String(v == null ? '' : v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    const nBs = (v) => (Number(v) || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const nInt = (v) => (Number(v) || 0).toLocaleString('es-BO');
+
+    /** Contexto que encabeza TODO reporte: sin esto una hoja suelta no dice de que es. */
+    function contextoReporte(extra) {
+      const selColegio = document.getElementById('global-colegio-select');
+      const ambito = selColegio && selColegio.selectedIndex >= 0
+        ? selColegio.options[selColegio.selectedIndex].textContent.trim()
+        : 'Toda la empresa';
+
+      const selSnap = document.getElementById('global-snapshot-select');
+      const snap = selSnap && selSnap.selectedIndex >= 0
+        ? selSnap.options[selSnap.selectedIndex].textContent.trim()
+        : 'Actual';
+
+      return Object.assign({
+        ambito,
+        snapshot: snap.replace(/^🔴\s*/, ''),
+        modalidad: modalidadFActual ? 'Con Factura' : 'Sin Factura',
+        emitido: new Date().toLocaleString('es-BO', {
+          day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        }),
+      }, extra || {});
+    }
+
+    function encabezadoReporte(titulo, subtitulo, ctx, kpis) {
+      const meta = [
+        ['Ámbito', ctx.ambito],
+        ['Modalidad', ctx.modalidad],
+        ['Escenario', ctx.snapshot],
+        ['Emitido', ctx.emitido],
+      ].map(([k, v]) => `<div class="rp-meta-item"><span>${esc(k)}</span><strong>${esc(v)}</strong></div>`).join('');
+
+      const tiras = (kpis || []).map(k => `
+        <div class="rp-kpi ${k.destacado ? 'rp-kpi-dest' : ''}">
+          <span class="rp-kpi-t">${esc(k.titulo)}</span>
+          <span class="rp-kpi-v">${esc(k.valor)}</span>
+          ${k.sub ? `<span class="rp-kpi-s">${esc(k.sub)}</span>` : ''}
+        </div>`).join('');
+
+      return `
+        <div class="rp-head">
+          <div class="rp-head-top">
+            <div>
+              <div class="rp-marca">MAYAKI · Sistema de Costeo de Uniformes</div>
+              <h1 class="rp-titulo">${esc(titulo)}</h1>
+              ${subtitulo ? `<div class="rp-sub">${esc(subtitulo)}</div>` : ''}
+            </div>
+            <div class="rp-meta">${meta}</div>
+          </div>
+          ${tiras ? `<div class="rp-kpis">${tiras}</div>` : ''}
+        </div>`;
+    }
+
+    function pieReporte(nota) {
+      return `
+        <div class="rp-pie">
+          <span>Fuente: motor de costeo del sistema · costos netos sin IVA (crédito fiscal recuperable).${nota ? ' ' + esc(nota) : ''}</span>
+          <span class="rp-pie-d">Documento generado automáticamente · MAYAKI</span>
+        </div>`;
+    }
+
+    /**
+     * Monta el reporte, lo ajusta y abre el dialogo de impresion.
+     *
+     * El contenedor se deja en el DOM despues de imprimir a proposito: quitarlo en
+     * el `onafterprint` compite con el momento en que el navegador toma la
+     * instantanea de la pagina, y en Chrome eso produce PDFs en blanco de forma
+     * intermitente. Queda oculto por CSS y se reemplaza en la proxima emision.
+     */
+    function emitirReporte(orientacion, html) {
+      let raiz = document.getElementById('rp-root');
+      if (!raiz) {
+        raiz = document.createElement('div');
+        raiz.id = 'rp-root';
+        document.body.appendChild(raiz);
+      }
+
+      let regla = document.getElementById('rp-page-rule');
+      if (!regla) {
+        regla = document.createElement('style');
+        regla.id = 'rp-page-rule';
+        document.head.appendChild(regla);
+      }
+      const h = HOJA[orientacion];
+      regla.textContent = `@page { size: A4 ${orientacion === 'horizontal' ? 'landscape' : 'portrait'}; margin: ${h.margenMm}mm; }`;
+
+      raiz.innerHTML = `<div class="rp-hoja"><div class="rp-fit">${html}</div></div>`;
+      const hoja = raiz.querySelector('.rp-hoja');
+      const fit = raiz.querySelector('.rp-fit');
+
+      document.body.classList.add('rp-imprimiendo');
+      const k = ajustarAUnaPagina(hoja, fit, orientacion);
+
+      const limpiar = () => document.body.classList.remove('rp-imprimiendo');
+      window.addEventListener('afterprint', limpiar, { once: true });
+      // Respaldo: si el navegador no dispara afterprint (pasa en algunos Safari),
+      // la clase igual se saca y la pantalla no queda en blanco.
+      setTimeout(limpiar, 60000);
+
+      setTimeout(() => window.print(), 60);
+      return k;
+    }
+
+    /** Aviso discreto cuando un reporte no tiene datos que mostrar. */
+    function _sinDatos(que) {
+      alert('No hay datos para exportar en ' + que + '.\n\nRevisá el ámbito seleccionado en el encabezado.');
+    }
+
+    /* ---------------- REPORTE 1 · RESUMEN GENERAL (vertical) ---------------- */
+    async function reporteResumenGeneral() {
+      try {
+        const res = await fetch('/api/dashboard-resumen?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam());
+        const d = await res.json();
+        if (!d || !d.prendas || !d.prendas.length) return _sinDatos('Resumen General');
+
+        const ctx = contextoReporte({ ambito: d.colegio || 'Toda la empresa' });
+        const conIva = Number(d.ivaDebitoTotalBs) > 0.005;
+
+        const kpis = [
+          { titulo: 'Prendas del catálogo', valor: nInt(d.productosCount), sub: nInt(d.variacionesCount) + ' variaciones por talla' },
+          { titulo: 'Stock físico', valor: nInt(d.totalStockUnidades) + ' u' },
+          { titulo: 'Inversión en producción', valor: 'Bs. ' + nBs(d.totalValorCostoBs) },
+          { titulo: 'Venta proyectada', valor: 'Bs. ' + nBs(d.totalValorVentaBs), sub: conIva ? 'neto de IVA: Bs. ' + nBs(d.totalIngresoNetoBs) : null },
+          { titulo: 'Ganancia bruta proyectada', valor: 'Bs. ' + nBs(d.gananciaTotalBs), sub: '+' + (Number(d.margenPromedioGlobalPct) || 0).toFixed(1) + '% sobre la inversión', destacado: true },
+        ];
+
+        const filas = d.prendas.map(p => `
+          <tr${p.sinCosteo ? ' class="rp-alerta"' : ''}>
+            <td class="rp-c">${esc(p.itemNumero)}</td>
+            <td>${esc(p.descripcion)}</td>
+            <td class="rp-r">${nInt(p.stockTotal)}</td>
+            <td class="rp-r">${nBs(p.costoMin)} – ${nBs(p.costoMax)}</td>
+            <td class="rp-r">${nBs(p.precioMin)} – ${nBs(p.precioMax)}</td>
+            <td class="rp-r">${nBs(p.valorCostoTotalBs)}</td>
+            <td class="rp-r">${nBs(p.valorVentaTotalBs)}</td>
+            <td class="rp-r rp-pos">${nBs(p.gananciaEstimadaBs)}</td>
+            <td class="rp-r">${(Number(p.margenPromedioPct) || 0).toFixed(1)}%</td>
+          </tr>`).join('');
+
+        const html = `
+          ${encabezadoReporte('Resumen Ejecutivo de Costeo y Valorización', `${esc(d.colegio || '')} · Gestión ${esc(d.anio || '')}`, ctx, kpis)}
+          <table class="rp-tabla">
+            <thead><tr>
+              <th class="rp-c">Ítem</th><th>Detalle del uniforme</th><th class="rp-r">Stock</th>
+              <th class="rp-r">Costo unit. (Bs.)</th><th class="rp-r">Precio venta (Bs.)</th>
+              <th class="rp-r">Inversión (Bs.)</th><th class="rp-r">Venta proy. (Bs.)</th>
+              <th class="rp-r">Ganancia (Bs.)</th><th class="rp-r">Margen</th>
+            </tr></thead>
+            <tbody>${filas}</tbody>
+            <tfoot><tr>
+              <td colspan="2">TOTAL · ${nInt(d.productosCount)} prendas</td>
+              <td class="rp-r">${nInt(d.totalStockUnidades)}</td>
+              <td colspan="2"></td>
+              <td class="rp-r">${nBs(d.totalValorCostoBs)}</td>
+              <td class="rp-r">${nBs(d.totalValorVentaBs)}</td>
+              <td class="rp-r rp-pos">${nBs(d.gananciaTotalBs)}</td>
+              <td class="rp-r">${(Number(d.margenPromedioGlobalPct) || 0).toFixed(1)}%</td>
+            </tr></tfoot>
+          </table>
+          ${(d.avisos && d.avisos.length) ? `<div class="rp-avisos"><strong>Observaciones:</strong> ${d.avisos.map(esc).join(' · ')}</div>` : ''}
+          ${pieReporte(ctx.modalidad === 'Sin Factura' ? 'Precios de venta directa, con el descuento sin factura aplicado.' : 'Precios de lista con factura.')}`;
+
+        emitirReporte('vertical', html);
+      } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
+    }
+
+    /* ---------------- REPORTE 2 · COSTEO MULTITALLA (horizontal) ---------------- */
+    async function reporteMultitalla() {
+      try {
+        const sel = document.getElementById('select-matriz-producto');
+        const productoId = sel ? sel.value : null;
+        if (!productoId) return _sinDatos('Costeo Multitalla');
+
+        const res = await fetch('/api/calculo/matriz-prenda/' + productoId + '?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam());
+        const j = await res.json();
+        if (!j.success || !j.data || !j.data.length) return _sinDatos('Costeo Multitalla');
+
+        const t = j.data;
+        const ctx = contextoReporte();
+        const conF = modalidadFActual;
+        const descPct = typeof j.descuentoSinFacturaPct === 'number' ? j.descuentoSinFacturaPct : 10;
+
+        const ofrecidas = t.filter(x => x.seOfrece);
+        const margenes = ofrecidas.map(x => Number(x.margenSinFactura) || 0).filter(Boolean);
+        const margenProm = margenes.length ? margenes.reduce((a, b) => a + b, 0) / margenes.length : 0;
+        const costos = ofrecidas.map(x => Number(x.costoUnitarioNeto) || 0).filter(Boolean);
+
+        const kpis = [
+          { titulo: 'Tallas ofrecidas', valor: ofrecidas.length + ' de ' + t.length },
+          { titulo: 'Costo unitario neto', valor: costos.length ? 'Bs. ' + nBs(Math.min(...costos)) + ' – ' + nBs(Math.max(...costos)) : '—' },
+          { titulo: 'Factor de complejidad', valor: String(j.producto.factorComplejidad ?? 1) },
+          { titulo: 'Margen promedio', valor: margenProm.toFixed(1) + '%', destacado: true },
+        ];
+
+        const cols = t.map(x => `<th class="rp-r">${esc(x.tallaCodigo)}</th>`).join('');
+        const fila = (etiqueta, get, clase) => `
+          <tr class="${clase || ''}">
+            <td class="rp-concepto">${esc(etiqueta)}</td>
+            ${t.map(x => `<td class="rp-r">${get(x)}</td>`).join('')}
+          </tr>`;
+        const num = (v) => (v === null || v === undefined || v === 0) ? '—' : nBs(v);
+        const pct = (v) => (v === null || v === undefined || v === 0) ? '—' : (Number(v)).toFixed(1) + '%';
+
+        const seccion = (titulo) => `<tr class="rp-seccion"><td colspan="${t.length + 1}">${esc(titulo)}</td></tr>`;
+
+        const html = `
+          ${encabezadoReporte(
+            'Costeo Multitalla · ' + j.producto.descripcion,
+            'Ítem #' + j.producto.itemNumero + ' · ' + (j.producto.modoCosteo === 'adquirido' ? 'Prenda adquirida / semiterminada' : 'Confección propia'),
+            ctx, kpis)}
+          <table class="rp-tabla rp-matriz">
+            <thead><tr><th class="rp-concepto">Concepto / Talla</th>${cols}</tr></thead>
+            <tbody>
+              ${seccion('Estructura del costo unitario de producción (neto, sin IVA)')}
+              ${fila('Peso con merma (g)', x => x.pesoConMerma ? (Number(x.pesoConMerma)).toFixed(1) : '—')}
+              ${fila('Costo de tela', x => num(x.costoTela))}
+              ${fila('Costo de accesorios', x => num(x.costoAccesorios))}
+              ${fila('Mano de obra directa', x => num(x.costoManoObra))}
+              ${fila('Costos indirectos prorrateados', x => num(x.costoIndirecto))}
+              ${fila('Costo unitario neto', x => num(x.costoUnitarioNeto), 'rp-total')}
+              ${seccion(conF ? 'Precio al público · Con factura (precio de lista)' : 'Precio al público · Sin factura (lista − ' + descPct.toFixed(0) + '%)')}
+              ${fila(conF ? 'Precio de venta (Bs.)' : 'Precio sin factura (Bs.)', x => num(x.precioVenta), 'rp-precio')}
+              ${conF ? '' : fila('Precio de lista (referencia)', x => num(x.precioLista), 'rp-tenue')}
+              ${seccion('Resultado por unidad')}
+              ${fila('Ingreso neto efectivo', x => num(x.ingresoNetoEfectivo))}
+              ${conF ? fila('Utilidad con factura (Bs.)', x => num(x.utilidadConFactura)) : fila('Utilidad sin factura (Bs.)', x => num(x.utilidadSinFactura))}
+              ${conF ? fila('Margen con factura', x => pct(x.margenConFactura), 'rp-total') : fila('Margen sin factura', x => pct(x.margenSinFactura), 'rp-total')}
+              ${seccion('Existencias')}
+              ${fila('Se ofrece en esta talla', x => x.seOfrece ? 'Sí' : '—', 'rp-tenue')}
+            </tbody>
+          </table>
+          ${pieReporte('Las tallas sin precio vigente no se ofrecen y se muestran sin costo prorrateado.')}`;
+
+        emitirReporte('horizontal', html);
+      } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
+    }
+
+    /* ---------------- REPORTE 3 · COSTEO INDIVIDUAL (vertical) ---------------- */
+    async function reporteCosteoIndividual() {
+      try {
+        const selP = document.getElementById('select-desglose-producto');
+        const selT = document.getElementById('select-desglose-talla');
+        const item = selP ? selP.value : '';
+        if (!item) return _sinDatos('Costeo Individual');
+
+        let url = '/api/inputs/desglose-inteligente-producto?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam() + '&itemNumero=' + item;
+        if (selT && selT.value) url += '&tallaId=' + selT.value;
+
+        const j = await (await fetch(url)).json();
+        const p = (j.data || [])[0];
+        if (!p) return _sinDatos('Costeo Individual');
+
+        const ctx = contextoReporte();
+        const conF = modalidadFActual;
+        const tallaTxt = p.tallaActual ? p.tallaActual.codigo : '—';
+
+        const kpis = [
+          { titulo: 'Costo unitario neto', valor: 'Bs. ' + nBs(p.costoUnitarioNetoBs) },
+          { titulo: conF ? 'Precio con factura' : 'Precio sin factura', valor: 'Bs. ' + nBs(p.precioVentaEfectivoBs) },
+          { titulo: 'Ingreso neto efectivo', valor: 'Bs. ' + nBs(p.ingresoNetoEfectivoBs) },
+          { titulo: 'Margen efectivo', valor: (Number(p.margenEfectivoPct) || 0).toFixed(1) + '%', destacado: true },
+        ];
+
+        const acc = (p.accesoriosIntervinientes || []);
+        const filasAcc = acc.length ? acc.map(a => `
+          <tr>
+            <td>${esc(a.nombre)}</td>
+            <td class="rp-c">${esc(a.unidadCompra || '—')}</td>
+            <td class="rp-r">${nBs(a.costoUnitarioBs)}</td>
+            <td class="rp-r">${(Number(a.cantidad) || 0).toFixed(2)}</td>
+            <td class="rp-r">${nBs(a.costoTotalBs)}</td>
+          </tr>`).join('')
+          : '<tr><td colspan="5" class="rp-c rp-tenue">Sin insumos cargados en la receta.</td></tr>';
+
+        const fx = p.fijosEIndirectos || {};
+        const composicion = [
+          ['Tela', p.tela ? p.tela.costoTelaBs : 0, p.tela ? `${esc(p.tela.nombre)} · ${(Number(p.tela.pesoGramos) || 0).toFixed(1)} g × Bs. ${(Number(p.tela.precioBsGramo) || 0).toFixed(4)}/g` : ''],
+          ['Accesorios e insumos', p.subtotalAccesoriosBs, acc.length + ' insumo(s) en la receta'],
+          ['Mano de obra directa', p.manoDeObra ? p.manoDeObra.totalManoObraBs : 0, 'Corte, confección y armado'],
+          ['Costos fijos por prenda', fx.fijosXprenda, 'Factor de complejidad ' + (fx.factorComplejidad ?? 1)],
+          ['Costos indirectos prorrateados', fx.indirectosXprenda, 'Pool anual · tarifa Bs. ' + (Number(fx.tarifaPuntoComplejidad) || 0).toFixed(4) + ' por punto'],
+        ];
+        const totalComp = composicion.reduce((s, r) => s + (Number(r[1]) || 0), 0) || 1;
+        const filasComp = composicion.map(([n, v, d]) => `
+          <tr>
+            <td>${esc(n)}<div class="rp-nota">${d}</div></td>
+            <td class="rp-r">${nBs(v)}</td>
+            <td class="rp-r">${(((Number(v) || 0) / totalComp) * 100).toFixed(1)}%</td>
+          </tr>`).join('');
+
+        const html = `
+          ${encabezadoReporte('Costeo Individual · ' + p.descripcion, 'Ítem #' + p.itemNumero + ' · Talla ' + tallaTxt, ctx, kpis)}
+          <div class="rp-dos">
+            <section>
+              <h2 class="rp-h2">Composición del costo unitario</h2>
+              <table class="rp-tabla">
+                <thead><tr><th>Componente</th><th class="rp-r">Bs.</th><th class="rp-r">Peso</th></tr></thead>
+                <tbody>${filasComp}</tbody>
+                <tfoot><tr><td>Costo unitario neto</td><td class="rp-r">${nBs(p.costoUnitarioNetoBs)}</td><td class="rp-r">100%</td></tr></tfoot>
+              </table>
+
+              <h2 class="rp-h2">Resultado comercial por unidad</h2>
+              <table class="rp-tabla">
+                <tbody>
+                  <tr><td>Precio de lista</td><td class="rp-r">${nBs(p.precioListaBs)}</td></tr>
+                  <tr class="rp-precio"><td>${conF ? 'Precio con factura' : 'Precio sin factura'}</td><td class="rp-r">${nBs(p.precioVentaEfectivoBs)}</td></tr>
+                  <tr><td>Ingreso neto efectivo</td><td class="rp-r">${nBs(p.ingresoNetoEfectivoBs)}</td></tr>
+                  <tr><td>Costo unitario neto</td><td class="rp-r">−${nBs(p.costoUnitarioNetoBs)}</td></tr>
+                  <tr class="rp-total"><td>Utilidad por unidad</td><td class="rp-r rp-pos">${nBs((Number(p.ingresoNetoEfectivoBs) || 0) - (Number(p.costoUnitarioNetoBs) || 0))}</td></tr>
+                  <tr class="rp-total"><td>Margen sobre ingreso</td><td class="rp-r">${(Number(p.margenEfectivoPct) || 0).toFixed(2)}%</td></tr>
+                </tbody>
+              </table>
+              <table class="rp-tabla rp-comparativo">
+                <thead><tr><th>Comparativo de canales</th><th class="rp-r">Ingreso</th><th class="rp-r">Margen</th></tr></thead>
+                <tbody>
+                  <tr><td>Con factura</td><td class="rp-r">${nBs(p.ingresoNetoConFacturaBs)}</td><td class="rp-r">${(Number(p.margenConFacturaPct) || 0).toFixed(2)}%</td></tr>
+                  <tr><td>Sin factura</td><td class="rp-r">${nBs(p.ingresoNetoSinFacturaBs)}</td><td class="rp-r">${(Number(p.margenSinFacturaPct) || 0).toFixed(2)}%</td></tr>
+                </tbody>
+              </table>
+            </section>
+            <section>
+              <h2 class="rp-h2">Insumos intervinientes</h2>
+              <table class="rp-tabla">
+                <thead><tr><th>Insumo</th><th class="rp-c">Unidad</th><th class="rp-r">Costo un.</th><th class="rp-r">Cant.</th><th class="rp-r">Total</th></tr></thead>
+                <tbody>${filasAcc}</tbody>
+                <tfoot><tr><td colspan="4">Subtotal insumos</td><td class="rp-r">${nBs(p.subtotalAccesoriosBs)}</td></tr></tfoot>
+              </table>
+              ${(p.diagnostico && p.diagnostico.faltantes && p.diagnostico.faltantes.length)
+                ? `<div class="rp-avisos"><strong>Datos faltantes:</strong> ${p.diagnostico.faltantes.map(esc).join(' · ')}</div>` : ''}
+            </section>
+          </div>
+          ${pieReporte()}`;
+
+        emitirReporte('vertical', html);
+      } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
+    }
+
+    /* ---------------- REPORTE 4 · INVENTARIO REAL (vertical) ---------------- */
+    /**
+     * CONSOLIDADO POR PRENDA, y no fila por fila.
+     *
+     * El detalle son 215 combinaciones de prenda y talla. A la escala que haria
+     * falta para meterlas en una hoja el cuerpo queda por debajo de 5 pt: entra,
+     * pero no se lee, y una hoja ilegible no cumple el pedido — solo lo aparenta.
+     * Para la audiencia de este reporte —un inversor, un comite de credito— la
+     * unidad de analisis es la PRENDA, no la talla.
+     *
+     * El detalle por talla no se pierde: vive en el reporte de Matriz Consolidada,
+     * que es una grilla de prenda por talla y tiene los conceptos Costo Inventario
+     * y Precio Inventario justamente para eso.
+     */
+    async function reporteInventario() {
+      try {
+        const j = await (await fetch('/api/inventario/stock?colegioId=' + colegioFiltroActual + getModalidadFQueryParam())).json();
+        const filas = j.data || [];
+        if (!filas.length) return _sinDatos('Inventario Real');
+
+        const ctx = contextoReporte();
+
+        const porPrenda = new Map();
+        for (const i of filas) {
+          const k = i.productoId || (i.itemNumero + '|' + i.producto);
+          let g = porPrenda.get(k);
+          if (!g) {
+            g = { item: i.itemNumero, nombre: i.producto, tallas: 0, unidades: 0,
+                  costo: 0, precio: 0, cMin: Infinity, cMax: 0, pMin: Infinity, pMax: 0, sinCosteo: false };
+            porPrenda.set(k, g);
+          }
+          const q = Number(i.cantidad) || 0;
+          const cu = Number(i.costoUnitario) || 0;
+          const pv = Number(i.precioVenta) || 0;
+          g.tallas += 1;
+          g.unidades += q;
+          g.costo += q * cu;
+          g.precio += q * pv;
+          if (cu > 0) { g.cMin = Math.min(g.cMin, cu); g.cMax = Math.max(g.cMax, cu); }
+          if (pv > 0) { g.pMin = Math.min(g.pMin, pv); g.pMax = Math.max(g.pMax, pv); }
+          if (i.sinCosteo) g.sinCosteo = true;
+        }
+
+        const grupos = [...porPrenda.values()].sort((x, y) => (Number(x.item) || 0) - (Number(y.item) || 0));
+        const totUnid = grupos.reduce((s, g) => s + g.unidades, 0);
+        const totCosto = grupos.reduce((s, g) => s + g.costo, 0);
+        const totPrecio = grupos.reduce((s, g) => s + g.precio, 0);
+
+        const rango = (min, max) => (max > 0)
+          ? (min === max ? nBs(min) : nBs(min) + ' – ' + nBs(max))
+          : '—';
+
+        const kpis = [
+          { titulo: 'Prendas con stock', valor: nInt(grupos.length), sub: nInt(filas.length) + ' referencias por talla' },
+          { titulo: 'Unidades en existencia', valor: nInt(totUnid) + ' u' },
+          { titulo: 'Costo del inventario', valor: 'Bs. ' + nBs(totCosto) },
+          { titulo: 'Precio del inventario', valor: 'Bs. ' + nBs(totPrecio) },
+          { titulo: 'Margen potencial', valor: 'Bs. ' + nBs(totPrecio - totCosto),
+            sub: totCosto > 0 ? '+' + (((totPrecio - totCosto) / totCosto) * 100).toFixed(1) + '% sobre el costo' : null,
+            destacado: true },
+        ];
+
+        const cuerpo = grupos.map(g => {
+          // MARGEN SOBRE LA VENTA, no sobre el costo. Dividir por el costo da un
+          // markup: para el Short daba 209,7%, un numero que en una hoja que va a un
+          // banco se lee como un error de calculo. Y ademas contradecia al resto del
+          // sistema, donde `margen` es utilidad sobre el ingreso cobrado — la misma
+          // definicion que usa costoTotal.service.ts. Dos definiciones del mismo
+          // nombre en dos pantallas es como se pierde la confianza en un reporte.
+          const margen = g.precio > 0 ? ((g.precio - g.costo) / g.precio) * 100 : 0;
+          return `
+            <tr${g.sinCosteo ? ' class="rp-alerta"' : ''}>
+              <td class="rp-c">${esc(g.item || '—')}</td>
+              <td>${esc(g.nombre)}</td>
+              <td class="rp-c">${g.tallas}</td>
+              <td class="rp-r">${nInt(g.unidades)}</td>
+              <td class="rp-r">${rango(g.cMin, g.cMax)}</td>
+              <td class="rp-r">${rango(g.pMin, g.pMax)}</td>
+              <td class="rp-r">${nBs(g.costo)}</td>
+              <td class="rp-r">${nBs(g.precio)}</td>
+              <td class="rp-r rp-pos">${margen.toFixed(1)}%</td>
+            </tr>`;
+        }).join('');
+
+        const html = `
+          ${encabezadoReporte(
+            'Inventario Real · Costo y Precio de Existencias',
+            'Valorización consolidada por prenda · solo referencias con stock físico mayor a cero',
+            ctx, kpis)}
+          <table class="rp-tabla rp-densa">
+            <thead><tr>
+              <th class="rp-c">Ítem</th><th>Producto / Uniforme</th><th class="rp-c">Tallas</th>
+              <th class="rp-r">Stock (u)</th><th class="rp-r">Costo unit. (Bs.)</th>
+              <th class="rp-r">Precio venta (Bs.)</th>
+              <th class="rp-r">Costo inventario</th><th class="rp-r">Precio inventario</th>
+              <th class="rp-r">Margen s/ venta</th>
+            </tr></thead>
+            <tbody>${cuerpo}</tbody>
+            <tfoot><tr>
+              <td colspan="2">TOTAL · ${nInt(grupos.length)} prendas</td>
+              <td class="rp-c">${nInt(filas.length)}</td>
+              <td class="rp-r">${nInt(totUnid)}</td>
+              <td colspan="2"></td>
+              <td class="rp-r">${nBs(totCosto)}</td>
+              <td class="rp-r">${nBs(totPrecio)}</td>
+              <td class="rp-r rp-pos">${totPrecio > 0 ? (((totPrecio - totCosto) / totPrecio) * 100).toFixed(1) : '0.0'}%</td>
+            </tr></tfoot>
+          </table>
+          ${pieReporte('El inventario se valoriza al costo neto de fabricación vigente, no al costo histórico de adquisición. El detalle por talla está en el reporte de Matriz Consolidada.')}`;
+
+        emitirReporte('vertical', html);
+      } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
+    }
+
+    /* ---------------- REPORTE 5 · MATRICES CONSOLIDADAS (horizontal) ---------------- */
+    /**
+     * Cubre los DIEZ conceptos de la pestaña con un solo reporte, incluidos Costo
+     * Inventario y Precio Inventario: es la misma grilla con otra celda, asi que
+     * cinco reportes casi identicos serian cinco lugares donde corregir el mismo
+     * encabezado.
+     */
+    const CONCEPTOS_RP = {
+      costoBruto:         { t: 'Costo Directo Total',            money: true },
+      precioVenta:        { t: 'Precio de Venta al Público',     money: true },
+      costoUnitarioNeto:  { t: 'Costo Unitario Neto',            money: true },
+      utilidadConFactura: { t: 'Utilidad con Factura',           money: true },
+      margenConFactura:   { t: 'Margen con Factura',             money: false, pct: true },
+      utilidadSinFactura: { t: 'Utilidad sin Factura',           money: true },
+      margenSinFactura:   { t: 'Margen sin Factura',             money: false, pct: true },
+      inventarioUnidades: { t: 'Inventario en Unidades',         money: false, entero: true },
+      costoInventario:    { t: 'Costo del Inventario',           money: true },
+      precioInventario:   { t: 'Precio del Inventario',          money: true },
+    };
+
+    async function reporteConsolidada() {
+      try {
+        const j = await (await fetch('/api/calculo/matriz-consolidada?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam())).json();
+        if (!j.success || !j.data || !j.data.length) return _sinDatos('Matrices Consolidadas');
+
+        const cfg = CONCEPTOS_RP[currentExcelConcept] || CONCEPTOS_RP.costoBruto;
+        const tallas = j.tallas || [];
+        const ctx = contextoReporte();
+
+        const val = (celda) => {
+          const v = Number(celda ? celda[currentExcelConcept] : 0) || 0;
+          if (!v) return '—';
+          if (cfg.entero) return nInt(v);
+          if (cfg.pct) return v.toFixed(1) + '%';
+          return nBs(v);
+        };
+        const bruto = (celda) => Number(celda ? celda[currentExcelConcept] : 0) || 0;
+
+        // El subtotal solo tiene sentido en los conceptos que SUMAN. Promediar un
+        // margen por talla y llamarlo "subtotal" seria inventar un numero, que es
+        // exactamente lo que este proyecto saco del dashboard con la Tasa Promedio.
+        const sumable = !cfg.pct;
+
+        let granTotal = 0;
+        const cuerpo = j.data.map(row => {
+          const sub = tallas.reduce((s, t) => s + bruto(row.tallas[t.codigo]), 0);
+          granTotal += sub;
+          return `
+            <tr>
+              <td class="rp-c">${esc(row.itemNumero)}</td>
+              <td class="rp-desc">${esc(row.descripcion)}</td>
+              ${tallas.map(t => `<td class="rp-r">${val(row.tallas[t.codigo])}</td>`).join('')}
+              <td class="rp-r rp-total-col">${sumable ? (cfg.entero ? nInt(sub) : nBs(sub)) : '—'}</td>
+            </tr>`;
+        }).join('');
+
+        const totalesTalla = tallas.map(t => {
+          const s = j.data.reduce((a, row) => a + bruto(row.tallas[t.codigo]), 0);
+          return `<td class="rp-r">${sumable ? (cfg.entero ? nInt(s) : nBs(s)) : '—'}</td>`;
+        }).join('');
+
+        const kpis = [
+          { titulo: 'Concepto', valor: cfg.t },
+          { titulo: 'Prendas', valor: nInt(j.data.length) },
+          { titulo: 'Tallas', valor: nInt(tallas.length) },
+          ...(sumable ? [{ titulo: 'Total general', valor: (cfg.entero ? nInt(granTotal) : 'Bs. ' + nBs(granTotal)), destacado: true }] : []),
+        ];
+
+        const html = `
+          ${encabezadoReporte('Matriz Consolidada · ' + cfg.t, 'Todas las prendas por talla', ctx, kpis)}
+          <table class="rp-tabla rp-matriz rp-densa">
+            <thead><tr>
+              <th class="rp-c">Ítem</th><th class="rp-desc">Detalle del uniforme</th>
+              ${tallas.map(t => `<th class="rp-r">${esc(t.codigo)}</th>`).join('')}
+              <th class="rp-r rp-total-col">Subtotal</th>
+            </tr></thead>
+            <tbody>${cuerpo}</tbody>
+            <tfoot><tr>
+              <td colspan="2">TOTAL POR TALLA</td>
+              ${totalesTalla}
+              <td class="rp-r rp-total-col">${sumable ? (cfg.entero ? nInt(granTotal) : nBs(granTotal)) : '—'}</td>
+            </tr></tfoot>
+          </table>
+          ${pieReporte(sumable ? '' : 'Los márgenes son porcentajes por celda: no se suman ni se promedian en los subtotales.')}`;
+
+        emitirReporte('horizontal', html);
+      } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
     }
 
     document.addEventListener('DOMContentLoaded', async () => {

@@ -1019,3 +1019,186 @@ footer {
   border-top: 1px solid var(--border);
   background: var(--bg-body);
 }
+
+/* ==================================================================
+     * REPORTES EJECUTIVOS EN PDF — hoja de estilo de impresión
+     *
+     * TEMA CLARO A PROPOSITO. La aplicación es oscura porque se mira en pantalla
+     * muchas horas; un reporte impreso es lo contrario: fondo blanco, tinta oscura
+     * y la menor cantidad de relleno de color posible. Imprimir la interfaz tal
+     * como se ve vacía un cartucho y produce una hoja que un banco no archiva.
+     *
+     * Las medidas van en milímetros y en puntos, no en rem: la unidad de esta hoja
+     * es el papel, no el viewport.
+     * ================================================================== */
+
+    /* FUERA DE PANTALLA, PERO MAQUETADO. Y esta distincion es el corazon del
+       ajuste a una hoja: con `display: none` el navegador no calcula geometria, asi
+       que `scrollHeight` devuelve 0, la busqueda binaria concluye que todo entra con
+       escala 1 y el reporte se imprime desbordado. Peor todavia, los chequeos que
+       comparan alto de contenido contra alto de hoja comparan 0 contra 0 y dan verde
+       sin haber medido nada: un verde vacuo, de los que este proyecto ya conoce.
+       Posicionado fuera del lienzo el elemento SI se maqueta, las medidas son reales
+       y el ajuste puede hacer su trabajo. */
+    #rp-root { position: absolute; left: -99999px; top: 0; }
+
+    .rp-hoja { overflow: hidden; }
+    .rp-fit { transform-origin: top left; }
+
+    @media print {
+      /* Se oculta la aplicación entera y se muestra sólo el reporte. Es más
+         robusto que ir tapando pestaña por pestaña: una pestaña nueva no se
+         "olvida" de esconderse. */
+      body.rp-imprimiendo > *:not(#rp-root) { display: none !important; }
+      body.rp-imprimiendo { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+      /* Al imprimir vuelve al flujo normal, en el origen de la hoja. */
+      body.rp-imprimiendo #rp-root {
+        display: block !important;
+        position: static !important; left: auto !important; top: auto !important;
+      }
+
+      /* Sin esto Chrome descarta los fondos de las bandas de sección y de la fila
+         de totales, que son lo que hace legible una tabla de 19 columnas. */
+      #rp-root, #rp-root * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+    }
+
+    /* AISLAMIENTO DE LA HOJA DE LA APLICACION.
+       styles.css fuerza `tr { height: 36px !important }` y lo mismo para td y th,
+       porque en pantalla conviene una fila alta y comoda de clickear. Dentro del
+       reporte esa regla es ruinosa: obliga a CADA fila a 36 px cuando su contenido
+       necesita 18, o sea duplica el alto de la tabla, y el ajuste automatico
+       compensa encogiendo todo hasta 4,2 pt. Se medio: neutralizarla sube la Matriz
+       Consolidada de 4,2 pt a 7,3 pt sin cambiar una sola linea del contenido.
+       El `!important` de aca no es pereza: es la unica forma de ganarle a otro
+       `!important` de igual especificidad. */
+    #rp-root tr, #rp-root td, #rp-root th {
+      height: auto !important;
+      min-height: 0 !important;
+      transition: none !important;
+    }
+    #rp-root tr:hover td { background: inherit; }
+
+    /* La app pinta `th` fijo con sombra y `tr:nth-child(odd|even) td` en tonos
+       oscuros, con selectores de ELEMENTO que alcanzan cualquier tabla del
+       documento, incluida la del reporte. En pantalla eso es el tema oscuro; en
+       papel es una hoja negra. Se reponen los fondos claros con especificidad de
+       id, y las filas especiales llevan !important porque `#rp-root tbody
+       tr:nth-child(odd) td` le gana por especificidad a una clase suelta. */
+    #rp-root th { position: static !important; box-shadow: none !important; z-index: auto !important; }
+    #rp-root td { transition: none !important; }
+    #rp-root table { border-collapse: collapse; border-spacing: 0; }
+    #rp-root tbody tr:nth-child(odd) td { background: #ffffff; }
+    #rp-root tbody tr:nth-child(even) td { background: #f8fafc; }
+    #rp-root tfoot td { background: #0f172a !important; color: #fff; }
+    #rp-root .rp-matriz td.rp-concepto { background: #f1f5f9 !important; }
+    /* Solo en el CUERPO. En el pie la celda de total general quedaba con el fondo
+       gris claro de la columna y el texto blanco del pie encima: el numero mas
+       importante de la hoja, invisible. */
+    #rp-root tbody td.rp-total-col { background: #f1f5f9 !important; }
+    #rp-root thead th { background: #1e293b !important; color: #ffffff !important; }
+    #rp-root tr.rp-seccion td { background: #334155 !important; color: #fff; }
+    #rp-root tr.rp-total td { background: #fef3c7 !important; }
+    #rp-root tr.rp-precio td { background: #dbeafe !important; }
+    #rp-root tr.rp-alerta td { background: #fee2e2 !important; }
+    #rp-root tr:hover td { background: inherit !important; }
+
+    #rp-root {
+      background: #fff;
+      color: #0f172a;
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      font-size: 9pt;
+      line-height: 1.32;
+    }
+
+    /* ---- Encabezado ejecutivo ---- */
+    .rp-head { border-bottom: 2.5pt solid #0f172a; padding-bottom: 6pt; margin-bottom: 8pt; }
+    .rp-head-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16pt; }
+    .rp-marca { font-size: 7.5pt; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #64748b; }
+    .rp-titulo { font-size: 16pt; font-weight: 800; margin: 2pt 0 0; letter-spacing: -0.015em; color: #0f172a; }
+    .rp-sub { font-size: 9.5pt; color: #475569; margin-top: 1pt; font-weight: 500; }
+
+    .rp-meta { display: grid; grid-template-columns: repeat(2, auto); gap: 2pt 14pt; text-align: right; flex-shrink: 0; }
+    .rp-meta-item span { display: block; font-size: 6.5pt; text-transform: uppercase; letter-spacing: 0.07em; color: #94a3b8; font-weight: 700; }
+    .rp-meta-item strong { display: block; font-size: 8.5pt; color: #1e293b; font-weight: 700; }
+
+    /* ---- Tira de indicadores ---- */
+    .rp-kpis { display: flex; gap: 6pt; margin-top: 8pt; }
+    .rp-kpi { flex: 1; border: 0.75pt solid #cbd5e1; border-radius: 3pt; padding: 5pt 7pt; background: #f8fafc; }
+    .rp-kpi-dest { background: #0f172a; border-color: #0f172a; }
+    .rp-kpi-dest .rp-kpi-t { color: #94a3b8 !important; }
+    .rp-kpi-dest .rp-kpi-v, .rp-kpi-dest .rp-kpi-s { color: #fff !important; }
+    .rp-kpi-t { display: block; font-size: 6.5pt; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; font-weight: 700; }
+    .rp-kpi-v { display: block; font-size: 12pt; font-weight: 800; color: #0f172a; margin-top: 1.5pt; letter-spacing: -0.02em; }
+    .rp-kpi-s { display: block; font-size: 6.8pt; color: #64748b; margin-top: 0.5pt; }
+
+    /* ---- Tablas ---- */
+    .rp-h2 { font-size: 9.5pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+             color: #334155; margin: 9pt 0 3pt; padding-bottom: 2pt; border-bottom: 0.75pt solid #cbd5e1; }
+
+    .rp-tabla { width: 100%; border-collapse: collapse; margin-bottom: 4pt; }
+    .rp-tabla th {
+      background: #1e293b; color: #fff; font-size: 7pt; font-weight: 700; text-align: left;
+      padding: 3.5pt 4pt; text-transform: uppercase; letter-spacing: 0.03em;
+      border-right: 0.5pt solid #334155;
+    }
+    .rp-tabla td { padding: 2.6pt 4pt; border-bottom: 0.4pt solid #e2e8f0; border-right: 0.4pt solid #eef2f7; }
+    .rp-tabla tbody tr:nth-child(even) td { background: #f8fafc; }
+    .rp-tabla tfoot td {
+      background: #0f172a; color: #fff; font-weight: 800; font-size: 8.5pt;
+      padding: 4pt; border: none; border-right: 0.5pt solid #334155;
+    }
+    .rp-densa { font-size: 7.4pt; }
+    .rp-densa td { padding: 1.9pt 3pt; }
+    .rp-densa th { font-size: 6.4pt; padding: 2.6pt 3pt; }
+
+    .rp-r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .rp-c { text-align: center; white-space: nowrap; }
+    .rp-pos { color: #047857; font-weight: 700; }
+    .rp-tenue td, td.rp-tenue { color: #94a3b8; }
+    .rp-nota { font-size: 6.5pt; color: #94a3b8; font-weight: 400; margin-top: 0.5pt; }
+
+    /* Matriz de conceptos por talla. La primera columna se ancla porque es la
+       única que dice QUÉ se está leyendo. */
+    .rp-matriz .rp-concepto { width: 26%; font-weight: 600; background: #f1f5f9; }
+    .rp-matriz .rp-desc { width: 22%; }
+    .rp-seccion td {
+      background: #334155 !important; color: #fff; font-size: 6.8pt; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.07em; padding: 3pt 4pt;
+    }
+    .rp-total td, tr.rp-total td { background: #fef3c7 !important; font-weight: 800; }
+    .rp-precio td, tr.rp-precio td { background: #dbeafe !important; font-weight: 700; }
+    .rp-total-col { background: #f1f5f9; font-weight: 800; }
+    .rp-alerta td { background: #fee2e2 !important; }
+
+    .rp-dos { display: grid; grid-template-columns: 1.15fr 1fr; gap: 12pt; align-items: start; }
+    .rp-comparativo { margin-top: 6pt; }
+
+    .rp-avisos {
+      margin-top: 5pt; padding: 4pt 6pt; border-left: 2.5pt solid #f59e0b;
+      background: #fffbeb; font-size: 7.5pt; color: #78350f;
+    }
+
+    .rp-pie {
+      margin-top: 8pt; padding-top: 4pt; border-top: 0.75pt solid #cbd5e1;
+      display: flex; justify-content: space-between; gap: 10pt;
+      font-size: 6.8pt; color: #94a3b8;
+    }
+    .rp-pie-d { white-space: nowrap; }
+
+    /* ---- Botón de exportación en pantalla ----
+       Chico y de bajo peso visual, como se pidió: no compite con los controles de
+       la pantalla y sólo se tiñe al pasar por encima. */
+    .btn-pdf {
+      display: inline-flex; align-items: center; gap: 0.25rem;
+      background: #1e293b; color: #94a3b8;
+      border: 1px solid #334155; border-radius: 5px;
+      padding: 0.2rem 0.45rem; height: 24px;
+      font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em;
+      cursor: pointer; white-space: nowrap;
+      transition: color .12s, border-color .12s, background .12s;
+    }
+    .btn-pdf:hover { color: #f8fafc; border-color: #64748b; background: #334155; }
+    .btn-pdf:active { transform: translateY(0.5px); }
