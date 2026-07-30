@@ -120,13 +120,40 @@ describe('parseo del export', () => {
 });
 
 describe('normalizacion de descripciones', () => {
-  it('quita el sufijo de colegio, que es ruido constante', () => {
+  it('el nombre del producto es lo que va ANTES de la coma, sin heuristicas', () => {
+    // Regla confirmada por el usuario y medida sobre el archivo: los 80 nombres
+    // distintos de las 732 filas relevantes tienen exactamente UNA coma, y lo que
+    // sigue es el sufijo del colegio. Los cinco sufijos reales, con sus conteos:
+    //   297 "CC"   166 "Intl SM"   126 "EO"   95 "Inf SM"   48 "SJ"
+    // Los dos con espacio son los que rompieron la primera version de esta funcion.
     expect(normalizarDescripcionPos('Bermuda, CC')).toBe('bermuda');
     expect(normalizarDescripcionPos('Bermuda, Intl SM')).toBe('bermuda');
     expect(normalizarDescripcionPos('Polo, Inf SM')).toBe('polo');
     expect(normalizarDescripcionPos('Short, SJ')).toBe('short');
-    // Pero NO se come una palabra con significado: no es una sigla.
-    expect(normalizarDescripcionPos('Camisa, blanca')).toBe('camisa blanca');
+    expect(normalizarDescripcionPos('Pantalón de Dama, Intl SM')).toBe('pantalon de dama');
+    expect(normalizarDescripcionPos('Falda c/elast, SJ')).toBe('falda con elastico');
+  });
+
+  it('un sufijo LARGO tambien se limpia: la regla no depende del largo ni de las mayusculas', () => {
+    // Lo que rompia a las dos versiones anteriores. La segunda exigia mayusculas y
+    // hasta seis letras por token, asi que un colegio con un sufijo mas largo dejaba
+    // de limpiarse y nadie se enteraria.
+    expect(normalizarDescripcionPos('Bermuda, Internacional San Marcos')).toBe('bermuda');
+    expect(normalizarDescripcionPos('Bermuda, saint jude')).toBe('bermuda');
+  });
+
+  it('un nombre SIN coma se usa completo', () => {
+    // Cero casos en las filas relevantes del archivo, pero la funcion no puede
+    // devolver vacio si algun dia aparece uno.
+    expect(normalizarDescripcionPos('Bermuda')).toBe('bermuda');
+    expect(normalizarDescripcionPos('Camisa m/corta')).toBe('camisa manga corta');
+  });
+
+  it('con una coma interna se conserva el nombre y se saca solo el sufijo', () => {
+    // Por eso se corta en la ULTIMA coma y no en la primera. En los 80 nombres reales
+    // da identico —tienen una sola— pero degrada mejor.
+    expect(normalizarDescripcionPos('Traje de 2 piezas, Saco y Pantalon, CC'))
+      .toBe('traje de 2 piezas saco y pantalon');
   });
 
   it('expande las abreviaturas reales del POS', () => {

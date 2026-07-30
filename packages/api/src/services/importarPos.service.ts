@@ -134,34 +134,37 @@ function sinAcentos(s: string): string {
  *   2. Expande abreviaturas.
  *   3. Normaliza acentos, minusculas y espacios.
  *
- * El paso 1 no conoce la lista de colegios a proposito: uno nuevo traera su propio
- * sufijo. Lo que SI exige es que parezca una abreviatura, y esa distincion importa.
+ * EL PASO 1 CORTA EN LA COMA. Sin heuristicas, porque la planilla no las necesita:
+ * el nombre del producto es lo que va ANTES de la coma y el sufijo del colegio es lo
+ * que va despues. Regla confirmada por el usuario y MEDIDA sobre el archivo:
  *
- * Los sufijos reales del archivo son cinco, y dos llevan ESPACIO:
+ *   80 nombres distintos en las 732 filas relevantes
+ *   los 80 tienen EXACTAMENTE UNA coma
+ *   cero nombres sin coma
+ *
+ * y los cinco sufijos que aparecen son:
  *
  *   297  "CC"        166  "Intl SM"     126  "EO"
  *    95  "Inf SM"     48  "SJ"
  *
- * La primera version de esta funcion tomaba un solo token tras la coma, asi que
- * "Intl SM" e "Inf SM" no se limpiaban: las 261 filas de esos dos colegios arrastraban
- * "intl sm" como ruido en cada comparacion. Lo encontro un test, no una lectura.
+ * DOS VERSIONES ANTERIORES DE ESTA FUNCION FUERON MAS LISTAS Y PEORES. La primera
+ * tomaba un solo token tras la coma, asi que "Intl SM" e "Inf SM" —que llevan espacio—
+ * no se limpiaban y las 261 filas de esos colegios arrastraban "intl sm" como ruido en
+ * cada comparacion; lo encontro un test. La segunda pedia que la mitad de las letras
+ * estuvieran en mayuscula, para no comerse una palabra con significado. Funcionaba con
+ * estos cinco sufijos, pero traia un limite de seis letras por token: el dia que un
+ * colegio traiga un sufijo mas largo, deja de limpiarlo y nadie se enteraria.
  *
- * Y el criterio no puede ser solo el largo. Con "hasta seis letras" tambien se comeria
- * el sufijo de una prenda llamada "Camisa, blanca", que es una palabra con significado.
- * Se exige que la mitad de las letras esten en MAYUSCULA —"CC", "SJ", "Intl SM", "Inf
- * SM" cumplen; "blanca" no— porque eso es lo que distingue una sigla de una palabra.
+ * La planilla es la fuente de verdad y dice algo mas simple que las dos. Se corta en la
+ * ULTIMA coma y no en la primera: en los 80 nombres reales da identico —tienen una
+ * sola— y degrada mejor si algun dia un nombre trae una coma interna, porque conserva
+ * el nombre y saca solo el sufijo.
  */
 export function normalizarDescripcionPos(texto: unknown): string {
   let s = String(texto ?? '').trim();
 
-  const m = s.match(/,\s*([A-Za-z.]{1,6}(?:\s+[A-Za-z.]{1,6})?)\s*$/);
-  if (m) {
-    const sigla = m[1].replace(/[^A-Za-z]/g, '');
-    const mayusculas = (sigla.match(/[A-Z]/g) || []).length;
-    if (sigla.length > 0 && mayusculas / sigla.length >= 0.5) {
-      s = s.slice(0, m.index).trim();
-    }
-  }
+  const coma = s.lastIndexOf(',');
+  if (coma > 0) s = s.slice(0, coma).trim();
 
   for (const [re, largo] of ABREVIATURAS) s = s.replace(re, largo);
   return sinAcentos(s).replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
