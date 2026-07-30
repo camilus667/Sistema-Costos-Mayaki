@@ -1344,8 +1344,16 @@
       const tallaSel = document.getElementById('select-desglose-talla');
       const badge = document.getElementById('desglose-total-badge');
 
-      const selectedItemNum = selectEl.value;
-      const selectedTallaId = tallaSel ? tallaSel.value : '';
+      // EL AMBITO MANDA SOBRE LA SELECCION ANTERIOR. Si cambio el colegio o la
+      // instantanea, la prenda y la talla elegidas pertenecen a OTRO conjunto de
+      // datos y arrastrarlas es lo que colgaba la pantalla: se pedia el item 1
+      // dentro de Internacional SM, que solo tiene el 28.
+      const ambitoDesglose = String(colegioFiltroActual || 'all') + '|' + String(snapshotFiltroActual || 'actual');
+      const cambioAmbito = _desgloseCacheColegioId !== null && _desgloseCacheColegioId !== ambitoDesglose;
+      _desgloseCacheColegioId = ambitoDesglose;
+
+      const selectedItemNum = cambioAmbito ? '' : selectEl.value;
+      const selectedTallaId = cambioAmbito ? '' : (tallaSel ? tallaSel.value : '');
 
       let url = '/api/inputs/desglose-inteligente-producto?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam();
       if (selectedItemNum) url += '&itemNumero=' + selectedItemNum;
@@ -1358,33 +1366,52 @@
         const json = await res.json();
         const allData = json.data || [];
 
-        // Poblar selector de prendas solo si está vacío
-        const currentPrendaVal = selectEl.value;
-        if (!selectEl.options.length || selectEl.options[0].value === '') {
-          selectEl.innerHTML = allData.map(p =>
-            `<option value="${p.itemNumero}">#${p.itemNumero} – ${p.descripcion}</option>`
-          ).join('');
-          if (currentPrendaVal && allData.find(p => String(p.itemNumero) === String(currentPrendaVal))) {
-            selectEl.value = currentPrendaVal;
-          }
+        // SE REPUEBLA SIEMPRE, no "solo si esta vacio".
+        //
+        // Esa condicion era el bug: despues de la primera carga el selector no se
+        // reconstruia nunca, asi que al cambiar de colegio seguia ofreciendo las 28
+        // prendas del anterior con la #1 elegida. Un selector que ofrece prendas que
+        // no existen en el ambito actual no es un detalle cosmetico: es la entrada
+        // de una consulta que no puede devolver nada.
+        const previo = selectedItemNum;
+        selectEl.innerHTML = allData.map(x =>
+          `<option value="${escAttr(x.itemNumero)}">#${escAttr(x.itemNumero)} – ${escAttr(x.descripcion)}</option>`
+        ).join('');
+        if (previo && allData.some(x => String(x.itemNumero) === String(previo))) {
+          selectEl.value = String(previo);
         }
 
-        const activeItemNum = selectEl.value || (allData[0] ? String(allData[0].itemNumero) : '');
-        if (!activeItemNum) {
-          container.innerHTML = '<div style="text-align:center; padding:2rem; color:#64748b;">Sin productos disponibles.</div>';
+        if (!allData.length) {
+          container.innerHTML = '<div style="text-align:center; padding:2rem; color:#64748b;">Este ámbito no tiene prendas cargadas.</div>';
           return;
         }
-        const p = allData.find(x => String(x.itemNumero) === String(activeItemNum));
-        if (!p) return;
+
+        // Y SI LA PRENDA PEDIDA NO ESTA EN ESTE AMBITO, SE CAE A LA PRIMERA.
+        //
+        // Antes esta linea era `if (!p) return;` — un return mudo, tres lineas
+        // despues de haber puesto "⏳ Cargando desglose..." en el contenedor. O sea
+        // que el caso de error dejaba la pantalla con el spinner para siempre, que
+        // es exactamente el sintoma reportado: "la pagina no carga". No se colgaba
+        // nada; la funcion terminaba bien y en silencio sobre un cartel de espera.
+        //
+        // Ninguna salida de esta funcion puede dejar el contenedor en "cargando".
+        const activeItemNum = selectEl.value || String(allData[0].itemNumero);
+        const p = allData.find(x => String(x.itemNumero) === String(activeItemNum)) || allData[0];
+        selectEl.value = String(p.itemNumero);
 
         const tallaActual = p.tallaActual;
 
         // Poblar/actualizar selector de tallas con las tallas disponibles de este producto/colegio
         if (tallaSel && p.tallasDisponibles && p.tallasDisponibles.length > 0) {
-          const hasRealOptions = Array.from(tallaSel.options).some(opt => opt.value !== '' && opt.value !== '⏳ cargando...');
-          if (!hasRealOptions) {
+          // Mismo criterio que el selector de prendas: se reconstruye cuando el
+          // JUEGO de tallas cambio, no solo cuando esta vacio. Dos colegios pueden
+          // tener curvas de talla distintas, y ofrecer una talla que la prenda no
+          // tiene devuelve una consulta vacia.
+          const idsNuevos = p.tallasDisponibles.map(t => t.tallaId).join(',');
+          const idsActuales = Array.from(tallaSel.options).map(o => o.value).join(',');
+          if (idsNuevos !== idsActuales) {
             tallaSel.innerHTML = p.tallasDisponibles.map(t =>
-              `<option value="${t.tallaId}">${t.codigo}</option>`
+              `<option value="${escAttr(t.tallaId)}">${escAttr(t.codigo)}</option>`
             ).join('');
           }
           if (tallaActual) {
