@@ -43,6 +43,11 @@ import { inventarioTransacciones, inventario, productos, tallas } from '../datab
 import { desc, eq, and, asc, sql } from 'drizzle-orm';
 import { costearLote } from '../services/calculo/costeoInputs.service';
 import { saveDbToDisk } from '../database/sqljs';
+import {
+  construirContextoFiscal,
+  resolverPrecios,
+  etiquetaModalidad,
+} from '../services/modalidadFiscal';
 
 const api = new Hono();
 
@@ -66,17 +71,26 @@ api.get('/stock', async (c) => {
   const db = (c as any).db;
   const colegioId = alcance(c.req.query('colegioId'));
   const { productoId, tallaId } = c.req.query();
-
   // El COSTO y el PRECIO salen del motor. Es la misma fuente que las matrices, asi que
   // el costo unitario que se ve aca es identico al de Costeo Individual para la misma
   // prenda y talla. Antes podian diferir y nada lo detectaba.
-  const { filas } = await costearLote(db, { colegioId });
+  const { filas, ctx } = await costearLote(db, { colegioId });
 
-  const costeoPorClave = new Map<string, { costoUnitario: number; precioVenta: number; seOfrece: boolean }>();
+  const avisosFiscales: string[] = [];
+  const fiscal = construirContextoFiscal(c, ctx, avisosFiscales);
+
+  const costeoPorClave = new Map<
+    string,
+    { costoUnitario: number; precioVenta: number; precioLista: number; seOfrece: boolean }
+  >();
   for (const f of filas) {
+    // El precio del inventario tambien depende del modo fiscal. Antes era siempre
+    // el de lista, asi que el interruptor no movia esta pantalla.
+    const { precioLista, precioVenta } = resolverPrecios(f.meta.precioVentaBs, fiscal);
     costeoPorClave.set(`${f.meta.productoId}_${f.meta.tallaId}`, {
       costoUnitario: Number(f.resultado.costoUnitarioNeto) || 0,
-      precioVenta: Number(f.meta.precioVentaBs) || 0,
+      precioVenta,
+      precioLista,
       seOfrece: !!f.meta.seOfrece,
     });
   }
@@ -135,6 +149,7 @@ api.get('/stock', async (c) => {
         cantidad,
         costoUnitario: Math.round(costoUnitario * 100) / 100,
         precioVenta: Math.round((costeo ? costeo.precioVenta : 0) * 100) / 100,
+        precioLista: Math.round((costeo ? costeo.precioLista : 0) * 100) / 100,
         valorTotalStock: Math.round(cantidad * costoUnitario * 100) / 100,
         // Se expone aparte y NO se mezcla con el de arriba. inventario.costo_unitario
         // pretende ser el costo al que se adquirio ese stock —costo historico—, que es
@@ -155,9 +170,15 @@ api.get('/stock', async (c) => {
     // Huella, como las tres bandas de la reja de paridad. Si esta pantalla vuelve a
     // leer de otro lado, este campo lo delata.
     fuenteCosto: 'motor-de-costeo',
-    avisos: sinCosteo > 0
-      ? [`${sinCosteo} fila(s) de inventario sin costeo del motor: revisar que la prenda tenga tela, peso y mano de obra cargados.`]
-      : [],
+    modalidad: fiscal.modalidad,
+    modalidadEtiqueta: etiquetaModalidad(fiscal.modalidad),
+    descuentoSinFacturaPct: parseFloat((fiscal.descuentoFraccion * 100).toFixed(2)),
+    avisos: [
+      ...avisosFiscales,
+      ...(sinCosteo > 0
+        ? [`${sinCosteo} fila(s) de inventario sin costeo del motor: revisar que la prenda tenga tela, peso y mano de obra cargados.`]
+        : []),
+    ],
   });
 });
 

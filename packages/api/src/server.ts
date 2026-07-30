@@ -27,6 +27,11 @@ import costeoRoutes from './routes/costeo';
 import snapshotRoutes from './routes/snapshots';
 import { asc, eq } from 'drizzle-orm';
 import { costearLote } from './services/calculo/costeoInputs.service';
+import {
+  construirContextoFiscal,
+  resolverPrecios,
+  etiquetaModalidad,
+} from './services/modalidadFiscal';
 
 const app = new Hono();
 
@@ -199,8 +204,6 @@ app.get('/api/dashboard-resumen', async (c) => {
   const colegioIdRaw = c.req.query('colegioId');
   const colegioId = colegioIdRaw && colegioIdRaw !== 'all' ? colegioIdRaw : undefined;
   const snapshotId = c.req.query('snapshotId');
-  const modalidadF = c.req.query('modalidadF') === 'true';
-  console.log('[dashboard-resumen] modalidadF param:', c.req.query('modalidadF'), '→ modalidadF =', modalidadF);
 
   // El encabezado tiene que mostrar el colegio ELEGIDO, no el primero de la tabla.
   // Con dos colegios, `limit(1)` mostraba siempre el mismo nombre.
@@ -225,35 +228,35 @@ app.get('/api/dashboard-resumen', async (c) => {
   // Tasas reales de la configuración para calcular ambos canales.
   // Se calcula aquí directamente para no depender de si el motor tenía
   // impuestosActivos=true o false al momento de correr.
-  const tasaIvaReal = ctx.tasaIvaFraccion > 0 ? ctx.tasaIvaFraccion : 0.13;
-  const descuentoSinFact = ctx.sysConfig.descuentoSinFactura > 0 ? ctx.sysConfig.descuentoSinFactura : 0.10;
+  const avisosFiscales: string[] = [];
+  const fiscal = construirContextoFiscal(c, ctx, avisosFiscales);
 
-  const costeo = new Map<string, { costo: number; precio: number; margenPct: number }>();
+  // DOS PRECIOS Y NO UNO. Antes esta pantalla guardaba un solo campo `precio` que
+  // era el ingreso NETO, y lo mostraba como si fuera el precio de venta. Por eso
+  // con factura aparecia 87 donde el precio de lista dice 100.
+  //
+  //   precio       lo que se le cobra al cliente   -> columna "Precio" y valorizacion
+  //   ingresoNeto  lo que queda tras el IVA        -> margen y ganancia
+  //
+  // Con factura difieren en el debito fiscal; sin factura son el mismo numero.
+  const costeo = new Map<
+    string,
+    { costo: number; precio: number; ingresoNeto: number; margenPct: number }
+  >();
   for (const f of filas) {
     const costoNeto = Number(f.resultado.costoUnitarioNeto) || 0;
-    const precioLista = Number(f.meta.precioVentaBs) || 0;
+    const { precioVenta, ingresoNeto } = resolverPrecios(f.meta.precioVentaBs, fiscal);
 
-    // Calcular ingreso efectivo directamente desde el precio lista con las tasas reales.
-    // Esto garantiza que siempre haya diferencia entre los dos modos, independientemente
-    // de si el motor tenía impuestosActivos activo o no.
-    let ingresoEfectivo: number;
-    let margenPct: number;
-    if (precioLista > 0) {
-      if (modalidadF) {
-        ingresoEfectivo = precioLista * (1 - tasaIvaReal);
-        margenPct = ingresoEfectivo > 0 ? ((ingresoEfectivo - costoNeto) / ingresoEfectivo) * 100 : 0;
-      } else {
-        ingresoEfectivo = precioLista * (1 - descuentoSinFact);
-        margenPct = ingresoEfectivo > 0 ? ((ingresoEfectivo - costoNeto) / ingresoEfectivo) * 100 : 0;
-      }
-    } else {
-      ingresoEfectivo = 0;
-      margenPct = 0;
-    }
+    // El margen se mide contra el ingreso efectivamente cobrado, no contra el
+    // precio de lista: es la regla que ya aplica costoTotal.service.ts y que
+    // existe para no reportar como ganancia plata que nunca entra al bolsillo.
+    const margenPct =
+      ingresoNeto > 0 ? ((ingresoNeto - costoNeto) / ingresoNeto) * 100 : 0;
 
     costeo.set(`${f.meta.productoId}_${f.meta.tallaId}`, {
       costo: costoNeto,
-      precio: ingresoEfectivo,
+      precio: precioVenta,
+      ingresoNeto,
       margenPct,
     });
   }
@@ -268,11 +271,13 @@ app.get('/api/dashboard-resumen', async (c) => {
   let totalStockUnidades = 0;
   let totalValorCostoBs = 0;
   let totalValorVentaBs = 0;
+  let totalIngresoNetoBs = 0;
 
   const resumenPrendas = productos.map((p: any) => {
     let prodStock = 0;
     let prodCostoBs = 0;
     let prodVentaBs = 0;
+    let prodIngresoNetoBs = 0;
 
     let minCosto = Infinity;
     let maxCosto = 0;
@@ -287,6 +292,7 @@ app.get('/api/dashboard-resumen', async (c) => {
 
       const ct = c2.costo;
       const pv = c2.precio;
+      const inNeto = c2.ingresoNeto;
       const mg = c2.margenPct;
       const inv = stockPorClave.get(clave) || 0;
 
@@ -306,13 +312,18 @@ app.get('/api/dashboard-resumen', async (c) => {
       prodCostoBs += inv * ct;
       // Sin precio de venta se valoriza al costo, igual que antes.
       prodVentaBs += inv * (pv > 0 ? pv : ct);
+      prodIngresoNetoBs += inv * (inNeto > 0 ? inNeto : ct);
     });
 
     totalStockUnidades += prodStock;
     totalValorCostoBs += prodCostoBs;
     totalValorVentaBs += prodVentaBs;
+    totalIngresoNetoBs += prodIngresoNetoBs;
 
-    const gananciaBs = prodVentaBs - prodCostoBs;
+    // La ganancia sale del ingreso NETO, no del precio facturado. Con factura los
+    // dos difieren en el debito fiscal, y contarlo como ganancia seria contar como
+    // propia una plata que se le debe al fisco.
+    const gananciaBs = prodIngresoNetoBs - prodCostoBs;
     const margenPct = margenes.length > 0
       ? margenes.reduce((a, b) => a + b, 0) / margenes.length
       : 0;
@@ -328,6 +339,7 @@ app.get('/api/dashboard-resumen', async (c) => {
       precioMax: maxPrecio > 0 ? parseFloat(maxPrecio.toFixed(2)) : 0,
       valorCostoTotalBs: parseFloat(prodCostoBs.toFixed(2)),
       valorVentaTotalBs: parseFloat(prodVentaBs.toFixed(2)),
+      ingresoNetoTotalBs: parseFloat(prodIngresoNetoBs.toFixed(2)),
       gananciaEstimadaBs: parseFloat(gananciaBs.toFixed(2)),
       margenPromedioPct: parseFloat(margenPct.toFixed(2)),
       // Si el motor no pudo costear ninguna talla, la fila lo dice en vez de mostrar 0.
@@ -335,8 +347,12 @@ app.get('/api/dashboard-resumen', async (c) => {
     };
   });
 
-  const gananciaTotalBs = totalValorVentaBs - totalValorCostoBs;
+  const gananciaTotalBs = totalIngresoNetoBs - totalValorCostoBs;
   const margenPromedioGlobalPct = totalValorCostoBs > 0 ? (gananciaTotalBs / totalValorCostoBs) * 100 : 0;
+  // Lo que se factura menos lo que queda: con factura es el debito fiscal, sin
+  // factura es exactamente 0. Se expone para que la pantalla pueda explicar por
+  // que "Venta - Inversion" no da "Ganancia" en vez de que parezca un error.
+  const ivaDebitoTotalBs = totalValorVentaBs - totalIngresoNetoBs;
 
   const sinCosteo = resumenPrendas.filter((p: any) => p.sinCosteo).map((p: any) => p.itemNumero);
 
@@ -354,16 +370,29 @@ app.get('/api/dashboard-resumen', async (c) => {
     totalStockUnidades,
     totalValorCostoBs: parseFloat(totalValorCostoBs.toFixed(2)),
     totalValorVentaBs: parseFloat(totalValorVentaBs.toFixed(2)),
+    totalIngresoNetoBs: parseFloat(totalIngresoNetoBs.toFixed(2)),
+    ivaDebitoTotalBs: parseFloat(ivaDebitoTotalBs.toFixed(2)),
     gananciaTotalBs: parseFloat(gananciaTotalBs.toFixed(2)),
     margenPromedioGlobalPct: parseFloat(margenPromedioGlobalPct.toFixed(2)),
+    // Modo fiscal con el que se calculo esta respuesta. Huella, igual que
+    // `fuenteCosto`: si la pantalla muestra un modo y el backend calculo el otro,
+    // este campo lo delata en vez de que la diferencia pase inadvertida.
+    modalidad: fiscal.modalidad,
+    modalidadEtiqueta: etiquetaModalidad(fiscal.modalidad),
+    descuentoSinFacturaPct: parseFloat((fiscal.descuentoFraccion * 100).toFixed(2)),
+    tasaIvaPct: parseFloat((fiscal.tasaIvaFraccion * 100).toFixed(2)),
+    impuestosActivos: fiscal.impuestosActivos,
     // Lista de Prendas con Resumen Financiero
     prendas: resumenPrendas,
     // Huella, como las tres bandas de la reja. Si esta pantalla vuelve a leer del Excel,
     // este campo lo delata.
     fuenteCosto: 'motor-de-costeo',
-    avisos: sinCosteo.length > 0
-      ? [`Sin costeo en ninguna talla: item(s) ${sinCosteo.join(', ')}. Revisar tela vinculada, peso de materia prima y mano de obra.`]
-      : [],
+    avisos: [
+      ...avisosFiscales,
+      ...(sinCosteo.length > 0
+        ? [`Sin costeo en ninguna talla: item(s) ${sinCosteo.join(', ')}. Revisar tela vinculada, peso de materia prima y mano de obra.`]
+        : []),
+    ],
   });
 });
 

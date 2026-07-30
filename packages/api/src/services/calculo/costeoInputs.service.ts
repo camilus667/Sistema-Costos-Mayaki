@@ -765,7 +765,7 @@ export async function costearPrendaTodasLasTallas(
   db: any,
   productoId: string,
   snapshotId?: string
-): Promise<{ producto: any; filas: PrendaCosteada[] } | null> {
+): Promise<{ producto: any; filas: PrendaCosteada[]; ctx: ContextoCosteo } | null> {
   const ctx = await cargarContextoCosteo(db, { productoId, snapshotId });
   const producto = ctx.productos[0];
   if (!producto) return null;
@@ -775,7 +775,11 @@ export async function costearPrendaTodasLasTallas(
     const { inputs, meta } = ensamblarInputs(ctx, producto, talla);
     return { meta, inputs, resultado: calcularCostoTotal(inputs) };
   });
-  return { producto, filas };
+  // Devuelve tambien el contexto, igual que costearLote. Sin esto, matriz-prenda
+  // no tenia de donde sacar la tasa de IVA ni el descuento sin factura y habria
+  // que releer la configuracion por su cuenta, que es como un default termina
+  // viviendo en tres lugares distintos.
+  return { producto, filas, ctx };
 }
 
 /** Costea todas las prendas de un colegio, en todas sus tallas. */

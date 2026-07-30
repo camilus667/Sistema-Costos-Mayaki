@@ -91,7 +91,10 @@
         <div class="stat-card stat-card-info">
           <span class="stat-title">VENTA TOTAL PROYECTADA</span>
           <span class="stat-value" id="st-venta-inv-kpi">Bs. 0.00</span>
-          <span class="stat-subtext">recaudación total proyectada</span>
+          <!-- Con factura, lo facturado y lo que queda NO son el mismo numero: la
+               diferencia es el debito fiscal. El subtexto lo explica en vez de que
+               parezca que "Venta - Inversion" no cierra con "Ganancia". -->
+          <span class="stat-subtext" id="st-venta-inv-sub">recaudación total proyectada</span>
         </div>
         <div class="stat-card stat-card-success">
           <span class="stat-title">GANANCIA BRUTA PROYECTADA</span>
@@ -272,8 +275,13 @@
               onchange="generarMatrizPrenda()">
               <option value="">Cargando lista de uniformes...</option>
             </select>
-            <label style="font-size: 0.8rem; color: #94a3b8; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 500; margin-left: 0.75rem;" title="Mostrar desglose tributario (Modalidad F)">
-              <input type="checkbox" id="chk-matriz-regimen-fiscal" onchange="generarMatrizPrenda()" style="cursor: pointer; accent-color: #3b82f6;">
+            <!-- Llama al manejador GLOBAL, no a generarMatrizPrenda(). Antes solo
+                 redibujaba esta matriz sin tocar `modalidadFActual`, asi que el
+                 check cambiaba de aspecto y no pasaba absolutamente nada: ni aca
+                 ni en el resto de las pantallas, y encima quedaba desincronizado
+                 del interruptor del header. -->
+            <label style="font-size: 0.8rem; color: #94a3b8; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 500; margin-left: 0.75rem;" title="Venta con factura: precio de lista con IVA por dentro. Sin factura: precio de lista menos el descuento configurado.">
+              <input type="checkbox" id="chk-matriz-regimen-fiscal" onchange="cambiarModalidadFGlobal(this.checked)" style="cursor: pointer; accent-color: #3b82f6;">
               <span>Modalidad F</span>
             </label>
           </div>
@@ -1166,12 +1174,28 @@
         document.getElementById('st-venta-inv-kpi').textContent = fmtMoney(data.totalValorVentaBs);
         document.getElementById('st-ganancia-kpi').textContent = fmtMoney(data.gananciaTotalBs);
 
+        // El debito fiscal se DICE. Con factura, de lo facturado se va el IVA y por
+        // eso la ganancia no es "venta menos inversion". Sin factura el debito es
+        // cero y el subtexto vuelve al texto de siempre.
+        const ventaSub = document.getElementById('st-venta-inv-sub');
+        if (ventaSub) {
+          const ivaDeb = Number(data.ivaDebitoTotalBs) || 0;
+          ventaSub.textContent = ivaDeb > 0.005
+            ? `facturado · neto de IVA ${fmtMoney(data.totalIngresoNetoBs)}`
+            : 'recaudación total proyectada';
+        }
+
         const pctGananciaInversion = data.totalValorCostoBs > 0 ? ((data.gananciaTotalBs / data.totalValorCostoBs) * 100).toFixed(1) : '0.0';
         document.getElementById('st-ganancia-sub').textContent = `+${pctGananciaInversion}% de ganancia sobre la inversión`;
 
         const titleEl = document.getElementById('resumen-panel-title');
         if (titleEl) {
-          titleEl.innerHTML = `Resumen Ejecutivo de Prendas, Precios y Valorización <span style="background:${modalidadFActual ? '#064e3b' : '#334155'}; color:${modalidadFActual ? '#34d399' : '#fbbf24'}; padding:0.25rem 0.6rem; border-radius:6px; font-size:0.75rem; margin-left:0.5rem; font-weight:700; border:1px solid ${modalidadFActual ? '#059669' : '#475569'};">${modalidadFActual ? 'Modo: Con Factura (IVA 13%)' : 'Modo: Sin Factura (Venta Directa)'}</span>`;
+          const descPct = typeof data.descuentoSinFacturaPct === 'number' ? data.descuentoSinFacturaPct : 10;
+          const ivaPct = typeof data.tasaIvaPct === 'number' ? data.tasaIvaPct : 13;
+          const etiqueta = modalidadFActual
+            ? `Modo: Con Factura (precio de lista, IVA ${ivaPct.toFixed(0)}% por dentro)`
+            : `Modo: Sin Factura (precio de lista − ${descPct.toFixed(0)}%)`;
+          titleEl.innerHTML = `Resumen Ejecutivo de Prendas, Precios y Valorización <span style="background:${modalidadFActual ? '#064e3b' : '#334155'}; color:${modalidadFActual ? '#34d399' : '#fbbf24'}; padding:0.25rem 0.6rem; border-radius:6px; font-size:0.75rem; margin-left:0.5rem; font-weight:700; border:1px solid ${modalidadFActual ? '#059669' : '#475569'};">${etiqueta}</span>`;
         }
 
         const tbody = document.getElementById('tb-resumen-prendas');
@@ -1275,7 +1299,7 @@
       const selectedItemNum = selectEl.value;
       const selectedTallaId = tallaSel ? tallaSel.value : '';
 
-      let url = '/api/inputs/desglose-inteligente-producto?colegioId=' + colegioFiltroActual + getSnapshotQueryParam();
+      let url = '/api/inputs/desglose-inteligente-producto?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam();
       if (selectedItemNum) url += '&itemNumero=' + selectedItemNum;
       if (selectedTallaId) url += '&tallaId=' + selectedTallaId;
 
@@ -2153,7 +2177,7 @@
 
     async function cargarMatrizConsolidada() {
       try {
-        const res = await fetch('/api/calculo/matriz-consolidada?colegioId=' + colegioFiltroActual + getSnapshotQueryParam());
+        const res = await fetch('/api/calculo/matriz-consolidada?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam());
         const json = await res.json();
         if (json.success) {
           rawConsolidadaData = json;
@@ -2420,7 +2444,7 @@
       if (!productoId) return;
 
       try {
-        const res = await fetch('/api/calculo/matriz-prenda/' + productoId + '?colegioId=' + colegioFiltroActual + getSnapshotQueryParam());
+        const res = await fetch('/api/calculo/matriz-prenda/' + productoId + '?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam());
         const json = await res.json();
         if (json.success && json.data) {
           const container = document.getElementById('matriz-container');
@@ -2453,6 +2477,10 @@
 
           const totalCols = tallas.length + 1;
           const showFacturaSection = modalidadFActual;
+          // El backend manda el descuento vigente. No se asume 10 aca: el numero
+          // vive en configuracion_sistema y un default escrito a mano en la
+          // pantalla es exactamente como el IVA termino en tres lugares distintos.
+          const descuentoPct = typeof json.descuentoSinFacturaPct === 'number' ? json.descuentoSinFacturaPct : 10;
 
           const sections = [
             {
@@ -2468,11 +2496,29 @@
               ]
             },
             {
-              title: 'Precio al Público',
+              // El precio que se muestra ahora depende del modo fiscal, y el
+              // encabezado lo DICE. Antes esta seccion se llamaba siempre "Precio
+              // al Publico" y mostraba siempre el de lista, asi que el interruptor
+              // no movia el unico numero que el usuario venia a mirar.
+              title: showFacturaSection
+                ? 'Precio al Público — Con Factura (precio de lista)'
+                : `Precio al Público — Sin Factura (lista − ${descuentoPct.toFixed(0)}%)`,
               color: '#38bdf8',
               bg: 'linear-gradient(90deg, #0369a133, #0f172a)',
               rows: [
-                { name: 'Precio de Venta al Público (Bs.)', desc: 'Precio de lista de venta al público fijado para esta talla.', key: 'precioVenta', isPrice: true, fmt: v => v ? `<strong style="color:#38bdf8; font-size:0.92rem;">${v.toFixed(2)}</strong>` : '-' }
+                {
+                  name: showFacturaSection
+                    ? 'Precio de Venta al Público (Bs.)'
+                    : `Precio de Venta Sin Factura (Bs.)`,
+                  desc: showFacturaSection
+                    ? 'Precio de lista de venta al público. Es el precio con factura: el IVA va por dentro.'
+                    : `Precio de lista menos el descuento por venta directa sin factura (${descuentoPct.toFixed(0)}%).`,
+                  key: 'precioVenta', isPrice: true,
+                  fmt: v => v ? `<strong style="color:#38bdf8; font-size:0.92rem;">${v.toFixed(2)}</strong>` : '-'
+                },
+                ...(showFacturaSection ? [] : [
+                  { name: 'Precio de Lista (referencia)', desc: 'El precio de lista sin el descuento, para comparar.', key: 'precioLista', fmt: v => v ? `<span style="color:#64748b;">${v.toFixed(2)}</span>` : '-' }
+                ])
               ]
             },
             ...(showFacturaSection ? [{
@@ -2532,7 +2578,7 @@
 
     async function cargarInventario() {
       try {
-        const res = await fetch('/api/inventario/stock?colegioId=' + colegioFiltroActual);
+        const res = await fetch('/api/inventario/stock?colegioId=' + colegioFiltroActual + getModalidadFQueryParam());
         const json = await res.json();
         const tbody = document.getElementById('tb-inventario');
         if (json.data && json.data.length > 0) {

@@ -8,6 +8,11 @@ import { productos, tallas, preciosVenta, inventario } from '../database/schema'
 import XLSX from 'xlsx';
 import { findExcelPath } from '../scripts/seed';
 import { resolverPrendaPorItem } from '../services/resolucion.service';
+import {
+  construirContextoFiscal,
+  resolverPrecios,
+  etiquetaModalidad,
+} from '../services/modalidadFiscal';
 
 /** Redondeo de presentacion. El motor ya redondea; esto es para los pesos crudos. */
 const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
@@ -218,8 +223,10 @@ api.get('/matriz-consolidada', async (c) => {
     const colegioIdRaw = c.req.query('colegioId');
     const colegioId = colegioIdRaw && colegioIdRaw !== 'all' ? colegioIdRaw : undefined;
     const snapshotId = c.req.query('snapshotId');
-
     const { ctx, filas } = await costearLote(db, { colegioId, snapshotId });
+
+    const avisosFiscales: string[] = [];
+    const fiscal = construirContextoFiscal(c, ctx, avisosFiscales);
 
     // El inventario no es un concepto de costeo, se consulta aparte.
     let invList: any[] = [];
@@ -247,6 +254,8 @@ api.get('/matriz-consolidada', async (c) => {
     const celdaVacia = () => ({
       costoBruto: 0,
       precioVenta: 0,
+      precioLista: 0,
+      ingresoNetoEfectivo: 0,
       costoUnitarioNeto: 0,
       ingresoNetoConFactura: 0,
       ingresoNetoSinFactura: 0,
@@ -283,10 +292,16 @@ api.get('/matriz-consolidada', async (c) => {
         }
 
         const r = f.resultado;
-        const pv = f.meta.precioVentaBs ?? 0;
+        // `precioVenta` pasa a ser el precio EFECTIVO del modo elegido: el de lista
+        // con factura, y el de lista menos el descuento sin factura. Antes era
+        // siempre el de lista, asi que el interruptor fiscal no movia esta grilla.
+        // `precioLista` se conserva aparte para no perder el dato de origen.
+        const { precioLista, precioVenta: pv, ingresoNeto } = resolverPrecios(f.meta.precioVentaBs, fiscal);
         rowObj.tallas[talla.codigo] = {
           costoBruto: r.costoBruto,
           precioVenta: r2(pv),
+          precioLista: r2(precioLista),
+          ingresoNetoEfectivo: r2(ingresoNeto),
           costoUnitarioNeto: r.costoUnitarioNeto,
           ingresoNetoConFactura: r.ingresoNetoConFactura ?? 0,
           ingresoNetoSinFactura: r.ingresoNetoSinFactura ?? 0,
@@ -311,6 +326,12 @@ api.get('/matriz-consolidada', async (c) => {
       tallas: allTallas.map((t: any) => ({ id: t.id, codigo: t.codigo, orden: t.orden })),
       // Huella para el arnes de paridad: distingue esta version de la heredada.
       implementacion: 'unificada',
+      // Huella del modo fiscal, para que la pantalla pueda verificar que le
+      // respondieron con el modo que pidio.
+      modalidad: fiscal.modalidad,
+      modalidadEtiqueta: etiquetaModalidad(fiscal.modalidad),
+      descuentoSinFacturaPct: parseFloat((fiscal.descuentoFraccion * 100).toFixed(2)),
+      avisos: avisosFiscales,
       data: gridData,
     });
   } catch (e: any) {
@@ -531,12 +552,14 @@ api.get('/matriz-prenda/:productoId', async (c) => {
     const db = (c as any).db;
     const productoId = c.req.param('productoId');
     const snapshotId = c.req.query('snapshotId');
-
     const res = await costearPrendaTodasLasTallas(db, productoId, snapshotId);
     if (!res) {
       return c.json({ success: false, error: 'Producto no encontrado' }, 404);
     }
-    const { producto: prod, filas } = res;
+    const { producto: prod, filas, ctx } = res;
+
+    const avisosFiscales: string[] = [];
+    const fiscal = construirContextoFiscal(c, ctx, avisosFiscales);
 
     const matriz = filas.map((f) => {
       const { meta, resultado } = f;
@@ -547,6 +570,13 @@ api.get('/matriz-prenda/:productoId', async (c) => {
       // combinacion que no existe. Reemplaza al viejo `isProduced`, que era una
       // heuristica sobre peso y componentes.
       const existe = meta.seOfrece;
+
+      // El precio que se MUESTRA depende del modo fiscal. Con factura es el de
+      // lista; sin factura, el de lista menos el descuento comercial. Antes esta
+      // fila devolvia siempre `meta.precioVentaBs` crudo, y por eso la pantalla de
+      // Costeo Multitalla mostraba el mismo precio en los dos modos: lo unico que
+      // cambiaba era que aparecia o desaparecia una seccion de la tabla.
+      const { precioLista, precioVenta, ingresoNeto } = resolverPrecios(meta.precioVentaBs, fiscal);
 
       return {
         tallaId: meta.tallaId,
@@ -565,7 +595,9 @@ api.get('/matriz-prenda/:productoId', async (c) => {
         // para que lo absorbido iguale el pool.
         costoIndirecto: existe ? resultado.costoIndirecto : 0,
         costoUnitarioNeto: existe ? resultado.costoUnitarioNeto : 0,
-        precioVenta: meta.precioVentaBs,
+        precioVenta: existe ? r2(precioVenta) : precioVenta > 0 ? r2(precioVenta) : null,
+        precioLista: precioLista > 0 ? r2(precioLista) : null,
+        ingresoNetoEfectivo: existe ? r2(ingresoNeto) : null,
         ingresoNetoConFactura: existe ? resultado.ingresoNetoConFactura : null,
         ingresoNetoSinFactura: existe ? resultado.ingresoNetoSinFactura : null,
         utilidadConFactura: existe ? resultado.utilidadConFactura : null,
@@ -595,6 +627,11 @@ api.get('/matriz-prenda/:productoId', async (c) => {
         factorComplejidad: prod.factorComplejidad,
         modoCosteo: prod.modoCosteo === 'adquirido' ? 'adquirido' : 'confeccion',
       },
+      modalidad: fiscal.modalidad,
+      modalidadEtiqueta: etiquetaModalidad(fiscal.modalidad),
+      descuentoSinFacturaPct: parseFloat((fiscal.descuentoFraccion * 100).toFixed(2)),
+      tasaIvaPct: parseFloat((fiscal.tasaIvaFraccion * 100).toFixed(2)),
+      avisos: avisosFiscales,
       data: matriz,
     });
   } catch (e: any) {

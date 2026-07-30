@@ -325,7 +325,20 @@ export function calcularCostoTotal(inputs: CalculoInputs): CalculoResultado {
 
     // Con factura: el debito fiscal va POR DENTRO del precio, el 13% se calcula
     // sobre el bruto. De 100 quedan 87 Bs.
-    const netoCon = pv.times(new Decimal(1).minus(tasa));
+    //
+    // Y SOLO SI EL CHECK ESTA PRENDIDO. `impuestos` se declaraba en la linea de
+    // arriba y NO SE USABA en ningun lado: el IVA se descontaba siempre, incluso
+    // con `impuestosActivos` en false. La constante estaba calculada, el comentario
+    // de la interfaz prometia "con impuestosActivos en false, los dos son el precio
+    // de lista sin ajustar", y el test de la Fase 3 lo exigia — pero el codigo hacia
+    // otra cosa. main venia en 53 de 54 por esto.
+    //
+    // No es cosmetico, y explica parte del sintoma reportado por el usuario:
+    // `impuestos_activos` NO existe como fila en configuracion_sistema, asi que
+    // corre el default false y toda la aplicacion deberia mostrar 100 como ingreso
+    // con factura. Mostraba 87. El canal CON factura aparecia mas barato que el
+    // canal SIN factura, que es exactamente lo que se veia mal en pantalla.
+    const netoCon = impuestos ? pv.times(new Decimal(1).minus(tasa)) : pv;
 
     // Sin factura: descuento comercial y sin debito fiscal. El descuento se aplica
     // aunque el check de impuestos este apagado, porque es un descuento de precio,

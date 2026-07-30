@@ -8,6 +8,11 @@ import { getSystemConfig, setSystemConfig } from '../services/configService';
 import { cargarContextoCosteo, ensamblarInputs } from '../services/calculo/costeoInputs.service';
 import { calcularCostoTotal } from '../services/calculo/costoTotal.service';
 import { resolverPrendaPorItem, nuevoIdHex } from '../services/resolucion.service';
+import {
+  construirContextoFiscal,
+  resolverPrecios,
+  etiquetaModalidad,
+} from '../services/modalidadFiscal';
 
 /** Redondeo de presentacion. El motor ya redondea sus propias salidas. */
 const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
@@ -57,7 +62,33 @@ api.put('/configuracion', async (c) => {
     await setSystemConfig(db, 'impuestos_activos', body.impuestosActivos ? 'true' : 'false');
   }
   if (body.descuentoSinFactura !== undefined) {
-    await setSystemConfig(db, 'descuento_sin_factura', String(body.descuentoSinFactura));
+    // SE NORMALIZA AL GUARDAR, no solo al leer. El campo acepta tanto 10 como
+    // 0.10 porque las dos formas son razonables de tipear, pero en la base queda
+    // SIEMPRE una fraccion.
+    //
+    // Guardar el numero crudo era un agujero real: `1 - 10` da -9, o sea un precio
+    // de venta NEGATIVO nueve veces el original, a un solo tecleo de distancia. Y
+    // no habria saltado a la vista, porque hoy la fila `descuento_sin_factura` ni
+    // siquiera existe en configuracion_sistema —corre el default 0,1 de
+    // configService— asi que el defecto estaba latente esperando a que alguien
+    // abriera esta pantalla por primera vez.
+    //
+    // La normalizacion al leer (descuentoSinFacturaComoFraccion) se mantiene igual:
+    // es la que protege a las bases que ya tengan el valor mal cargado.
+    const crudo = Number(body.descuentoSinFactura);
+    const fraccion = Number.isFinite(crudo) && crudo > 1 ? crudo / 100 : crudo;
+    if (!Number.isFinite(fraccion) || fraccion < 0 || fraccion > 0.95) {
+      return c.json(
+        {
+          success: false,
+          error:
+            `Descuento sin factura invalido (${body.descuentoSinFactura}). ` +
+            'Se admite 0 a 0.95 como fraccion, o 0 a 95 como porcentaje.',
+        },
+        400
+      );
+    }
+    await setSystemConfig(db, 'descuento_sin_factura', String(fraccion));
   }
 
   // FASE 4. El denominador anual de los indirectos.
@@ -1003,8 +1034,10 @@ api.get('/desglose-inteligente-producto', async (c) => {
     const colegioId = colegioIdRaw && colegioIdRaw !== 'all' ? colegioIdRaw : undefined;
     const tallaIdParam = c.req.query('tallaId') || null;
     const snapshotId = c.req.query('snapshotId');
-
     const ctx = await cargarContextoCosteo(db, { colegioId, snapshotId });
+
+    const avisosFiscales: string[] = [];
+    const fiscal = construirContextoFiscal(c, ctx, avisosFiscales);
     const sysConfig = ctx.sysConfig;
 
     const data = ctx.productos.map((p: any) => {
@@ -1066,6 +1099,10 @@ api.get('/desglose-inteligente-producto', async (c) => {
           },
           costoDirectoTotalBs: 0,
           costoUnitarioNetoBs: 0,
+          precioListaBs: null,
+          precioVentaEfectivoBs: null,
+          ingresoNetoEfectivoBs: null,
+          margenEfectivoPct: null,
           ingresoNetoConFacturaBs: null,
           ingresoNetoSinFacturaBs: null,
           margenConFacturaPct: null,
@@ -1077,6 +1114,15 @@ api.get('/desglose-inteligente-producto', async (c) => {
 
       const { inputs, meta } = ensamblarInputs(ctx, p, tallaObj);
       const res = calcularCostoTotal(inputs);
+
+      // El desglose tambien tiene que hablar del modo elegido, no de los dos a la
+      // vez. Los campos por canal se conservan —los usa el detalle— pero ahora hay
+      // un precio y un margen EFECTIVOS, que son los que la pantalla muestra.
+      const { precioLista, precioVenta, ingresoNeto } = resolverPrecios(meta.precioVentaBs, fiscal);
+      const margenEfectivoPct =
+        ingresoNeto > 0
+          ? Math.round(((ingresoNeto - res.costoUnitarioNeto) / ingresoNeto) * 10000) / 100
+          : null;
 
       return {
         productoId: p.id,
@@ -1124,6 +1170,10 @@ api.get('/desglose-inteligente-producto', async (c) => {
         // conceptos — costoAntesImpuestosBs, costoTotalProduccionBs y
         // precioFinalConIvaBs — y los dos ultimos eran el mismo numero inflado.
         costoUnitarioNetoBs: res.costoUnitarioNeto,
+        precioListaBs: precioLista > 0 ? r2(precioLista) : null,
+        precioVentaEfectivoBs: precioVenta > 0 ? r2(precioVenta) : null,
+        ingresoNetoEfectivoBs: ingresoNeto > 0 ? r2(ingresoNeto) : null,
+        margenEfectivoPct,
         ingresoNetoConFacturaBs: res.ingresoNetoConFactura,
         ingresoNetoSinFacturaBs: res.ingresoNetoSinFactura,
         margenConFacturaPct: res.margenConFactura,
@@ -1142,7 +1192,14 @@ api.get('/desglose-inteligente-producto', async (c) => {
       };
     });
 
-    return c.json({ success: true, data });
+    return c.json({
+      success: true,
+      modalidad: fiscal.modalidad,
+      modalidadEtiqueta: etiquetaModalidad(fiscal.modalidad),
+      descuentoSinFacturaPct: parseFloat((fiscal.descuentoFraccion * 100).toFixed(2)),
+      avisos: avisosFiscales,
+      data,
+    });
   } catch (e: any) {
     console.error('desglose-inteligente-producto:', e);
     return c.json({ success: false, error: e?.message || String(e) }, 500);
