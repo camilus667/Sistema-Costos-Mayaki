@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { codigoTallaCanonico, bandaManoObra } from '../services/tallas';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -94,8 +95,11 @@ export async function seedData(db: any) {
     tallas = await db.insert(schema.tallas).values(
       tallasHeader.map((codigo: any, idx: number) => ({
         colegioId: colegio.id,
-        codigo: String(codigo),
-        nombre: `Talla ${codigo}`,
+        // NORMALIZADO AL INSERTAR. Antes se tomaba crudo del encabezado del Excel,
+        // asi que la forma de la clave la decidia una planilla. Una base nueva nace
+        // con la forma canonica sin importar como venga el archivo.
+        codigo: codigoTallaCanonico(codigo),
+        nombre: `Talla ${codigoTallaCanonico(codigo)}`,
         orden: idx + 1,
         activo: true,
       }))
@@ -318,8 +322,9 @@ export async function seedData(db: any) {
       tallas.forEach((talla: any) => {
         const code = talla.codigo;
         let costoBs = g3;
-        if (['2', '4', '6', '8', '10'].includes(code)) costoBs = g1;
-        else if (['12', '14', '16/34', '36/XS', '38/S'].includes(code)) costoBs = g2;
+        const banda = bandaManoObra(code);
+        if (banda === 1) costoBs = g1;
+        else if (banda === 2) costoBs = g2;
 
         moInserts.push({
           productoId: prod.id,

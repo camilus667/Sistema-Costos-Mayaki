@@ -13,6 +13,7 @@ import {
   resolverPrecios,
   etiquetaModalidad,
 } from '../services/modalidadFiscal';
+import { bandaManoObra, esDeBanda } from '../services/tallas';
 
 /** Redondeo de presentacion. El motor ya redondea sus propias salidas. */
 const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
@@ -779,9 +780,13 @@ api.get('/mano-de-obra', async (c) => {
   const data = allProds.map((prod: any) => {
     const excelMo = moExcelMap.get(prod.itemNumero) || { grupo1: 0, grupo2: 0, grupo3: 0 };
 
-    const tGroup1 = allTallas.find((t: any) => ['2', '4', '6', '8', '10'].includes(t.codigo));
-    const tGroup2 = allTallas.find((t: any) => ['12', '14', '16/34', '36/XS', '38/S'].includes(t.codigo));
-    const tGroup3 = allTallas.find((t: any) => ['40/M', '42/L', '44/XL', '46/2XL', '48/3XL', '50/4XL'].includes(t.codigo));
+    // Las tres bandas salen de services/tallas.ts y la comparacion NORMALIZA el
+    // codigo. Antes estaban escritas a mano aca, asi que renombrar `2` a `02` habria
+    // hecho que `find` no encontrara ninguna talla del grupo 1 y la pantalla cayera
+    // al valor del Excel en vez del de la base, sin avisar.
+    const tGroup1 = allTallas.find((t: any) => esDeBanda(t.codigo, 1));
+    const tGroup2 = allTallas.find((t: any) => esDeBanda(t.codigo, 2));
+    const tGroup3 = allTallas.find((t: any) => esDeBanda(t.codigo, 3));
 
     const g1 = tGroup1 ? (moDbMap.get(`${prod.id}_${tGroup1.id}`) ?? excelMo.grupo1) : excelMo.grupo1;
     const g2 = tGroup2 ? (moDbMap.get(`${prod.id}_${tGroup2.id}`) ?? excelMo.grupo2) : excelMo.grupo2;
@@ -880,8 +885,12 @@ api.put('/mano-de-obra/:productoId', async (c) => {
     for (const tallaObj of allTallas) {
       const code = tallaObj.codigo;
       let costoBs = Number(grupo3) || 0;
-      if (['2', '4', '6', '8', '10'].includes(code)) costoBs = Number(grupo1) || 0;
-      else if (['12', '14', '16/34', '36/XS', '38/S'].includes(code)) costoBs = Number(grupo2) || 0;
+      // El camino de ESCRITURA. Aca la lista a mano era mas grave que en la lectura:
+      // con los codigos renombrados, la mano de obra de las tallas chicas se habria
+      // guardado con el costo de las grandes. Sin error y con status 200.
+      const banda = bandaManoObra(code);
+      if (banda === 1) costoBs = Number(grupo1) || 0;
+      else if (banda === 2) costoBs = Number(grupo2) || 0;
 
       await db.delete(manoObra).where(and(eq(manoObra.productoId, prod.id), eq(manoObra.tallaId, tallaObj.id)));
       await db.insert(manoObra).values({
