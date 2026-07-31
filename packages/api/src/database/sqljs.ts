@@ -1,7 +1,10 @@
 // @ts-nocheck
 import { drizzle } from 'drizzle-orm/sql-js';
 import * as schemaModule from './schema';
-import { seedData } from '../scripts/seed';
+// seedData YA NO SE IMPORTA a proposito. Abrir la base no siembra: ver el bloque del final
+// de getDb(). El sembrado vive solo en src/scripts/seed.ts y se corre a mano con
+// `pnpm db:seed`. Dejar el import aunque no se use invitaria a volver a llamarlo.
+// import { seedData } from '../scripts/seed';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -441,27 +444,46 @@ export async function getDb(opciones: OpcionesGetDb = {}) {
     return dbDrizzle;
   }
 
+  // ---------------------------------------------------------------------------
+  // ABRIR LA BASE ES UNA OPERACION DE LECTURA. No siembra y no escribe el archivo.
+  //
+  // DECISION DEL USUARIO, 31-jul-2026, textual: "ya no quiero nada del sembrado desde
+  // CAMBRIDGE.xlsx, los datos ya estan en la bd, quita completamente el sembrado de la
+  // logica". Los datos definitivos viven en la base y el Excel no tiene nada que aportar.
+  //
+  // QUE HACIA ANTES, y por que estaba mal aunque no perdiera datos:
+  //
+  //   1. Llamaba a `seedData` en las DOS ramas —base vacia y base cargada— asi que abria y
+  //      parseaba CAMBRIDGE.xlsx en cada arranque. El servidor dependia de un archivo que
+  //      ya no aporta nada: moverlo rompia el arranque.
+  //
+  //   2. Llamaba a `saveDbToDisk()` aunque `seedData` no hubiera insertado una sola fila.
+  //      Eso convertia "abrir la base" en una ESCRITURA, y tuvo una consecuencia concreta:
+  //      un arranque que despues fallo por el puerto ocupado ya habia reescrito el archivo
+  //      de la base del usuario antes de morirse.
+  //
+  //   3. Imprimia "Todos los datos fijos han sido completamente insertados" cuando no
+  //      inserto nada. Un mensaje que afirma mas de lo que hizo es peor que ninguno.
+  //
+  //   4. Dejaba una trampa: las guardas de `seedData` son "si la tabla esta vacia". El dia
+  //      que una tabla quedara vacia —un borrado, una restauracion incompleta— el arranque
+  //      siguiente la resembraba desde el Excel, en silencio y sin que nadie lo pidiera.
+  //
+  // Las MIGRACIONES no se tocan y siguen corriendo arriba: los CREATE TABLE IF NOT EXISTS,
+  // los ALTER TABLE y los indices son idempotentes y no dependen de ningun Excel.
+  //
+  // `seedData` sigue existiendo en src/scripts/seed.ts, alcanzable solo a mano con
+  // `pnpm db:seed`, para una instalacion desde cero. NADA lo llama automaticamente.
+  // ---------------------------------------------------------------------------
   if (rowCount > 0) {
-    console.log(`✅ Base de datos persistente cargada desde disco (${dbPath}) con ${rowCount} colegio(s).`);
-    // OJO: esto NO es solo "migraciones pendientes". `seedData` protege la
-    // mayoria de las tablas con una guarda de tabla vacia, pero a `mano_obra` le
-    // hace DELETE y INSERT sin condicion en cada llamada. O sea que abrir la
-    // base reescribe las 432 tarifas de mano de obra desde el Excel y descarta
-    // cualquier edicion hecha desde la UI. Pendiente de decision del usuario.
-    try {
-      await seedData(dbDrizzle);
-      saveDbToDisk();
-    } catch (err) {
-      console.error('Error al ejecutar migraciones:', err);
-    }
+    console.log(`✅ Base de datos cargada desde disco (${dbPath}) con ${rowCount} colegio(s).`);
   } else {
-    console.log(`🌱 Base de datos vacía o nueva. Ejecutando sembrado inicial desde Excel (una sola vez)...`);
-    try {
-      await seedData(dbDrizzle);
-      saveDbToDisk();
-    } catch (err) {
-      console.error('Error al poblar la base de datos local:', err);
-    }
+    // Una base vacia ya NO se siembra sola. Se dice, con la instruccion exacta, en vez de
+    // rellenarla con datos de otro colegio a espaldas del usuario.
+    console.warn(
+      `⚠️  La base en ${dbPath} no tiene ningun colegio. No se siembra nada automaticamente.\n` +
+      `    Si es una instalacion nueva y queres los datos de ejemplo: pnpm db:seed`
+    );
   }
 
   return dbDrizzle;
