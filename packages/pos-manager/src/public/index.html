@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestor de Matrices POS - Sistema Mayaki</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    .pos-container { padding: 18px; max-width: 100%; margin: 0 auto; }
+    .pos-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; background: var(--bg-card); padding: 14px 18px; border-radius: var(--radius-lg); border: 1px solid var(--border); }
+    .pos-header h1 { font-size: 1.25rem; font-weight: 700; color: var(--text-main); }
+    .pos-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    
+    .btn { padding: 5px 10px; border-radius: var(--radius-sm); font-weight: 600; font-size: 0.8rem; cursor: pointer; border: 1px solid transparent; transition: all var(--transition-fast); display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+    .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary-border); }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-secondary { background: #1e293b; color: var(--text-main); border-color: var(--border-light); }
+    .btn-secondary:hover { background: #334155; }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-success:hover { filter: brightness(1.1); }
+    .btn-danger { background: var(--danger); color: #fff; }
+
+    .nav-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; overflow-x: auto; padding-bottom: 2px; }
+    .nav-tab { padding: 7px 12px; background: transparent; border: none; color: var(--text-muted); font-weight: 600; font-size: 0.82rem; cursor: pointer; border-radius: var(--radius-md) var(--radius-md) 0 0; border-bottom: 2px solid transparent; white-space: nowrap; transition: all var(--transition-fast); }
+    .nav-tab:hover { color: var(--text-main); background: rgba(255,255,255,0.03); }
+    .nav-tab.active { color: var(--primary); border-bottom-color: var(--primary); background: var(--primary-subtle); }
+    .nav-tab.ref-tab { color: #94a3b8; }
+
+    .section-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 8px; color: var(--text-main); display: flex; justify-content: space-between; align-items: center; }
+    .section-subtitle { font-size: 0.75rem; font-weight: 400; color: var(--text-muted); }
+
+    .table-wrapper { background: var(--bg-card); border-radius: var(--radius-lg); border: 1px solid var(--border); overflow-x: auto; box-shadow: var(--shadow-md); margin-bottom: 20px; }
+    .matrix-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    
+    .matrix-table th { background: #0f172a; padding: 6px 3px; text-align: center; border-bottom: 1px solid var(--border); border-right: 1px solid rgba(255,255,255,0.05); font-weight: 600; color: var(--text-subtle); position: sticky; top: 0; white-space: nowrap; }
+    .matrix-table th.cod-col { width: 74px; min-width: 74px; max-width: 74px; text-align: center; }
+    .matrix-table th.prenda-col { width: 145px; min-width: 145px; max-width: 145px; text-align: left; padding-left: 8px; }
+    .matrix-table th.size-col { width: 50px; min-width: 50px; max-width: 50px; }
+    .matrix-table th.subtotal-col { background: #1e293b; color: var(--primary); font-weight: 700; width: 74px; min-width: 74px; max-width: 74px; }
+    
+    .matrix-table td { padding: 3px 3px; border-bottom: 1px solid rgba(255,255,255,0.04); border-right: 1px solid rgba(255,255,255,0.03); text-align: center; }
+    .matrix-table td.cod-cell { text-align: center; width: 74px; }
+    .matrix-table td.prenda-cell { text-align: left; padding-left: 8px; font-weight: 600; color: var(--text-main); width: 145px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.78rem; }
+    .matrix-table td.subtotal-cell { font-weight: 700; color: var(--text-main); background: rgba(99,102,241,0.06); width: 74px; font-variant-numeric: tabular-nums; }
+    .matrix-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* Badge idéntico al sistema principal (.col-item) */
+    .col-item {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 60px;
+      height: 20px;
+      padding: 0 0.35rem;
+      background: var(--primary-subtle);
+      color: #818cf8;
+      border: 1px solid var(--primary-border);
+      border-radius: var(--radius-sm);
+      font-size: 0.74rem;
+      font-weight: 700;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .cell-input { width: 42px; padding: 2px 1px; background: var(--bg-input); border: 1px solid var(--border-light); border-radius: var(--radius-sm); color: var(--text-main); text-align: center; font-size: 0.78rem; font-weight: 600; }
+    .cell-input:focus { border-color: var(--primary); outline: none; box-shadow: var(--shadow-glow); }
+    .cell-input.saving { border-color: var(--warning); }
+    .cell-input.saved { border-color: var(--success); }
+
+    .badge-no-inv { font-size: 0.62rem; padding: 1px 3px; background: rgba(239,68,68,0.15); color: #f87171; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); white-space: nowrap; }
+    .badge-ref { font-size: 0.78rem; padding: 5px 10px; background: rgba(56,189,248,0.12); color: #38bdf8; border-radius: 6px; border: 1px solid rgba(56,189,248,0.25); display: inline-block; margin-bottom: 14px; }
+
+    /* Modal Ampliado para Orden de Catálogo */
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.75); display: flex; justify-content: center; align-items: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity var(--transition-fast); }
+    .modal-overlay.open { opacity: 1; pointer-events: auto; }
+    .modal-content { background: var(--bg-card); width: 95%; max-width: 640px; padding: 18px; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-md); max-height: 88vh; overflow-y: auto; }
+    
+    #ordenModal .modal-content { max-width: 860px; }
+
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .modal-header h2 { font-size: 1.1rem; }
+    .close-btn { background: none; border: none; color: var(--text-muted); font-size: 1.3rem; cursor: pointer; }
+
+    .snap-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; background: var(--bg-body); border-radius: var(--radius-md); border: 1px solid var(--border); margin-bottom: 6px; }
+    .snap-info h4 { font-size: 0.85rem; font-weight: 600; }
+    .snap-info p { font-size: 0.75rem; color: var(--text-muted); }
+
+    /* Lista del Modal de Orden (Soporta muchas prendas) */
+    #ordenItemsList { max-height: 560px; overflow-y: auto; padding-right: 6px; margin-bottom: 14px; }
+    .order-list-item { display: flex; justify-content: space-between; align-items: center; padding: 7px 12px; background: var(--bg-body); border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 6px; cursor: grab; user-select: none; transition: all 0.15s ease; }
+    .order-list-item:hover { background: rgba(255,255,255,0.04); border-color: var(--primary-border); }
+    .order-list-item.dragging { opacity: 0.4; border-color: var(--primary); background: var(--primary-subtle); }
+    .order-list-item .item-title { font-weight: 600; font-size: 0.84rem; color: var(--text-main); }
+  </style>
+</head>
+<body>
+
+  <div class="pos-container">
+    <header class="pos-header">
+      <div>
+        <h1>Gestor de Matrices POS</h1>
+        <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: 2px;">
+          Edición independiente de precios y stock por colegio, exportación multi-hoja y regeneración del POS de 38 columnas.
+        </p>
+      </div>
+
+      <div class="pos-actions">
+        <label class="btn btn-primary">
+          Cargar POS (.xlsx)
+          <input type="file" id="fileInput" accept=".xlsx" style="display: none;">
+        </label>
+        <button class="btn btn-secondary" onclick="abrirModalOrdenCatalogo()">Orden de Catálogo</button>
+        <button class="btn btn-secondary" onclick="exportarExcelGlobal()">Excel Global (Todas)</button>
+        <button class="btn btn-success" onclick="exportarPos38()">Export POS (38 Cols)</button>
+        <button class="btn btn-secondary" onclick="abrirModalSnapshots()">Instantáneas</button>
+      </div>
+    </header>
+
+    <div id="statusBanner" style="display: none; padding: 8px 12px; border-radius: var(--radius-md); margin-bottom: 12px; font-size: 0.82rem; font-weight: 500;"></div>
+
+    <nav class="nav-tabs" id="tabsNav"></nav>
+
+    <main id="mainContent">
+      <div style="text-align: center; padding: 60px; color: var(--text-muted);">
+        Cargando matrices del POS...
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal Instantáneas -->
+  <div class="modal-overlay" id="snapshotModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Gestor de Instantáneas POS</h2>
+        <button class="close-btn" onclick="cerrarModalSnapshots()">&times;</button>
+      </div>
+
+      <div style="margin-bottom: 14px; padding: 10px; background: var(--bg-body); border-radius: var(--radius-md); border: 1px solid var(--border);">
+        <h4 style="margin-bottom: 4px; font-size: 0.82rem;">Crear Nueva Instantánea</h4>
+        <div style="display: flex; gap: 6px;">
+          <input type="text" id="snapNombre" placeholder="Nombre de instantánea" class="cell-input" style="width: 100%; text-align: left; padding: 5px 8px;">
+          <button class="btn btn-primary" onclick="crearSnapshot()">Guardar</button>
+        </div>
+      </div>
+
+      <h4 style="margin-bottom: 6px; font-size: 0.82rem; color: var(--text-subtle);">Historial de Respaldos</h4>
+      <div id="snapshotList">
+        <p style="color: var(--text-muted); font-size: 0.8rem;">Cargando instantáneas...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Orden de Catálogo Ampliado -->
+  <div class="modal-overlay" id="ordenModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Orden del Catálogo (<span id="modalGrupoNombre"></span>)</h2>
+        <button class="close-btn" onclick="cerrarModalOrdenCatalogo()">&times;</button>
+      </div>
+
+      <p style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 12px;">
+        Arrastra las prendas o usa ▲ Subir / ▼ Bajar para definir el orden permanente del colegio. El orden configurado se mantendrá guardado permanentemente en la base de datos al importar nuevos archivos POS.xlsx.
+      </p>
+
+      <div id="ordenItemsList"></div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px;">
+        <button class="btn btn-secondary" onclick="cerrarModalOrdenCatalogo()">Cancelar</button>
+        <button class="btn btn-primary" onclick="guardarOrdenCatalogoModal()">Guardar Orden Permanente</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let grupoActual = 'Cambridge';
+    let gruposData = [];
+    let matrizDataActual = null;
+    let ordenModalItems = [];
+
+    async function cargarGrupos() {
+      try {
+        const res = await fetch('/api/pos/grupos');
+        const json = await res.json();
+        if (json.success && json.data.length > 0) {
+          gruposData = json.data;
+          renderTabs();
+          cargarMatriz(grupoActual);
+        } else {
+          document.getElementById('mainContent').innerHTML = `
+            <div style="text-align: center; padding: 60px;">
+              <h3>No hay datos cargados en el POS Manager</h3>
+              <p style="color: var(--text-muted); margin-top: 8px;">Haz clic en <b>"Cargar POS (.xlsx)"</b> para importar pos2.xlsx o un export del POS.</p>
+            </div>
+          `;
+        }
+      } catch (err) {
+        mostrarNotificacion('Error al conectar con la API: ' + err.message, 'danger');
+      }
+    }
+
+    function renderTabs() {
+      const nav = document.getElementById('tabsNav');
+      nav.innerHTML = gruposData.map(g => `
+        <button class="nav-tab ${g.nombre === grupoActual ? 'active' : ''} ${g.soloReferencia ? 'ref-tab' : ''}" 
+                onclick="cambiarGrupo('${g.nombre}')">
+          ${g.nombre} <small>(${g.totalProductos})</small>
+        </button>
+      `).join('');
+    }
+
+    function cambiarGrupo(grupo) {
+      grupoActual = grupo;
+      renderTabs();
+      cargarMatriz(grupoActual);
+    }
+
+    async function cargarMatriz(grupo) {
+      const main = document.getElementById('mainContent');
+      main.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-muted);">Cargando...</div>';
+
+      try {
+        if (grupo === 'Empresas y General') {
+          const res = await fetch('/api/pos/referencia');
+          const json = await res.json();
+          renderTablaReferencia(json.data);
+        } else {
+          const res = await fetch(`/api/pos/matriz/${encodeURIComponent(grupo)}`);
+          const json = await res.json();
+          matrizDataActual = json.data;
+          renderMatricesSeparadas(json.data);
+        }
+      } catch (err) {
+        main.innerHTML = `<div style="color: var(--danger); padding: 20px;">Error al cargar matriz: ${err.message}</div>`;
+      }
+    }
+
+    function renderMatricesSeparadas(matriz) {
+      const main = document.getElementById('mainContent');
+
+      // TABLA 1: PRECIOS POS
+      let htmlPrecios = `
+        <div class="section-title">
+          <div>
+            <span>Matriz de Precios POS (${matriz.grupo})</span>
+            <span class="section-subtitle">Precios unitarios en Bs por talla (Suma por fila - Referencial)</span>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button class="btn btn-secondary" onclick="exportarPreciosExcel()">Excel Precios</button>
+            <button class="btn btn-secondary" onclick="exportarPreciosPdf()">PDF Precios</button>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table class="matrix-table" id="tablaPrecios">
+            <thead>
+              <tr>
+                <th class="cod-col">Cod</th>
+                <th class="prenda-col">Prenda</th>
+                ${matriz.columnasTallas.map(t => `<th class="size-col">${t}</th>`).join('')}
+                <th class="subtotal-col">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      matriz.filas.forEach((fila, rowIdx) => {
+        const codBadge = `<span class="col-item">${fila.cod || 'CC-01'}</span>`;
+        let subtotalRowPrecio = 0;
+
+        let celdasHtml = '';
+        matriz.columnasTallas.forEach(talla => {
+          const celda = fila.celdas[talla];
+          if (!celda) {
+            celdasHtml += '<td style="color: var(--text-subtle);">-</td>';
+          } else {
+            const precioVal = celda.precioPos !== null && celda.precioPos !== undefined ? celda.precioPos : '';
+            if (precioVal !== '') {
+              subtotalRowPrecio += Number(precioVal);
+            }
+            celdasHtml += `
+              <td>
+                <input type="number" step="0.5" class="cell-input input-precio" 
+                       data-rowidx="${rowIdx}"
+                       value="${precioVal}" 
+                       onchange="guardarCelda('${celda.id}', 'precioPos', this, ${rowIdx}, 'precio')" />
+              </td>
+            `;
+          }
+        });
+
+        subtotalRowPrecio = Math.round(subtotalRowPrecio * 100) / 100;
+
+        htmlPrecios += `
+          <tr>
+            <td class="cod-cell">${codBadge}</td>
+            <td class="prenda-cell" title="${fila.nombreLimpio}">${fila.nombreLimpio}</td>
+            ${celdasHtml}
+            <td class="subtotal-cell subtotal-precio-${rowIdx}">${subtotalRowPrecio}</td>
+          </tr>
+        `;
+      });
+
+      htmlPrecios += '</tbody></table></div>';
+
+      // TABLA 2: INVENTARIO / STOCK
+      const totalesTallasStock = {};
+      let granTotalStock = 0;
+
+      matriz.columnasTallas.forEach(t => totalesTallasStock[t] = 0);
+
+      let htmlStock = `
+        <div class="section-title">
+          <div>
+            <span>Matriz de Inventario / Stock (${matriz.grupo})</span>
+            <span class="section-subtitle">Cantidades disponibles en general por talla (Suma por fila - Total Unidades)</span>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button class="btn btn-secondary" onclick="exportarStockExcel()">Excel Stock</button>
+            <button class="btn btn-secondary" onclick="exportarStockPdf()">PDF Stock</button>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table class="matrix-table" id="tablaStock">
+            <thead>
+              <tr>
+                <th class="cod-col">Cod</th>
+                <th class="prenda-col">Prenda</th>
+                ${matriz.columnasTallas.map(t => `<th class="size-col">${t}</th>`).join('')}
+                <th class="subtotal-col">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      matriz.filas.forEach((fila, rowIdx) => {
+        const codBadge = `<span class="col-item">${fila.cod || 'CC-01'}</span>`;
+        let subtotalRowStock = 0;
+
+        let celdasHtml = '';
+        matriz.columnasTallas.forEach(talla => {
+          const celda = fila.celdas[talla];
+          if (!celda) {
+            celdasHtml += '<td style="color: var(--text-subtle);">-</td>';
+          } else {
+            const esSinInv = celda.tipoInventario === 'SIN INVENTARIO';
+            const cantVal = celda.cantInvGeneral !== null && celda.cantInvGeneral !== undefined ? celda.cantInvGeneral : '';
+
+            if (cantVal !== '' && !esSinInv) {
+              const numVal = Number(cantVal);
+              subtotalRowStock += numVal;
+              totalesTallasStock[talla] = (totalesTallasStock[talla] || 0) + numVal;
+            }
+
+            if (esSinInv) {
+              celdasHtml += '<td><span class="badge-no-inv">SIN INV</span></td>';
+            } else {
+              celdasHtml += `
+                <td>
+                  <input type="number" class="cell-input input-stock" 
+                         data-rowidx="${rowIdx}"
+                         data-talla="${talla}"
+                         value="${cantVal}" 
+                         onchange="guardarCelda('${celda.id}', 'cantInvGeneral', this, ${rowIdx}, 'stock')" />
+                </td>
+              `;
+            }
+          }
+        });
+
+        subtotalRowStock = Math.round(subtotalRowStock * 100) / 100;
+        granTotalStock += subtotalRowStock;
+
+        htmlStock += `
+          <tr>
+            <td class="cod-cell">${codBadge}</td>
+            <td class="prenda-cell" title="${fila.nombreLimpio}">${fila.nombreLimpio}</td>
+            ${celdasHtml}
+            <td class="subtotal-cell subtotal-stock-${rowIdx}">${subtotalRowStock}</td>
+          </tr>
+        `;
+      });
+
+      granTotalStock = Math.round(granTotalStock * 100) / 100;
+
+      htmlStock += `
+        </tbody>
+        <tfoot>
+          <tr style="background: #1e293b; font-weight: 700; border-top: 2px solid var(--primary);">
+            <td class="cod-cell"></td>
+            <td class="prenda-cell" style="color: var(--primary);">TOTAL INVENTARIO</td>
+            ${matriz.columnasTallas.map(t => `<td id="totalStockTalla_${t}">${Math.round((totalesTallasStock[t] || 0) * 100) / 100}</td>`).join('')}
+            <td class="subtotal-cell" id="granTotalStock" style="color: var(--success); font-size: 0.85rem;">${granTotalStock}</td>
+          </tr>
+        </tfoot>
+        </table>
+        </div>
+      `;
+
+      main.innerHTML = htmlPrecios + htmlStock;
+    }
+
+    function renderTablaReferencia(items) {
+      const main = document.getElementById('mainContent');
+      let html = `
+        <div class="badge-ref">Pestaña de Referencia (Empresas y General) - Solo Lectura. No se incluye en exportaciones por colegio.</div>
+        <div class="table-wrapper">
+          <table class="matrix-table">
+            <thead>
+              <tr>
+                <th class="cod-col">Cod</th>
+                <th>Categoría</th>
+                <th class="prenda-col">Prenda</th>
+                <th>Variante</th>
+                <th>Precio POS</th>
+                <th>Stock General</th>
+                <th>Tipo Inventario</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      items.forEach((item) => {
+        const codBadge = `<span class="col-item">${item.cod || 'REF-01'}</span>`;
+        html += `
+          <tr>
+            <td class="cod-cell">${codBadge}</td>
+            <td><span style="font-size: 0.75rem; background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px;">${item.categoria}</span></td>
+            <td class="prenda-cell">${item.nombreProducto}</td>
+            <td>${item.nombreVariante || '-'}</td>
+            <td><b>${item.precioPos !== null ? item.precioPos : '-'}</b></td>
+            <td>${item.cantInvGeneral !== null ? item.cantInvGeneral : '-'}</td>
+            <td>${item.tipoInventario === 'SIN INVENTARIO' ? '<span class="badge-no-inv">SIN INV</span>' : 'GENERAL'}</td>
+          </tr>
+        `;
+      });
+
+      html += '</tbody></table></div>';
+      main.innerHTML = html;
+    }
+
+    async function guardarCelda(id, campo, inputEl, rowIdx, tipo) {
+      inputEl.classList.add('saving');
+      const val = inputEl.value === '' ? null : Number(inputEl.value);
+
+      try {
+        const res = await fetch(`/api/pos/producto/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [campo]: val })
+        });
+        const json = await res.json();
+        inputEl.classList.remove('saving');
+
+        if (json.success) {
+          inputEl.classList.add('saved');
+          setTimeout(() => inputEl.classList.remove('saved'), 1200);
+          recalcularSubtotalFila(rowIdx, tipo);
+        } else {
+          mostrarNotificacion('Error: ' + json.error, 'danger');
+        }
+      } catch (err) {
+        inputEl.classList.remove('saving');
+        mostrarNotificacion('Error de red al guardar: ' + err.message, 'danger');
+      }
+    }
+
+    function recalcularSubtotalFila(rowIdx, tipo) {
+      if (tipo === 'precio') {
+        const inputs = document.querySelectorAll(`.input-precio[data-rowidx="${rowIdx}"]`);
+        let suma = 0;
+        inputs.forEach(inp => {
+          const v = Number(inp.value);
+          if (!isNaN(v) && inp.value !== '') suma += v;
+        });
+        const cell = document.querySelector(`.subtotal-precio-${rowIdx}`);
+        if (cell) cell.textContent = Math.round(suma * 100) / 100;
+      } else if (tipo === 'stock') {
+        const inputs = document.querySelectorAll(`.input-stock[data-rowidx="${rowIdx}"]`);
+        let suma = 0;
+        inputs.forEach(inp => {
+          const v = Number(inp.value);
+          if (!isNaN(v) && inp.value !== '') suma += v;
+        });
+        const cell = document.querySelector(`.subtotal-stock-${rowIdx}`);
+        if (cell) cell.textContent = Math.round(suma * 100) / 100;
+
+        recalcularTotalesStockTabla();
+      }
+    }
+
+    function recalcularTotalesStockTabla() {
+      if (!matrizDataActual) return;
+      const totalesTallas = {};
+      let granTotal = 0;
+
+      matrizDataActual.columnasTallas.forEach(t => totalesTallas[t] = 0);
+
+      document.querySelectorAll('.input-stock').forEach(inp => {
+        const v = Number(inp.value);
+        const talla = inp.getAttribute('data-talla');
+        if (!isNaN(v) && inp.value !== '') {
+          if (talla) totalesTallas[talla] = (totalesTallas[talla] || 0) + v;
+          granTotal += v;
+        }
+      });
+
+      matrizDataActual.columnasTallas.forEach(t => {
+        const elTalla = document.getElementById(`totalStockTalla_${t}`);
+        if (elTalla) elTalla.textContent = Math.round((totalesTallas[t] || 0) * 100) / 100;
+      });
+
+      const elGranTotal = document.getElementById('granTotalStock');
+      if (elGranTotal) elGranTotal.textContent = Math.round(granTotal * 100) / 100;
+    }
+
+    // Modal Orden de Catálogo Ampliado con Drag & Drop
+    function abrirModalOrdenCatalogo() {
+      if (grupoActual === 'Empresas y General' || !matrizDataActual) {
+        alert('Selecciona un colegio para configurar su orden de catálogo.');
+        return;
+      }
+
+      document.getElementById('modalGrupoNombre').textContent = grupoActual;
+      ordenModalItems = matrizDataActual.filas.map(f => ({
+        posIdProducto: f.posIdProducto,
+        nombreLimpio: f.nombreLimpio,
+        cod: f.cod
+      }));
+
+      renderOrdenModalItems();
+      document.getElementById('ordenModal').classList.add('open');
+    }
+
+    function cerrarModalOrdenCatalogo() {
+      document.getElementById('ordenModal').classList.remove('open');
+    }
+
+    function renderOrdenModalItems() {
+      const container = document.getElementById('ordenItemsList');
+      container.innerHTML = ordenModalItems.map((item, idx) => `
+        <div class="order-list-item" draggable="true" data-idx="${idx}">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span class="col-item">${item.cod}</span>
+            <span class="item-title">${item.nombreLimpio}</span>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button class="btn btn-secondary" style="padding: 3px 10px; font-size: 0.78rem;" onclick="moverOrdenItem(${idx}, -1)" ${idx === 0 ? 'disabled' : ''}>▲ Subir</button>
+            <button class="btn btn-secondary" style="padding: 3px 10px; font-size: 0.78rem;" onclick="moverOrdenItem(${idx}, 1)" ${idx === ordenModalItems.length - 1 ? 'disabled' : ''}>▼ Bajar</button>
+          </div>
+        </div>
+      `).join('');
+
+      activarDragAndDropModal();
+    }
+
+    function activarDragAndDropModal() {
+      const container = document.getElementById('ordenItemsList');
+      let draggedIdx = null;
+
+      container.querySelectorAll('.order-list-item').forEach(item => {
+        item.addEventListener('dragstart', (e) => {
+          draggedIdx = Number(item.getAttribute('data-idx'));
+          item.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+        });
+
+        item.addEventListener('dragend', () => {
+          item.classList.remove('dragging');
+          draggedIdx = null;
+        });
+
+        item.addEventListener('dragover', (e) => {
+          e.preventDefault();
+        });
+
+        item.addEventListener('drop', (e) => {
+          e.preventDefault();
+          const targetIdx = Number(item.getAttribute('data-idx'));
+          if (draggedIdx !== null && targetIdx !== null && draggedIdx !== targetIdx) {
+            const moved = ordenModalItems.splice(draggedIdx, 1)[0];
+            ordenModalItems.splice(targetIdx, 0, moved);
+            renderOrdenModalItems();
+          }
+        });
+      });
+    }
+
+    function moverOrdenItem(idx, delta) {
+      const target = idx + delta;
+      if (target < 0 || target >= ordenModalItems.length) return;
+      const temp = ordenModalItems[idx];
+      ordenModalItems[idx] = ordenModalItems[target];
+      ordenModalItems[target] = temp;
+      renderOrdenModalItems();
+    }
+
+    async function guardarOrdenCatalogoModal() {
+      const posIds = ordenModalItems.map(i => i.posIdProducto);
+      await guardarNuevoOrden(posIds);
+      cerrarModalOrdenCatalogo();
+    }
+
+    async function guardarNuevoOrden(posIds) {
+      try {
+        const res = await fetch(`/api/pos/orden/${encodeURIComponent(grupoActual)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orden: posIds })
+        });
+        const json = await res.json();
+        if (json.success) {
+          mostrarNotificacion('Orden de catálogo guardado permanentemente.', 'success');
+          await cargarMatriz(grupoActual);
+        }
+      } catch (err) {
+        mostrarNotificacion('Error al reordenar: ' + err.message, 'danger');
+      }
+    }
+
+    // Exportaciones individuales por tabla
+    function exportarPreciosExcel() {
+      window.location.href = `/api/pos/exportar/excel/${encodeURIComponent(grupoActual)}?tipo=precios`;
+    }
+
+    function exportarPreciosPdf() {
+      window.open(`/api/pos/imprimir/${encodeURIComponent(grupoActual)}?tipo=precios`, '_blank');
+    }
+
+    function exportarStockExcel() {
+      window.location.href = `/api/pos/exportar/excel/${encodeURIComponent(grupoActual)}?tipo=stock`;
+    }
+
+    function exportarStockPdf() {
+      window.open(`/api/pos/imprimir/${encodeURIComponent(grupoActual)}?tipo=stock`, '_blank');
+    }
+
+    function exportarExcelGlobal() {
+      window.location.href = '/api/pos/exportar/excel-global';
+    }
+
+    function exportarPos38() {
+      window.location.href = '/api/pos/exportar/pos-38';
+    }
+
+    // Importación .xlsx
+    document.getElementById('fileInput').addEventListener('change', async function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      mostrarNotificacion('Importando archivo...', 'warning');
+
+      const formData = new FormData();
+      formData.append('archivo', file);
+
+      try {
+        const res = await fetch('/api/pos/importar', {
+          method: 'POST',
+          body: formData
+        });
+        const json = await res.json();
+
+        if (json.success) {
+          mostrarNotificacion(json.message, 'success');
+          await cargarGrupos();
+        } else {
+          mostrarNotificacion('Error al importar: ' + json.error, 'danger');
+        }
+      } catch (err) {
+        mostrarNotificacion('Error de red al importar: ' + err.message, 'danger');
+      } finally {
+        e.target.value = '';
+      }
+    });
+
+    // Instantáneas
+    function abrirModalSnapshots() {
+      document.getElementById('snapshotModal').classList.add('open');
+      cargarSnapshots();
+    }
+
+    function cerrarModalSnapshots() {
+      document.getElementById('snapshotModal').classList.remove('open');
+    }
+
+    async function cargarSnapshots() {
+      const container = document.getElementById('snapshotList');
+      try {
+        const res = await fetch('/api/pos/snapshots');
+        const json = await res.json();
+
+        if (json.success && json.data.length > 0) {
+          container.innerHTML = json.data.map(s => `
+            <div class="snap-item">
+              <div class="snap-info">
+                <h4>${s.nombre}</h4>
+                <p>${new Date(s.creadoEn).toLocaleString('es-BO')} | ${s.totalProductos} productos</p>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <button class="btn btn-success" style="padding: 3px 8px; font-size: 0.72rem;" onclick="restaurarSnapshot('${s.id}')">Restaurar</button>
+                <button class="btn btn-danger" style="padding: 3px 8px; font-size: 0.72rem;" onclick="eliminarSnapshot('${s.id}')">&times;</button>
+              </div>
+            </div>
+          `).join('');
+        } else {
+          container.innerHTML = '<p style="color: var(--text-muted); font-size: 0.8rem;">No hay instantáneas guardadas.</p>';
+        }
+      } catch (err) {
+        container.innerHTML = '<p style="color: var(--danger); font-size: 0.8rem;">Error al cargar instantáneas.</p>';
+      }
+    }
+
+    async function crearSnapshot() {
+      const input = document.getElementById('snapNombre');
+      const nombre = input.value.trim();
+      if (!nombre) return alert('Ingresa un nombre para la instantánea.');
+
+      try {
+        const res = await fetch('/api/pos/snapshots', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre })
+        });
+        const json = await res.json();
+
+        if (json.success) {
+          input.value = '';
+          cargarSnapshots();
+        } else {
+          alert('Error: ' + json.error);
+        }
+      } catch (err) {
+        alert('Error al crear instantánea: ' + err.message);
+      }
+    }
+
+    async function restaurarSnapshot(id) {
+      if (!confirm('¿Estás seguro de restaurar esta instantánea? Los precios y stock actuales serán reemplazados.')) return;
+
+      try {
+        const res = await fetch(`/api/pos/snapshots/${id}/restaurar`, { method: 'POST' });
+        const json = await res.json();
+        if (json.success) {
+          mostrarNotificacion(json.message, 'success');
+          cerrarModalSnapshots();
+          await cargarGrupos();
+        } else {
+          alert('Error: ' + json.error);
+        }
+      } catch (err) {
+        alert('Error al restaurar: ' + err.message);
+      }
+    }
+
+    async function eliminarSnapshot(id) {
+      if (!confirm('¿Eliminar esta instantánea?')) return;
+      try {
+        await fetch(`/api/pos/snapshots/${id}`, { method: 'DELETE' });
+        cargarSnapshots();
+      } catch (err) {
+        alert('Error al eliminar: ' + err.message);
+      }
+    }
+
+    function mostrarNotificacion(msg, tipo = 'info') {
+      const banner = document.getElementById('statusBanner');
+      banner.style.display = 'block';
+      banner.textContent = msg;
+
+      if (tipo === 'success') {
+        banner.style.background = 'var(--success-subtle)';
+        banner.style.color = 'var(--success)';
+        banner.style.border = '1px solid var(--success)';
+      } else if (tipo === 'danger') {
+        banner.style.background = 'rgba(239,68,68,0.15)';
+        banner.style.color = '#f87171';
+        banner.style.border = '1px solid rgba(239,68,68,0.3)';
+      } else {
+        banner.style.background = 'var(--warning-subtle)';
+        banner.style.color = 'var(--warning)';
+        banner.style.border = '1px solid var(--warning)';
+      }
+
+      setTimeout(() => { banner.style.display = 'none'; }, 4000);
+    }
+
+    cargarGrupos();
+  </script>
+</body>
+</html>

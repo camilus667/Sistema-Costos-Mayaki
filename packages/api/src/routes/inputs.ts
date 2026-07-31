@@ -251,9 +251,9 @@ api.get('/peso-mat-prima', async (c) => {
   const db = (c as any).db;
   const colegioId = c.req.query('colegioId');
 
-  let prodQuery = db.select().from(productos);
-  if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
-  const allProds = await ordenarPrendasDesdeBase(db, await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero)));
+  const conds = [or(eq(productos.activo, true), isNull(productos.activo))];
+  if (colegioId && colegioId !== 'all') conds.push(eq(productos.colegioId, colegioId));
+  const allProds = await ordenarPrendasDesdeBase(db, await db.select().from(productos).where(and(...conds)).orderBy(asc(productos.orden), asc(productos.itemNumero)));
   const allTallas = await db.select().from(tallas).orderBy(asc(tallas.orden));
 
   let pesos: any[] = [];
@@ -337,11 +337,12 @@ api.get('/precios-adquisicion', async (c) => {
   const db = (c as any).db;
   const colegioId = c.req.query('colegioId');
 
-  let prodQuery = db.select().from(productos).where(eq(productos.modoCosteo, 'adquirido'));
-  if (colegioId && colegioId !== 'all') {
-    prodQuery = db.select().from(productos).where(and(eq(productos.modoCosteo, 'adquirido'), eq(productos.colegioId, colegioId)));
-  }
-  const allProds = await ordenarPrendasDesdeBase(db, await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero)));
+  const conds = [
+    eq(productos.modoCosteo, 'adquirido'),
+    or(eq(productos.activo, true), isNull(productos.activo))
+  ];
+  if (colegioId && colegioId !== 'all') conds.push(eq(productos.colegioId, colegioId));
+  const allProds = await ordenarPrendasDesdeBase(db, await db.select().from(productos).where(and(...conds)).orderBy(asc(productos.orden), asc(productos.itemNumero)));
   let tallasQuery = db.select().from(tallas);
   if (colegioId && colegioId !== 'all') {
     tallasQuery = db.select().from(tallas).where(or(eq(tallas.colegioId, colegioId), isNull(tallas.colegioId)));
@@ -426,9 +427,9 @@ api.get('/accesorios-matriz', async (c) => {
   const colegioId = c.req.query('colegioId');
   const filtrar = !!(colegioId && colegioId !== 'all');
 
-  let prodQuery = db.select().from(productos);
-  if (filtrar) prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
-  const allProds = await ordenarPrendasDesdeBase(db, await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero)));
+  const condsAcc = [or(eq(productos.activo, true), isNull(productos.activo))];
+  if (filtrar) condsAcc.push(eq(productos.colegioId, colegioId));
+  const allProds = await ordenarPrendasDesdeBase(db, await db.select().from(productos).where(and(...condsAcc)).orderBy(asc(productos.orden), asc(productos.itemNumero)));
 
   // Las COLUMNAS salen del catalogo de accesorios, no de los encabezados del Excel.
   //
@@ -576,17 +577,31 @@ api.get('/accesorios-matriz', async (c) => {
 api.put('/accesorios-matriz-celda', async (c) => {
   const db = (c as any).db;
   const body = await c.req.json();
-  const { itemNumero, accesorioNombre, cantidad, colegioId } = body;
+  const { itemNumero, accesorioNombre, cantidad, colegioId, productoId, prendaId } = body;
 
-  if (!itemNumero || Number(itemNumero) <= 0 || !accesorioNombre) {
+  if (!accesorioNombre || (!itemNumero && !productoId && !prendaId)) {
     return c.json({
       success: false,
-      error: 'Hacen falta itemNumero (mayor a cero) y accesorioNombre.',
+      error: 'Hacen falta accesorioNombre y productoId o itemNumero.',
     }, 400);
   }
 
-  const { prenda, estado, error } = await resolverPrendaPorItem(db, Number(itemNumero), colegioId);
-  if (!prenda) return c.json({ success: false, error }, estado as any);
+  let prenda: any = null;
+  const targetId = productoId || prendaId;
+
+  if (targetId) {
+    [prenda] = await db.select().from(productos).where(eq(productos.id, targetId)).limit(1);
+  }
+
+  if (!prenda && itemNumero) {
+    const res = await resolverPrendaPorItem(db, Number(itemNumero), colegioId);
+    if (res.prenda) prenda = res.prenda;
+    else if (!targetId) return c.json({ success: false, error: res.error }, res.estado as any);
+  }
+
+  if (!prenda) {
+    return c.json({ success: false, error: 'No se pudo identificar la prenda especificada.' }, 404);
+  }
 
   // El accesorio se busca comparando descripciones ya recortadas: la base puede tener
   // espacios al final y un eq() directo los fallaria.
@@ -629,6 +644,7 @@ api.put('/accesorios-matriz-celda', async (c) => {
   if (cant <= 0) {
     if (linea) {
       await db.delete(detalleAccesorio).where(eq(detalleAccesorio.id, linea.id));
+      saveDbToDisk();
     }
     return c.json({
       success: true,
@@ -649,9 +665,8 @@ api.put('/accesorios-matriz-celda', async (c) => {
     });
   }
 
-  // Se devuelve el costo resultante para que la pantalla no tenga que recalcularlo por
-  // su cuenta: fue justo esa clase de calculo duplicado en el front la que produjo la
-  // cuarta copia de la formula de costeo.
+  saveDbToDisk();
+
   return c.json({
     success: true,
     message: 'Cantidad guardada',
@@ -667,9 +682,9 @@ api.get('/mano-de-obra', async (c) => {
   const db = (c as any).db;
   const colegioId = c.req.query('colegioId');
 
-  let prodQuery = db.select().from(productos);
-  if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
-  const allProds = await ordenarPrendasDesdeBase(db, await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero)));
+  const condsMo = [or(eq(productos.activo, true), isNull(productos.activo))];
+  if (colegioId && colegioId !== 'all') condsMo.push(eq(productos.colegioId, colegioId));
+  const allProds = await ordenarPrendasDesdeBase(db, await db.select().from(productos).where(and(...condsMo)).orderBy(asc(productos.orden), asc(productos.itemNumero)));
   const allTallas = await db.select().from(tallas).orderBy(asc(tallas.orden));
 
   let moList: any[] = [];
@@ -725,9 +740,9 @@ api.get('/fijos-x-prenda', async (c) => {
   const db = (c as any).db;
   const colegioId = c.req.query('colegioId');
 
-  let prodQuery = db.select().from(productos);
-  if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
-  const allProds = await ordenarPrendasDesdeBase(db, await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero)));
+  const condsFij = [or(eq(productos.activo, true), isNull(productos.activo))];
+  if (colegioId && colegioId !== 'all') condsFij.push(eq(productos.colegioId, colegioId));
+  const allProds = await ordenarPrendasDesdeBase(db, await db.select().from(productos).where(and(...condsFij)).orderBy(asc(productos.orden), asc(productos.itemNumero)));
 
   const sysConfig = await getSystemConfig(db);
 

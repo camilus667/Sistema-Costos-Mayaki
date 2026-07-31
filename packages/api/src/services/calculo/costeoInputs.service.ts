@@ -216,7 +216,7 @@ export function tasaIvaComoFraccion(sysConfig: SystemConfig, avisos?: string[]):
  */
 export async function cargarContextoCosteo(
   db: any,
-  opts: { colegioId?: string; productoId?: string; snapshotId?: string } = {}
+  opts: { colegioId?: string; productoId?: string; snapshotId?: string; incluirInactivos?: boolean } = {}
 ): Promise<ContextoCosteo> {
   const avisosGlobales: string[] = [];
   const sysConfig = await getSystemConfig(db);
@@ -238,12 +238,16 @@ export async function cargarContextoCosteo(
   let listaProductos: any[] = [];
   if (snapData && Array.isArray(snapData.productos)) {
     listaProductos = snapData.productos.filter((p: any) => {
+      if (!opts.incluirInactivos && p.activo === false) return false;
       if (opts.productoId && p.id !== opts.productoId) return false;
       if (opts.colegioId && opts.colegioId !== 'all' && p.colegioId !== opts.colegioId) return false;
       return true;
     });
   } else {
     const filtrosProducto: any[] = [];
+    if (!opts.incluirInactivos) {
+      filtrosProducto.push(or(eq(productos.activo, true), isNull(productos.activo)));
+    }
     if (opts.productoId) filtrosProducto.push(eq(productos.id, opts.productoId));
     if (opts.colegioId && opts.colegioId !== 'all') {
       filtrosProducto.push(eq(productos.colegioId, opts.colegioId));

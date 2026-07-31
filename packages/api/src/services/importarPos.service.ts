@@ -96,7 +96,7 @@ function normalizarEncabezado(x: unknown): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/\s+/g, ' ')
+    .replace(/[^a-z0-9]/g, '')
     .trim();
 }
 
@@ -438,7 +438,9 @@ export interface ResultadoParseo {
 }
 
 const aNumero = (v: unknown): number => {
-  const s = String(v ?? '').trim().replace(/\s/g, '').replace(',', '.');
+  if (v === null || v === undefined) return NaN;
+  const s = String(v).trim().replace(/\s/g, '').replace(',', '.');
+  if (s === '') return NaN;
   const n = Number(s);
   return Number.isFinite(n) ? n : NaN;
 };

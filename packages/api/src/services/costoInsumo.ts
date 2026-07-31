@@ -39,11 +39,6 @@ export interface EntradasInsumo {
   /**
    * Costo unitario ya guardado. Es RESPALDO, no la fuente: se usa solo cuando las dos entradas
    * de arriba no alcanzan para calcularlo.
-   *
-   * MEDIDO: pasa en 4 de 38 filas —Cuello, Vinilo para shorts, Vinilo Calzas, Entretela Corbata—,
-   * todas con `costoUdCompra` en 0 y el unitario cargado a mano. Sin este respaldo esas cuatro
-   * costarian 0. En la base `cantidad_x_ud` es NOT NULL, asi que el "par" de la planilla ya quedo
-   * como 1 y no llega a este camino.
    */
   costoUnitarioGuardado?: number | null;
   /**
@@ -51,6 +46,8 @@ export interface EntradasInsumo {
    * elastico, 1,5 de un forro, 100 de hilo.
    */
   unidadesPorPrenda?: number | null;
+  /** Cantidad de ojales si aplica. */
+  ojales?: number | string | null;
 }
 
 /** Convierte a numero finito, o null. Una cadena como "130 cm2" no es un numero valido aca. */
@@ -62,24 +59,11 @@ function num(x: unknown): number | null {
 
 /**
  * Costo de UNA unidad del insumo.
- *
- * Se calcula cuando se puede y se cae al valor guardado cuando no. El orden importa: si el
- * respaldo tuviera prioridad, cambiar el precio de compra no movería el costo, que es justo el
- * problema de guardar un derivado.
  */
 export function costoUnitarioDeInsumo(e: EntradasInsumo): number {
   const compra = num(e?.costoUdCompra);
   const cantidad = num(e?.cantidadXud);
 
-  // El costo de compra tiene que ser MAYOR A CERO para mandar, no solo estar presente.
-  //
-  // MEDIDO: cuatro insumos —Cuello, Vinilo para shorts, Vinilo Calzas, Entretela Corbata— tienen
-  // `costoUdCompra` en 0 con `cantidadXud` en 1, y su costo unitario cargado a mano (2,70; 0,035;
-  // 0,055; 0,0015). En esas filas el costo de compra nunca se registro: el unitario ES el dato.
-  //
-  // Con la condicion en `>= 0`, `0 / 1 = 0` contaba como calculo valido y le ganaba al valor
-  // real, poniendo en cero cuatro costos. Un insumo genuinamente gratis sigue dando 0, porque su
-  // valor guardado tambien es 0.
   if (compra !== null && compra > 0 && cantidad !== null && cantidad > 0) return compra / cantidad;
 
   return num(e?.costoUnitarioGuardado) ?? 0;
@@ -87,17 +71,14 @@ export function costoUnitarioDeInsumo(e: EntradasInsumo): number {
 
 /**
  * Costo del insumo en UNA prenda.
- *
- * Sin `unidadesPorPrenda` se asume 1, que es el caso de la mayoria de los insumos —un cierre, un
- * cuello— y lo que hacia la planilla. Un valor negativo se trata como ausente: un insumo no se
- * puede usar en cantidad negativa, y dejarlo pasar daria un costo negativo que bajaria el total
- * de la prenda sin que nadie lo note.
  */
 export function costoUsoDeInsumo(e: EntradasInsumo): number {
   const unitario = costoUnitarioDeInsumo(e);
   const uds = num(e?.unidadesPorPrenda);
-  const factor = uds !== null && uds >= 0 ? uds : 1;
-  return unitario * factor;
+  const factorUds = uds !== null && uds >= 0 ? uds : 1;
+  const oj = num(e?.ojales);
+  const factorOjales = oj !== null && oj > 0 ? oj : 1;
+  return unitario * factorUds * factorOjales;
 }
 
 /**

@@ -294,6 +294,42 @@ CREATE TABLE IF NOT EXISTS "configuracion_sistema" (
  "descripcion" text,
  "actualizado_en" text DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
+CREATE TABLE IF NOT EXISTS "pos_producto" (
+ "id" text PRIMARY KEY NOT NULL,
+ "pos_id_producto" text NOT NULL,
+ "nombre_variante" text NOT NULL,
+ "categoria" text NOT NULL,
+ "grupo_matriz" text NOT NULL,
+ "solo_referencia" integer DEFAULT false NOT NULL,
+ "nombre_producto" text NOT NULL,
+ "nombre_limpio" text NOT NULL,
+ "talla" text,
+ "es_generico" integer DEFAULT false NOT NULL,
+ "talla_presentacion" text,
+ "orden" integer,
+ "cod_producto" text,
+ "precio_pos" real,
+ "cant_inv_general" real,
+ "tipo_inventario" text,
+ "precio_editable_pos" text,
+ "datos_originales" text NOT NULL,
+ "activo" integer DEFAULT true NOT NULL,
+ "creado_en" text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+ "actualizado_en" text
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_pos_producto_natural" ON "pos_producto" ("pos_id_producto", "nombre_variante");
+CREATE INDEX IF NOT EXISTS "idx_pos_producto_grupo" ON "pos_producto" ("grupo_matriz");
+CREATE INDEX IF NOT EXISTS "idx_pos_producto_orden" ON "pos_producto" ("grupo_matriz", "orden");
+
+CREATE TABLE IF NOT EXISTS "pos_snapshot" (
+ "id" text PRIMARY KEY NOT NULL,
+ "nombre" text NOT NULL,
+ "descripcion" text,
+ "datos_json" text NOT NULL,
+ "total_productos" integer DEFAULT 0 NOT NULL,
+ "creado_por" text,
+ "creado_en" text DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
 `;
 
 export interface OpcionesGetDb {

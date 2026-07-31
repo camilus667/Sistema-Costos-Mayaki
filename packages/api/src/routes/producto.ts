@@ -29,7 +29,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
-import { eq, asc, and, sql } from 'drizzle-orm';
+import { eq, asc, and, sql, or, isNull } from 'drizzle-orm';
 import {
   productos,
   colegios,
@@ -134,15 +134,21 @@ async function itemsQueQuedanCruzados(db: any, productoId: string, colegioNuevo:
 api.get('/', async (c) => {
   const db = (c as any).db;
   const colegioId = c.req.query('colegioId');
+  const incluirInactivos = c.req.query('incluirInactivos') === 'true';
   const acotado = !!colegioId && colegioId !== 'all';
 
-  const base = db.select().from(productos);
-  const sinOrdenar = await (acotado ? base.where(eq(productos.colegioId, colegioId!)) : base)
-    .orderBy(asc(productos.itemNumero));
-  // El orden lo define services/ordenPrendas.ts, la unica casa del criterio. El `orderBy` de
-  // la consulta se queda para que el resultado sea ESTABLE antes de ordenar —dos filas
-  // empatadas no pueden venir en distinto orden entre dos llamadas— pero el criterio real,
-  // el que agrupa por colegio, se aplica despues.
+  const conds: any[] = [];
+  if (!incluirInactivos) {
+    conds.push(or(eq(productos.activo, true), isNull(productos.activo)));
+  }
+  if (acotado) {
+    conds.push(eq(productos.colegioId, colegioId!));
+  }
+
+  let query = db.select().from(productos);
+  if (conds.length > 0) query = query.where(and(...conds));
+
+  const sinOrdenar = await query.orderBy(asc(productos.itemNumero));
   const lista = await ordenarPrendasDesdeBase(db, sinOrdenar);
 
   // La REFERENCIA `CC-01` de cada prenda, que es lo que se ve en la columna `Prod`.

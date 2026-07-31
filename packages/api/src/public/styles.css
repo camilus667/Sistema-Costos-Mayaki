@@ -1191,56 +1191,55 @@ footer {
        en blanco consume tinta a chorros, sale sucia en una laser comun, y si el
        driver descarta los fondos —cosa que pasa— el texto blanco queda invisible
        sobre papel blanco. La jerarquia se arma con NEGRITA, filetes gruesos y el
-       guindo reservado para lo importante: titulos, encabezados de seccion y las
-       cifras de cierre. */
+       guindo reservado para lo importante: titulos, encabezados. */
     #rp-root {
       --rp-guindo: #9E0D3D;
       --rp-guindo-osc: #8C0931;
       --rp-guindo-tenue: #fbf2f5;
-      --rp-gris: #829094;
-      --rp-gris-osc: #4D5456;
-      --rp-linea: #cfd5d6;
-      --rp-tinta: #22282a;
+      --rp-gris: #374151;
+      --rp-gris-osc: #1f2937;
+      --rp-linea: #9ca3af;
+      --rp-tinta: #0f172a;
 
       background: #fff;
       color: var(--rp-tinta);
       font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-      font-size: 9pt;
-      line-height: 1.32;
+      font-size: 9.5pt;
+      line-height: 1.35;
     }
 
     /* ---- Encabezado ejecutivo ---- */
     .rp-head { border-bottom: 2.5pt solid var(--rp-guindo); padding-bottom: 6pt; margin-bottom: 8pt; }
     .rp-head-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16pt; }
-    .rp-marca { font-size: 7.5pt; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--rp-guindo); }
+    .rp-marca { font-size: 8.5pt; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--rp-guindo); }
     .rp-titulo { font-size: 16pt; font-weight: 800; margin: 2pt 0 0; letter-spacing: -0.015em; color: var(--rp-tinta); }
-    .rp-sub { font-size: 9.5pt; color: var(--rp-gris-osc); margin-top: 1pt; font-weight: 600; }
+    .rp-sub { font-size: 10pt; color: var(--rp-gris-osc); margin-top: 1pt; font-weight: 700; }
 
     .rp-meta { display: grid; grid-template-columns: repeat(2, auto); gap: 2pt 14pt; text-align: right; flex-shrink: 0; }
     .rp-meta-chk { flex-shrink: 0; padding-top: 1pt; padding-left: 2pt; }
-    .rp-meta-item span { display: block; font-size: 6.5pt; text-transform: uppercase; letter-spacing: 0.07em; color: var(--rp-gris); font-weight: 700; }
-    .rp-meta-item strong { display: block; font-size: 8.5pt; color: var(--rp-tinta); font-weight: 800; }
+    .rp-meta-item span { display: block; font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.07em; color: var(--rp-gris-osc); font-weight: 800; }
+    .rp-meta-item strong { display: block; font-size: 9.5pt; color: var(--rp-tinta); font-weight: 800; }
 
     /* ---- Tira de indicadores ---- */
     .rp-kpis { display: flex; gap: 6pt; margin-top: 8pt; }
     .rp-kpi {
-      flex: 1; border: 0.5pt solid var(--rp-linea); border-left: 2pt solid var(--rp-gris);
+      flex: 1; border: 0.75pt solid var(--rp-linea); border-left: 3.5pt solid var(--rp-gris-osc);
       padding: 5pt 7pt; background: #fff;
     }
     /* El indicador principal se distingue por un filete guindo mas grueso y la cifra
        en guindo, no por invertir el fondo. */
     .rp-kpi-dest { border-left: 3.5pt solid var(--rp-guindo); background: var(--rp-guindo-tenue); }
     .rp-kpi-dest .rp-kpi-v { color: var(--rp-guindo-osc); }
-    .rp-kpi-t { display: block; font-size: 6.5pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--rp-gris); font-weight: 800; }
-    .rp-kpi-v { display: block; font-size: 12pt; font-weight: 800; color: var(--rp-tinta); margin-top: 1.5pt; letter-spacing: -0.02em; }
-    .rp-kpi-s { display: block; font-size: 6.8pt; color: var(--rp-gris-osc); margin-top: 0.5pt; font-weight: 600; }
+    .rp-kpi-t { display: block; font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--rp-gris-osc); font-weight: 800; }
+    .rp-kpi-v { display: block; font-size: 12.5pt; font-weight: 800; color: var(--rp-tinta); margin-top: 1.5pt; letter-spacing: -0.02em; }
+    .rp-kpi-s { display: block; font-size: 8pt; color: var(--rp-tinta); margin-top: 0.5pt; font-weight: 700; }
 
     /* Indicador de escenario de precios: un cuadrito, sin leyenda. */
     .rp-chk { display: inline-block; width: 8pt; height: 8pt; border: 0.75pt solid var(--rp-gris); background: #fff; }
     .rp-chk-on { background: var(--rp-guindo); border-color: var(--rp-guindo); }
 
     /* ---- Tablas ---- */
-    .rp-h2 { font-size: 9.5pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+    .rp-h2 { font-size: 10pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
              color: var(--rp-guindo); margin: 9pt 0 3pt; padding-bottom: 2pt;
              border-bottom: 1.5pt solid var(--rp-guindo); }
 
@@ -1248,32 +1247,30 @@ footer {
     /* Encabezado: gris muy claro, tinta oscura en negrita y un filete guindo grueso
        debajo. Antes era una banda negra con texto blanco. */
     .rp-tabla th {
-      background: #f0f2f2; color: var(--rp-tinta); font-size: 7pt; font-weight: 800; text-align: left;
-      padding: 3.5pt 4pt; text-transform: uppercase; letter-spacing: 0.03em;
-      border-right: 0.4pt solid var(--rp-linea);
+      background: #f0f2f2; color: var(--rp-tinta); font-size: 8pt; font-weight: 800; text-align: left;
+      padding: 4pt 5pt; text-transform: uppercase; letter-spacing: 0.03em;
+      border-right: 0.5pt solid var(--rp-linea);
       border-top: 0.5pt solid var(--rp-linea);
       border-bottom: 1.5pt solid var(--rp-guindo);
     }
-    .rp-tabla td { padding: 2.6pt 4pt; border-bottom: 0.4pt solid #e6e9ea; border-right: 0.4pt solid #eff1f1; }
-    .rp-tabla tbody tr:nth-child(even) td { background: #f6f7f7; }
+    .rp-tabla td { font-size: 8.5pt; color: var(--rp-tinta); padding: 3pt 4.5pt; border-bottom: 0.5pt solid #d1d5db; border-right: 0.5pt solid #e5e7eb; }
+    .rp-tabla tbody tr:nth-child(even) td { background: #f8fafc; }
     /* Cierre sin fondo, con doble filete arriba: la convencion contable, y no gasta
        tinta. Las cifras del cierre van en guindo. */
     .rp-tabla tfoot td {
-      background: #fff; color: var(--rp-tinta); font-weight: 800; font-size: 8.5pt;
-      padding: 4pt; border: none;
-      border-top: 1.75pt solid var(--rp-gris-osc);
-      border-bottom: 0.75pt solid var(--rp-gris-osc);
+      background: #fff; color: var(--rp-tinta); font-weight: 800; font-size: 9pt;
+      padding: 4.5pt; border: none;
+      border-top: 1.75pt solid var(--rp-tinta);
+      border-bottom: 1pt solid var(--rp-tinta);
     }
     .rp-tabla tfoot td.rp-r { color: var(--rp-guindo-osc); }
-    .rp-densa { font-size: 7.4pt; }
-    .rp-densa td { padding: 1.9pt 3pt; }
-    .rp-densa th { font-size: 6.4pt; padding: 2.6pt 3pt; }
+    .rp-densa { font-size: 8pt; }
+    .rp-densa td { padding: 2.2pt 3.5pt; }
+    .rp-densa th { font-size: 7.5pt; padding: 3pt 3.5pt; }
 
     .rp-r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .rp-c { text-align: center; white-space: nowrap; }
-    .rp-pos { color: var(--rp-guindo-osc); font-weight: 800; }
-    .rp-tenue td, td.rp-tenue { color: var(--rp-gris); }
-    .rp-nota { font-size: 6.5pt; color: var(--rp-gris); font-weight: 400; margin-top: 0.5pt; }
+    .rp-nota { font-size: 7.5pt; color: #374151; font-weight: 600; margin-top: 0.5pt; }
 
     /* Matriz de conceptos por talla. La primera columna se ancla porque es la
        única que dice QUÉ se está leyendo. */

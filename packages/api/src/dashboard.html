@@ -2221,8 +2221,6 @@
             const cost = p.accesorios ? (p.accesorios[a] || 0) : 0;
             const accId = a.replace(/[^a-zA-Z0-9]/g, '_');
 
-            if (cost === 0 && qty === 0) return '<td style="text-align:center; color: var(--text-muted);">-</td>';
-
             const tooltipText = `${a}:\n${qty} unidades × Bs. ${uCost.toFixed(3)}/u = Bs. ${cost.toFixed(2)}`;
 
             return `<td style="text-align:center; padding:0.05rem;" title="${tooltipText}">
@@ -2238,7 +2236,7 @@
                            data-uc="${uCost}"
                            onclick="this.select()" 
                            onfocus="this.select()" 
-                           onchange="recalcularMatrizAccLive(${p.itemNumero}, '${a.replace(/'/g, "\\'")}', ${uCost}, this)">
+                           onchange="recalcularMatrizAccLive('${p.productoId}', ${p.itemNumero}, '${a.replace(/'/g, "\\'")}', ${uCost}, this)">
                   </div>
                 </td>`;
           }).join('')}
@@ -2294,7 +2292,7 @@
       }
     }
 
-    async function recalcularMatrizAccLive(itemNum, accName, uCost, inputElem) {
+    async function recalcularMatrizAccLive(productoId, itemNum, accName, uCost, inputElem) {
       const newQty = parseFloat(inputElem.value) || 0;
       const newCost = uCost > 0 ? (newQty * uCost) : (newQty > 0 ? newQty : 0);
 
@@ -2327,12 +2325,12 @@
         await fetch('/api/inputs/accesorios-matriz-celda', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ itemNumero: itemNum, accesorioNombre: accName, cantidad: newQty })
+          body: JSON.stringify({ productoId: productoId, itemNumero: itemNum, accesorioNombre: accName, cantidad: newQty, colegioId: colegioFiltroActual })
         });
         await fetch('/api/calculo/accesorio-total', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ itemNumero: itemNum, totalAccBs: rowTotalBs })
+          body: JSON.stringify({ productoId: productoId, itemNumero: itemNum, totalAccBs: rowTotalBs, colegioId: colegioFiltroActual })
         });
         cargarMatrizConsolidada();
         cargarResumen();
@@ -2352,19 +2350,13 @@
       const costoCm2 = (costoCm2Val !== undefined && costoCm2Val !== '') ? parseFloat(costoCm2Val) : null;
 
       let costoUnit = cantUd > 0 ? (costoUd / cantUd) : costoUd;
-      if (costoUd === 0 && costoUnit === 0) {
-        const currentUnitElem = document.getElementById('costounit-' + id);
-        if (currentUnitElem) {
-          const text = currentUnitElem.textContent.replace('Bs.', '').trim();
-          costoUnit = parseFloat(text) || 0;
-        }
-      }
+      const factorOjales = (ojales && !isNaN(ojales) && ojales > 0) ? ojales : 1;
 
       let costoUso = costoUnit;
       if (costoCm2 && costoCm2 > 0) {
         costoUso = 500 * costoCm2;
-      } else if (udPrenda && udPrenda > 0) {
-        costoUso = costoUnit * udPrenda;
+      } else if (udPrenda !== null && udPrenda !== undefined && !isNaN(udPrenda)) {
+        costoUso = costoUnit * udPrenda * factorOjales;
       }
 
       const unitElem = document.getElementById('costounit-' + id);
@@ -3650,16 +3642,43 @@
      * y tapa lo unico que hay que atender, que son las que faltan.
      */
     function impDetalleTallas(g) {
+      const ef = impEfectos();
       const entran = g.tallasEmparejadas || [];
       const faltan = g.tallasFaltantes || [];
-      const muestra = entran.slice(0, 10).map(t => esc(fmtTalla(t))).join(', ');
-      const resto = entran.length > 10 ? ' y ' + (entran.length - 10) + ' más' : '';
 
-      return '<div style="font-size:0.68rem; margin-top:0.2rem; line-height:1.5;">' +
-        '<div style="color:#34d399;">emparejan ' + entran.length + ' de ' + g.resumen.filas +
-          ' tallas: ' + muestra + resto + '</div>' +
+      let htmlDetalle = '';
+
+      if (g.filas && g.filas.length > 0) {
+        const chips = g.filas.map(f => {
+          const tCod = f.tallaCodigo || f.tallaCodigoFaltante || f.origen?.variante || '?';
+          if (ef.escribeInventario) {
+            const cantAnt = f.cantidadActual !== null && f.cantidadActual !== undefined ? f.cantidadActual : 0;
+            const cantNue = f.cantidadPos !== null && f.cantidadPos !== undefined ? f.cantidadPos : 0;
+            const cambioClass = cantAnt !== cantNue ? 'color:#34d399; font-weight:700;' : 'color:#94a3b8;';
+            return '<span style="display:inline-flex; align-items:center; gap:3px; background:rgba(15,23,42,0.6); padding:2px 6px; border-radius:4px; border:1px solid rgba(255,255,255,0.08); font-size:0.68rem; margin:2px 2px 2px 0;">' +
+              '<span style="color:#cbd5e1; font-weight:600;">' + esc(fmtTalla(tCod)) + ':</span> ' +
+              '<span style="' + cambioClass + '">' + cantAnt + ' ➔ <strong style="color:#fbbf24;">' + cantNue + ' un</strong></span>' +
+              '</span>';
+          } else if (ef.escribePrecios) {
+            const precAnt = f.precioActual !== null && f.precioActual !== undefined ? f.precioActual + ' Bs' : 'sin precio';
+            const precNue = f.precioPos !== null && f.precioPos !== undefined ? f.precioPos + ' Bs' : '-';
+            return '<span style="display:inline-flex; align-items:center; gap:3px; background:rgba(15,23,42,0.6); padding:2px 6px; border-radius:4px; border:1px solid rgba(255,255,255,0.08); font-size:0.68rem; margin:2px 2px 2px 0;">' +
+              '<span style="color:#cbd5e1; font-weight:600;">' + esc(fmtTalla(tCod)) + ':</span> ' +
+              '<span style="color:#94a3b8;">' + precAnt + ' ➔ <strong style="color:#34d399;">' + precNue + '</strong></span>' +
+              '</span>';
+          } else {
+            return '<span style="display:inline-block; background:rgba(15,23,42,0.6); padding:2px 6px; border-radius:4px; font-size:0.68rem; margin:2px 2px 2px 0;">' + esc(fmtTalla(tCod)) + '</span>';
+          }
+        }).join('');
+
+        htmlDetalle = '<div style="display:flex; flex-wrap:wrap; gap:2px; margin-top:0.35rem;">' + chips + '</div>';
+      }
+
+      return '<div style="font-size:0.68rem; margin-top:0.25rem; line-height:1.4;">' +
+        '<div style="color:#34d399; font-weight:600;">Emparejan ' + entran.length + ' de ' + g.resumen.filas + ' tallas:</div>' +
+        htmlDetalle +
         (faltan.length
-          ? '<div style="color:#fbbf24;">' +
+          ? '<div style="color:#fbbf24; margin-top:0.2rem;">' +
             (faltan.length === 1
               ? 'NO empareja la talla ' + esc(fmtTalla(faltan[0])) + ': no está activa en este colegio'
               : 'NO emparejan las tallas ' + faltan.map(t => esc(fmtTalla(t))).join(', ') +
@@ -3806,9 +3825,7 @@
               ? ((g.productoDescripcion
                   ? String(g.productoDescripcion).replace(/</g, '&lt;')
                   : (g.estado === 'sin-producto' ? '<span style="color:#fbbf24;">se crea con este nombre</span>' : '<span style="color:#64748b;">ninguna</span>'))
-                 // Un parcial DICE cuantas filas entran y que talla falta. Sin eso, "PARCIAL" en
-                 // verde-amarillo no distingue 13 de 14 de 1 de 14.
-                 + (parcial ? impDetalleTallas(g) : ''))
+                 + impDetalleTallas(g))
               : '<div style="color:#f87171; font-weight:700;">NO SE IMPORTA</div>' +
                 (g.productoDescripcion
                   ? '<div style="color:#64748b; font-size:0.68rem;">lo más parecido: ' +
@@ -5046,19 +5063,13 @@
       const costoCm2 = (costoCm2Val !== undefined && costoCm2Val !== '') ? parseFloat(costoCm2Val) : null;
 
       let costoUnit = cantUd > 0 ? (costoUd / cantUd) : costoUd;
-      if (costoUd === 0 && costoUnit === 0) {
-        const currentUnitElem = document.getElementById('costounit-' + id);
-        if (currentUnitElem) {
-          const text = currentUnitElem.textContent.replace('Bs.', '').trim();
-          costoUnit = parseFloat(text) || 0;
-        }
-      }
+      const factorOjales = (ojales && !isNaN(ojales) && ojales > 0) ? ojales : 1;
 
       let costoUso = costoUnit;
       if (costoCm2 && costoCm2 > 0) {
         costoUso = 500 * costoCm2;
-      } else if (udPrenda && udPrenda > 0) {
-        costoUso = costoUnit * udPrenda;
+      } else if (udPrenda !== null && udPrenda !== undefined && !isNaN(udPrenda)) {
+        costoUso = costoUnit * udPrenda * factorOjales;
       }
 
       const unitElem = document.getElementById('costounit-' + id);
@@ -6322,7 +6333,7 @@
         document.head.appendChild(regla);
       }
       const h = HOJA[orientacion];
-      regla.textContent = `@page { size: A4 ${orientacion === 'horizontal' ? 'landscape' : 'portrait'}; margin: ${h.margenMm}mm; }`;
+      regla.textContent = `@page { size: A4 ${orientacion === 'horizontal' ? 'landscape' : 'portrait'}; margin: ${h.margenMm}mm; @bottom-right { content: "Página " counter(page) " de " counter(pages); font-size: 8pt; color: #555; } }`;
 
       document.body.classList.add('rp-imprimiendo');
       raiz.classList.toggle('rp-multipagina', multipagina);
@@ -6418,9 +6429,7 @@
             ? `Precios netos de un descuento comercial del ${(Number(d.descuentoSinFacturaPct) || 10).toFixed(0)}%.`
             : 'Precios de lista.')}`;
 
-        // `auto`: nueve columnas y tantas filas como prendas tenga el colegio. Medido con dos
-        // colegios da vertical, y si crece la va a seguir eligiendo por si misma.
-        emitirReporte('auto', html);
+        emitirReporte('horizontal', html, { multipagina: true });
       } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
     }
 

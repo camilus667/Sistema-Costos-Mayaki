@@ -40,7 +40,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { inventarioTransacciones, inventario, productos, tallas } from '../database/schema';
-import { desc, eq, and, asc, sql } from 'drizzle-orm';
+import { desc, eq, and, asc, sql, or, isNull } from 'drizzle-orm';
 import XLSX from 'xlsx';
 import { costearLote } from '../services/calculo/costeoInputs.service';
 import { referenciasDesdeBase } from '../services/referenciaPrendaDb';
@@ -109,7 +109,7 @@ async function construirFilasInventario(c: any, opciones: { soloConStock: boolea
     });
   }
 
-  const cond: any[] = [];
+  const cond: any[] = [or(eq(productos.activo, true), isNull(productos.activo))];
   if (colegioId) cond.push(eq(productos.colegioId, colegioId));
   if (productoId) cond.push(eq(inventario.productoId, productoId));
   if (tallaId) cond.push(eq(inventario.tallaId, tallaId));

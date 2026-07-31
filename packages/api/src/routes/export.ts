@@ -38,7 +38,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { productos, inventario, preciosVenta, tallas } from '../database/schema';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, or, isNull } from 'drizzle-orm';
 // El criterio de orden vive en UNA sola casa. En un export importa doble: la hoja SALE del
 // sistema, asi que su orden tiene que coincidir con el de la pantalla.
 import { ordenarPrendasDesdeBase } from '../services/ordenPrendasDb';
@@ -72,24 +72,20 @@ function describirAlcance(f: Filtros): string {
 // ---------------------------------------------------------------- costos
 async function exportarCostos(db: any, filtros: Filtros) {
   const f = limpiar(filtros);
-  const cond: any[] = [];
+  const cond: any[] = [or(eq(productos.activo, true), isNull(productos.activo))];
   if (f.productoId) cond.push(eq(productos.id, f.productoId));
   if (f.colegioId) cond.push(eq(productos.colegioId, f.colegioId));
 
   let query = db.select().from(productos);
-  // and() con una sola condicion la devuelve tal cual, asi que no hace falta ramificar.
   if (cond.length > 0) query = query.where(and(...cond));
 
-  // El orden lo define services/ordenPrendas.ts. Este export SALE del sistema —se manda por
-  // mail, se abre en Excel— asi que el orden de la hoja tiene que ser el mismo que ve el
-  // usuario en pantalla, no uno propio.
   return await ordenarPrendasDesdeBase(db, await query.orderBy(asc(productos.itemNumero)));
 }
 
 // ------------------------------------------------------------ inventario
 async function exportarInventario(db: any, filtros: Filtros) {
   const f = limpiar(filtros);
-  const cond: any[] = [];
+  const cond: any[] = [or(eq(productos.activo, true), isNull(productos.activo))];
   if (f.colegioId) cond.push(eq(productos.colegioId, f.colegioId));
   if (f.productoId) cond.push(eq(inventario.productoId, f.productoId));
   if (f.tallaId) cond.push(eq(inventario.tallaId, f.tallaId));

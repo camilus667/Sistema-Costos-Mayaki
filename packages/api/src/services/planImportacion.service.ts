@@ -368,6 +368,9 @@ export function planificarCambios(op: OpcionesPlan): PlanImportacion {
         ? (r.origen.precioPos - precioActual) / precioActual
         : null;
 
+    const tieneCantidadValida = !Number.isNaN(r.origen.cantidad);
+    const cantidadCambia = tieneCantidadValida && (cantidadActual === null || Math.abs(cantidadActual - r.origen.cantidad) > 0.0001);
+
     return {
       origen: r.origen,
       estado: r.estado,
@@ -390,7 +393,7 @@ export function planificarCambios(op: OpcionesPlan): PlanImportacion {
       codigoCambia: (codigoActual ?? '') !== r.origen.codigo,
       cantidadActual,
       cantidadPos: r.origen.cantidad,
-      cantidadCambia: cantidadActual === null || cantidadActual !== r.origen.cantidad,
+      cantidadCambia,
     };
   });
 

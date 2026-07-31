@@ -5,6 +5,8 @@
   "description": "Sistema centralizado de gestión de uniformes escolares",
   "scripts": {
     "dev": "pnpm --filter @sistema-uniformes/api dev:local",
+    "dev:all": "pnpm --filter @sistema-uniformes/api dev:local",
+    "dev:pos": "pnpm --filter @sistema-uniformes/pos-manager dev",
     "test": "turbo test",
     "typecheck": "turbo typecheck",
     "dev:local": "pnpm --filter @sistema-uniformes/api dev:local",
@@ -14,6 +16,7 @@
     "lint": "turbo lint"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "prettier": "^3.2.5",
     "tsx": "^4.23.1",
     "turbo": "^1.13.3",

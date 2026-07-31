@@ -30,7 +30,7 @@ import inputRoutes from './routes/inputs';
 import costeoRoutes from './routes/costeo';
 import snapshotRoutes from './routes/snapshots';
 import importarRoutes from './routes/importar';
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, or, and, isNull } from 'drizzle-orm';
 import { costearLote } from './services/calculo/costeoInputs.service';
 import {
   construirContextoFiscal,
@@ -246,23 +246,19 @@ app.get('/api/dashboard-resumen', async (c) => {
   const admin = (await db.select().from(schema.usuarios).limit(1))[0];
   const tallas = await db.select().from(schema.tallas).orderBy(asc(schema.tallas.orden));
 
-  let prodQuery = db.select().from(schema.productos);
-  if (colegioId) prodQuery = prodQuery.where(eq(schema.productos.colegioId, colegioId));
-  const productosSinOrdenar = await prodQuery
+  let conds = [or(eq(schema.productos.activo, true), isNull(schema.productos.activo))];
+  if (colegioId) conds.push(eq(schema.productos.colegioId, colegioId));
+
+  const productosSinOrdenar = await db
+    .select()
+    .from(schema.productos)
+    .where(and(...conds))
     .orderBy(asc(schema.productos.orden), asc(schema.productos.itemNumero));
 
-  // EL ORDEN LO DEFINE LA MISMA CASA QUE EL DE LAS MATRICES: `services/ordenPrendas.ts`.
-  //
-  // Este `orderBy` de SQL ordenaba por `orden, itemNumero` sin conocer los colegios, asi que
-  // Resumen General y Matrices Consolidadas mostraban las prendas en ORDEN DISTINTO. Con dos
-  // colegios eso se nota enseguida: la matriz las agrupa por colegio y el resumen las intercalaba.
-  //
-  // El `orderBy` se conserva para que el resultado sea ESTABLE antes de ordenar —dos filas
-  // empatadas no pueden venir en distinto orden entre dos llamadas—, pero el criterio real se
-  // aplica despues, igual que en `/api/productos`.
-  const productos = await ordenarPrendasDesdeBase(db, productosSinOrdenar as any, 'defecto', {
+  const productosOrdenados = await ordenarPrendasDesdeBase(db, productosSinOrdenar as any, 'defecto', {
     agruparPorColegio: !colegioId,
   });
+  const productos = productosOrdenados.filter((p: any) => p.activo !== false && p.activo !== 0);
 
   // La REFERENCIA `CC-01` de cada prenda, que es lo que va en la columna `Prod`. Sin esto el
   // resumen caia al numero de item y mostraba codigos distintos que la matriz para la misma prenda.
@@ -504,6 +500,22 @@ async function start() {
       console.log(`✅ Servidor escuchando en puerto ${PORT}`);
     }
   );
+
+  if (process.env.SERVE_POS !== 'false') {
+    try {
+      const posAppModule = await import('../../pos-manager/src/app');
+      const posApp = posAppModule.default;
+      const POS_PORT = Number(process.env.POS_PORT) || 3001;
+      serve({
+        fetch: posApp.fetch.bind(posApp),
+        port: POS_PORT,
+      }, () => {
+        console.log(`🚀 Gestor POS escuchando en http://localhost:${POS_PORT}`);
+      });
+    } catch (err) {
+      // Ignorar si pos-manager no está disponible
+    }
+  }
 }
 
 const meta = import.meta as any;
@@ -512,3 +524,4 @@ if (meta.main || process.argv[1]?.includes('server.ts')) {
 }
 
 export default app;
+

@@ -430,3 +430,45 @@ export const configuracionSistema = sqliteTable('configuracion_sistema', {
   descripcion: text('descripcion'),
   actualizadoEn: text('actualizado_en').default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
+
+// ============================================
+// SISTEMA POS - PRODUCTOS Y REPRES
+// ============================================
+export const posProductos = sqliteTable('pos_producto', {
+  id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
+  posIdProducto: text('pos_id_producto').notNull(),
+  nombreVariante: text('nombre_variante').notNull(),
+  categoria: text('categoria').notNull(),
+  grupoMatriz: text('grupo_matriz').notNull(),
+  soloReferencia: integer('solo_referencia', { mode: 'boolean' }).default(false).notNull(),
+  nombreProducto: text('nombre_producto').notNull(),
+  nombreLimpio: text('nombre_limpio').notNull(),
+  talla: text('talla'),
+  esGenerico: integer('es_generico', { mode: 'boolean' }).default(false).notNull(),
+  tallaPresentacion: text('talla_presentacion'),
+  orden: integer('orden'),
+  codProducto: text('cod_producto'),
+  precioPos: real('precio_pos'),
+  cantInvGeneral: real('cant_inv_general'),
+  tipoInventario: text('tipo_inventario'),
+  precioEditablePos: text('precio_editable_pos'),
+  datosOriginales: text('datos_originales').notNull(),
+  activo: integer('activo', { mode: 'boolean' }).default(true).notNull(),
+  creadoEn: text('creado_en').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  actualizadoEn: text('actualizado_en'),
+}, (t) => ({
+  claveNatural: uniqueIndex('idx_pos_producto_natural').on(t.posIdProducto, t.nombreVariante),
+  porGrupo: index('idx_pos_producto_grupo').on(t.grupoMatriz),
+  porOrden: index('idx_pos_producto_orden').on(t.grupoMatriz, t.orden),
+}));
+
+export const posSnapshots = sqliteTable('pos_snapshot', {
+  id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
+  nombre: text('nombre').notNull(),
+  descripcion: text('descripcion'),
+  datosJson: text('datos_json').notNull(),
+  totalProductos: integer('total_productos').default(0).notNull(),
+  creadoPor: text('creado_por'),
+  creadoEn: text('creado_en').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+

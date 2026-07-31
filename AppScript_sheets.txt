@@ -1,0 +1,292 @@
+function organizarDatosPorProducto() {
+  // Obtén la primera hoja de la izquierda
+  var hoja = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0]; // Primera hoja
+  var datos = hoja.getDataRange().getValues();
+  
+  // Encontrar las columnas basadas en las cabeceras
+  var cabeceras = datos[0];
+  Logger.log("Cabeceras encontradas: " + JSON.stringify(cabeceras)); // Imprimir cabeceras encontradas
+  var columnaNombreProducto = cabeceras.indexOf("Nombre de Producto");
+  var columnaNombreVariante = cabeceras.indexOf("Nombre de variante");
+  var columnaPrecioPOS = cabeceras.indexOf("Precio POS");
+
+  if (columnaNombreProducto === -1 || columnaNombreVariante === -1 || columnaPrecioPOS === -1) {
+    throw new Error("No se encontraron todas las cabeceras necesarias (Nombre de Producto, Nombre de variante, Precio POS).");
+  }
+
+  // Crear objetos para almacenar los productos únicos y sus variantes para cada hoja
+  var productosCambridge = {};
+  var productosEdadDeOro = {};
+  var productosInfSanMarcos = {};
+  var productosIntlSanMarcos = {};
+  var productosColSanMarcos = {};
+  var productosSJ = {};
+  
+  // Variantes posibles actualizadas (sin "Talla ")
+  var variantesPosiblesCambridge = [
+    "02", "04", "06", "08", "10", 
+    "12", "14", "16/34", "36/XS", "38/S", 
+    "40/M", "42/L", "44/XL", 
+    "46/2XL", "48/3XL", "50/4XL"
+  ];
+  
+  var variantesPosiblesEO = [
+    "04", "06", "08", "10", 
+    "12", "14", "16/34", 
+    "38/S", "40/M", "42/L", 
+    "44/XL", "46/2XL", "48/3XL"
+  ];
+
+  var variantesPosiblesInfSM = [
+      "02", "04", "06", "08", "10", 
+      "12", "14", "16/34", "38/S"
+    ];
+
+  var variantesPosiblesIntlSM = [
+      "04", "06", "08", "10", 
+      "12", "14", "16/34", "38/S" , "40/M", "42/L", "44/XL", "46/2XL", "48/3XL", "50/4XL"
+    ];
+
+  var variantesPosiblesColSM = [
+      "04", "06", "08", "10", 
+      "12", "14", "16/34", "38/S" 
+  ];
+
+  var variantesPosiblesSJ = [
+      "02", "03", "04", "06", "08", 
+      "10"
+    ];
+
+
+  // Procesar las filas de datos
+  for (var i = 1; i < datos.length; i++) {
+    var nombreProducto = datos[i][columnaNombreProducto];
+    var nombreVariante = datos[i][columnaNombreVariante];
+    var precioPOS = datos[i][columnaPrecioPOS];
+    
+    if (!nombreProducto || !precioPOS) {
+      Logger.log("Fila " + (i+1) + ": Faltan datos requeridos (Nombre de Producto o Precio POS).");
+      continue; // Saltar a la siguiente fila si faltan datos requeridos
+    }
+    
+    // Asignar el producto al objeto correspondiente según el nombre
+    if (nombreProducto.includes(", CC")) {
+      if (!productosCambridge[nombreProducto.replace(", CC", "")]) {
+        productosCambridge[nombreProducto.replace(", CC", "")] = {};
+      }
+      
+      // Asignar el precio a la variante correspondiente o a la columna "2" si no hay variante
+      if (nombreVariante) {
+        productosCambridge[nombreProducto.replace(", CC", "")][nombreVariante.replace("Talla ", "")] = precioPOS; // Eliminar "Talla "
+        Logger.log("Asignando precio " + precioPOS + " a variante " + nombreVariante.replace("Talla ", "") + " del producto " + nombreProducto.replace(", CC", ""));
+      } else {
+        // Si no hay variante, asignar el precio a la columna "2"
+        productosCambridge[nombreProducto.replace(", CC", "")]["2"] = precioPOS;
+        Logger.log("Asignando precio " + precioPOS + " a la columna '2' del producto " + nombreProducto.replace(", CC", ""));
+      }
+    } else if (nombreProducto.includes(", EO")) {
+      if (!productosEdadDeOro[nombreProducto.replace(", EO", "")]) {
+        productosEdadDeOro[nombreProducto.replace(", EO", "")] = {};
+      }
+      
+      // Asignar el precio a la variante correspondiente o a la columna "2" si no hay variante
+      if (nombreVariante) {
+        productosEdadDeOro[nombreProducto.replace(", EO", "")][nombreVariante.replace("Talla ", "")] = precioPOS; // Eliminar "Talla "
+        Logger.log("Asignando precio " + precioPOS + " a variante " + nombreVariante.replace("Talla ", "") + " del producto " + nombreProducto.replace(", EO", ""));
+      } else {
+        // Si no hay variante, asignar el precio a la columna "2"
+        productosEdadDeOro[nombreProducto.replace(", EO", "")]["2"] = precioPOS;
+        Logger.log("Asignando precio " + precioPOS + " a la columna '2' del producto " + nombreProducto.replace(", EO", ""));
+      }
+    } else if (nombreProducto.includes(", Inf SM")) {
+      // 1. Limpiamos el nombre del producto
+      var nombreLimpio = nombreProducto.replace(", Inf SM", "");
+      
+      if (!productosInfSanMarcos[nombreLimpio]) {
+        productosInfSanMarcos[nombreLimpio] = {};
+      }
+      
+      // 2. Guardamos el precio
+      if (nombreVariante) {
+        // Quitamos "Talla " y usamos .trim() para limpiar espacios invisibles
+        var tallaLimpia = nombreVariante.replace("Talla ", "").trim();
+        productosInfSanMarcos[nombreLimpio][tallaLimpia] = precioPOS;
+      } else {
+        productosInfSanMarcos[nombreLimpio]["2"] = precioPOS;
+      }
+    } else if (nombreProducto.includes(", Intl SM")) {
+      var nombreLimpio = nombreProducto.replace(", Intl SM", "");
+      if (!productosIntlSanMarcos[nombreLimpio]) {
+        productosIntlSanMarcos[nombreLimpio] = {};
+      }
+      
+      if (nombreVariante) {
+        var tallaLimpia = nombreVariante.replace("Talla ", "").trim();
+        productosIntlSanMarcos[nombreLimpio][tallaLimpia] = precioPOS;
+      } else {
+        productosIntlSanMarcos[nombreLimpio]["2"] = precioPOS;
+      }
+
+    // --- LÓGICA SJ ---
+    } else if (nombreProducto.includes(", SJ")) {
+      var nombreLimpio = nombreProducto.replace(", SJ", "");
+      if (!productosSJ[nombreLimpio]) {
+        productosSJ[nombreLimpio] = {};
+      }
+      
+      if (nombreVariante) {
+        var tallaLimpia = nombreVariante.replace("Talla ", "").trim();
+        productosSJ[nombreLimpio][tallaLimpia] = precioPOS;
+      } else {
+        productosSJ[nombreLimpio]["2"] = precioPOS;
+      }
+
+    // --- AGREGAR ESTO: LÓGICA Col SM ---
+    } else if (nombreProducto.includes(", Col SM")) {
+      var nombreLimpio = nombreProducto.replace(", Col SM", "");
+      if (!productosColSanMarcos[nombreLimpio]) {
+        productosColSanMarcos[nombreLimpio] = {};
+      }
+      
+      if (nombreVariante) {
+        var tallaLimpia = nombreVariante.replace("Talla ", "").trim();
+        productosColSanMarcos[nombreLimpio][tallaLimpia] = precioPOS;
+      } else {
+        productosColSanMarcos[nombreLimpio]["2"] = precioPOS;
+      }
+    }
+  }
+
+  // Imprimir los objetos de productos para ver cómo se han almacenado los precios
+  Logger.log("Contenido de productosCambridge: " + JSON.stringify(productosCambridge));
+  Logger.log("Contenido de productosEdadDeOro: " + JSON.stringify(productosEdadDeOro));
+  Logger.log("Contenido de productosInfSanMarcos: " + JSON.stringify(productosInfSanMarcos));
+
+  // Crear las hojas y escribir los datos organizados
+  crearYEscribirHoja("Cambridge", productosCambridge, variantesPosiblesCambridge, [
+    "Pantalón de Varon", "Camisa m/c", "Camisa m/l", "Corbata Larga",
+    "Pantalón c/elas", "Bermuda", "Polera m/c", "Polera m/l",
+    "Short", "Calza corta", "Calza larga", "Pantalón Dama",
+    "Blusa m/c", "Blusa m/l", "Corbata c/elas", "Falda Plisada",
+    "Jamper", "Vestido", "Chompa c/v", "Chaleco c/v",
+    "Chamarra ver", "Chamarra dep", "Chamarra inv", "Buzo dep",
+    "Polera de colores", "Polera Bullying", "Saco a medida Gde", "Saco a medida Peq",
+    "Gorro", "Gorra", "Sombrero", "Lanyard", "Riñonera", "Cinturón",
+    "Camisa profesor", "Polo para profesor"
+  ]);
+  
+  crearYEscribirHoja("Edad de Oro", productosEdadDeOro, variantesPosiblesEO, [
+    "Polera Ed Física", "Short Ed Física", "Calza Corta Ed. Fis", "Calza Larga Ed. Fis",
+    "Polo Niño", "Polo Niña", "Conjunto Dep", "Pant c/Elast", "Pant Chupin Azul",
+    "Falda Azul", "Traje Natación"
+  ]);
+  
+  crearYEscribirHoja("Infantil San Marcos", productosInfSanMarcos, variantesPosiblesInfSM, [
+       "Camisa Manga Corta", "Blusa Manga Corta", "Pantalon c/elast.", "Bermuda Calipso", "Bermuda Gris", "Short Falda Calipso","Short Falda Gris", "Polo", "Polera Ed. Física", "Short", "Calza", "Delantal Escolar",
+  ]);
+
+  crearYEscribirHoja("Intl San Marcos", productosIntlSanMarcos, variantesPosiblesIntlSM, [
+      "Pantalón de Varón","Pantalón de Mujer","Camisa m/corta","Camisa m/larga","Blusa m/corta", "Blusa m/larga","Pantalón c/Elast","Short Falda Niña","Polera Ed. Fisica","Polo de Varón" ,"Polo de Mujer" ,"Short","Calza","Chamarra Dep","Buzo Dep"
+  ]);
+
+  crearYEscribirHoja("Col San Marcos", productosColSanMarcos, variantesPosiblesColSM, [
+    "Pantalón c/elast", "Bermuda", "Polo", "Polera Ed. Física",
+    "Polera m/larga", "Short Falda c/elast", "Short", "Calza"
+  ]);
+
+  crearYEscribirHoja("Saint Jude", productosSJ, variantesPosiblesSJ, [
+     "Bermuda","Falda c/elast","Polo","Short","Calza","Polera c/redondo","Chamarra","Buzo dep"
+  ]);
+}
+
+function crearYEscribirHoja(nombreHoja, productos, variantesPosibles, ordenProductos) {
+  // 1. Cabeceras
+  var datosOrganizados = [];
+  datosOrganizados.push(["ITEM", "DETALLE"].concat(variantesPosibles));
+
+  var itemCounter = 1;
+  var productosProcesados = {}; // Para marcar los que ya pusimos y no repetir
+
+  // ---------------------------------------------------------
+  // PASO 1: Escribir PRIMERO los productos que están en tu LISTA DE ORDEN
+  // ---------------------------------------------------------
+  ordenProductos.forEach(function(nombreProducto) {
+    // Solo si el producto existe en los datos leídos del Excel
+    if (productos[nombreProducto]) {
+      var fila = construirFila(itemCounter++, nombreProducto, productos[nombreProducto], variantesPosibles);
+      datosOrganizados.push(fila);
+      productosProcesados[nombreProducto] = true; // Marcar como procesado
+    }
+  });
+
+  // ---------------------------------------------------------
+  // PASO 2: Escribir DESPUÉS los productos que sobran (los que no pusiste en la lista)
+  // ---------------------------------------------------------
+  for (var nombreProducto in productos) {
+    // Si NO está marcado como procesado, lo agregamos al final
+    if (!productosProcesados[nombreProducto]) {
+      var fila = construirFila(itemCounter++, nombreProducto, productos[nombreProducto], variantesPosibles);
+      datosOrganizados.push(fila);
+    }
+  }
+
+  // ---------------------------------------------------------
+  // PASO 3: Crear/Limpiar la hoja y Escribir
+  // ---------------------------------------------------------
+  var hojaOrganizada = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nombreHoja);
+  
+  if (hojaOrganizada) {
+    hojaOrganizada.clear();
+  } else {
+    hojaOrganizada = SpreadsheetApp.getActiveSpreadsheet().insertSheet(nombreHoja);
+    try {
+      // Mover la hoja al final (opcional, ayuda al orden visual)
+      var totalHojas = SpreadsheetApp.getActiveSpreadsheet().getNumSheets();
+      hojaOrganizada.activate();
+      SpreadsheetApp.getActiveSpreadsheet().moveActiveSheet(totalHojas);
+    } catch(e) {} // Ignorar si falla el movimiento
+  }
+  
+  if (!hojaOrganizada) throw new Error("No se pudo crear la hoja '" + nombreHoja + "'.");
+  
+  // Escribir datos
+  hojaOrganizada.getRange(1, 1, datosOrganizados.length, datosOrganizados[0].length).setValues(datosOrganizados);
+
+  // Formato Visual
+  hojaOrganizada.setColumnWidth(1, 50);  // ITEM
+  hojaOrganizada.setColumnWidth(2, 200); // DETALLE (Más ancho para leer bien)
+  
+  for (var j = 3; j <= variantesPosibles.length + 2; j++) {
+    hojaOrganizada.setColumnWidth(j, 60); // Columnas de tallas
+  }
+  
+  hojaOrganizada.getRange(1, 1, datosOrganizados.length, datosOrganizados[0].length).setHorizontalAlignment("center");
+  // Poner negrita a la cabecera
+  hojaOrganizada.getRange(1, 1, 1, datosOrganizados[0].length).setFontWeight("bold");
+}
+
+// Función auxiliar para armar la fila (limpia el código principal)
+function construirFila(numeroItem, nombre, datosPrecios, variantes) {
+  var fila = [];
+  fila.push(numeroItem); 
+  fila.push(nombre);
+
+  for (var k = 0; k < variantes.length; k++) {
+    var variante = variantes[k];
+    var precio = datosPrecios[variante] || "-";
+    fila.push(precio);
+  }
+  
+  // Si existe precio en columna "2" (sin variante), sobrescribe o rellena si es necesario
+  // Nota: En tu lógica original esto iba en la posición 2 (columna 3 de Excel).
+  // Si prefieres que el precio base vaya en una columna específica, ajusta el índice aquí.
+  if (datosPrecios["2"]) {
+    // Por defecto tu código anterior lo ponía en la columna de la primera talla.
+    // Si quieres mantener eso:
+    if (fila[2] === "-") { 
+        fila[2] = datosPrecios["2"]; 
+    }
+  }
+  
+  return fila;
+}
