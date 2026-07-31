@@ -38,7 +38,9 @@ describe('costoUnitarioDeInsumo', () => {
   });
 
   it('se cae al valor guardado cuando la cantidad no es un numero', () => {
-    // Pasa en 8 de 38 filas: "Botamanga (par)" tiene cantidadXud = "par".
+    // Caso defensivo: si `cantidadXud` llegara como texto. En la base es NOT NULL y el "par"
+    // de la planilla ya quedo como 1, asi que hoy no ocurre; el respaldo real son las 4 filas
+    // con costo de compra en 0.
     expect(costoUnitarioDeInsumo({
       costoUdCompra: null, cantidadXud: 'par' as any, costoUnitarioGuardado: 3.5,
     })).toBe(3.5);

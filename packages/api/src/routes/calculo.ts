@@ -13,6 +13,8 @@ import {
 // Que le falta a una prenda para que su costo sea real. NO consulta nada: el motor ya reporta
 // origenPeso, telaVinculada y tieneManoObra en el meta de cada fila.
 import { diagnosticarPorPrenda, resumirDiagnosticos } from '../services/diagnosticoCosto';
+// La referencia `CC-01` de cada prenda, para la columna `Prod`.
+import { referenciasDesdeBase } from '../services/referenciaPrendaDb';
 import XLSX from 'xlsx';
 import { resolverPrendaPorItem } from '../services/resolucion.service';
 import {
@@ -320,6 +322,10 @@ api.get('/matriz-consolidada', async (c) => {
     // elegir. El mayor es el de la talla mas grande, es estable, y no se mueve porque una
     // talla chica no tenga precio cargado. Tomar la primera talla seria arbitrario, y el
     // promedio movería el orden al agregar una talla.
+    // Las referencias se piden con TODAS las prendas, no con las de esta pagina: `CC-03` significa
+    // "la tercera prenda de Cambridge", y si se contara sobre las filas devueltas, en la pagina 2
+    // la primera volveria a ser `CC-01` y la columna dejaria de identificar.
+    const referencias = await referenciasDesdeBase(db);
     for (const fila of gridData) {
       let mayor: number | null = null;
       for (const celda of Object.values(fila.tallas as Record<string, any>)) {
@@ -329,6 +335,10 @@ api.get('/matriz-consolidada', async (c) => {
       }
       fila.precio = mayor;
       fila.colegioNombre = nombrePorColegio.get(String(fila.colegioId)) ?? null;
+      // La REFERENCIA que se ve en la columna `Prod`: `CC-01`. Reemplaza al numero de item, que
+      // era GLOBAL y por eso ilegible —Cambridge 1 a 27 e Internacional SM arrancando en 28, que
+      // es el `1, 28, 2, 3` de la matriz—.
+      fila.prod = referencias.get(String(fila.productoId)) ?? null;
     }
 
     const ordenadas = ordenarPrendas(gridData as any, criterio as any, posiciones, { agruparPorColegio });

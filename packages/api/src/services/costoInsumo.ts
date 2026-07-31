@@ -38,8 +38,12 @@ export interface EntradasInsumo {
   cantidadXud?: number | null;
   /**
    * Costo unitario ya guardado. Es RESPALDO, no la fuente: se usa solo cuando las dos entradas
-   * de arriba no alcanzan para calcularlo. Pasa en 8 de 38 filas, donde `cantidadXud` no es un
-   * numero (dice "par") o falta el costo de compra. Sin este respaldo esas filas costarian 0.
+   * de arriba no alcanzan para calcularlo.
+   *
+   * MEDIDO: pasa en 4 de 38 filas —Cuello, Vinilo para shorts, Vinilo Calzas, Entretela Corbata—,
+   * todas con `costoUdCompra` en 0 y el unitario cargado a mano. Sin este respaldo esas cuatro
+   * costarian 0. En la base `cantidad_x_ud` es NOT NULL, asi que el "par" de la planilla ya quedo
+   * como 1 y no llega a este camino.
    */
   costoUnitarioGuardado?: number | null;
   /**

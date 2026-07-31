@@ -49,6 +49,7 @@ import { saveDbToDisk } from '../database/sqljs';
 // El criterio de orden vive en UNA sola casa. Antes estaba escrito en diez consultas con
 // tres versiones distintas, y ninguna mencionaba el colegio: por eso el item de un colegio
 // aparecia entre los de otro.
+import { referenciasDesdeBase } from '../services/referenciaPrendaDb';
 import { ordenarPrendasDesdeBase } from '../services/ordenPrendasDb';
 
 const api = new Hono();
@@ -144,9 +145,22 @@ api.get('/', async (c) => {
   // el que agrupa por colegio, se aplica despues.
   const lista = await ordenarPrendasDesdeBase(db, sinOrdenar);
 
+  // La REFERENCIA `CC-01` de cada prenda, que es lo que se ve en la columna `Prod`.
+  //
+  // Se calcula con TODAS las prendas y no con `lista`: cuando se filtra por un colegio, `lista`
+  // trae solo las de ese colegio, y numerar sobre eso daria el mismo resultado por casualidad.
+  // Pero con el filtro en toda la empresa y una pagina de por medio, contar sobre las filas
+  // devueltas haria que la referencia signifique "la enesima de esta vista" en vez de "la enesima
+  // de su colegio". `referenciasDesdeBase` siempre mira el conjunto completo.
+  const referencias = await referenciasDesdeBase(db);
+  const conReferencia = lista.map((p: any) => ({
+    ...p,
+    prod: referencias.get(String(p.id)) ?? null,
+  }));
+
   return c.json({
     success: true,
-    data: lista,
+    data: conReferencia,
     // El alcance DECLARADO, igual que en export.ts. Un listado de toda la empresa y el de
     // un colegio se veian identicos desde afuera, y con un solo colegio cargado eran la
     // misma cosa. Con dos ya no.

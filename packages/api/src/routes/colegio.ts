@@ -18,6 +18,15 @@ const crearColegioSchema = z.object({
   direccion: z.string().max(500).optional(),
   nit: z.string().max(50).optional(),
   telefono: z.string().max(50).optional(),
+  /**
+   * Abreviatura del colegio: la que forma `CC-01` en la columna `Prod` y la que empareja el
+   * sufijo del codigo del POS al importar.
+   *
+   * Tope de 12 caracteres: la mas larga que usa el POS es `IntlSM` (6). Doce da margen sin que
+   * alguien pegue un nombre entero y rompa el ancho de la columna, que convive con 16 columnas
+   * de tallas.
+   */
+  abreviatura: z.string().max(12).optional(),
 });
 
 // GET /api/colegios - Listar colegios
