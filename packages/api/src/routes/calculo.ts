@@ -4,7 +4,12 @@ import { zValidator } from '@hono/zod-validator';
 import { eq, and, asc, or, isNull } from 'drizzle-orm';
 import { calcularCostoTotal } from '../services/calculo/costoTotal.service';
 import { costearLote, costearPrendaTodasLasTallas } from '../services/calculo/costeoInputs.service';
-import { productos, tallas, preciosVenta, inventario } from '../database/schema';
+import { productos, tallas, preciosVenta, inventario, colegios } from '../database/schema';
+// El criterio de orden y la paginacion viven en UNA sola casa. Ver el comentario de
+// ordenPrendas.ts: estaban repartidos en diez consultas con tres criterios distintos.
+import {
+  posicionesDeColegios, ordenarPrendas, paginar, leerPaginacion, esCriterioValido,
+} from '../services/ordenPrendas';
 import XLSX from 'xlsx';
 import { findExcelPath } from '../scripts/seed';
 import { resolverPrendaPorItem } from '../services/resolucion.service';
@@ -303,6 +308,11 @@ api.get('/matriz-consolidada', async (c) => {
         productoId: prod.id,
         itemNumero: prod.itemNumero,
         descripcion: prod.descripcion,
+        // El COLEGIO viaja en la fila. Sin el, la pantalla no puede agrupar ni poner la fila
+        // separadora, y el orden tampoco podia saber que existen los colegios: es la causa
+        // exacta del 1, 28, 2, 3 que reporto el usuario.
+        colegioId: prod.colegioId ?? null,
+        orden: prod.orden ?? null,
         tallas: {},
       };
 
@@ -350,9 +360,58 @@ api.get('/matriz-consolidada', async (c) => {
       return rowObj;
     });
 
+    // -----------------------------------------------------------------------
+    // ORDEN Y PAGINACION. Los dos aca, en este orden, y por una sola via.
+    //
+    // EL ORDEN NO SE ESCRIBE EN ESTA RUTA: lo define services/ordenPrendas.ts, que es la
+    // unica casa del criterio. Antes esta pantalla ordenaba por `orden, item_numero` sin
+    // mencionar el colegio, y como `orden` se numera POR COLEGIO los dos unos empataban:
+    // el item 28 de Internacional SM salia entre el 1 y el 2 de Cambridge.
+    //
+    // Y PAGINAR VA DESPUES DE ORDENAR, no antes. Al reves cada pagina traeria un conjunto
+    // distinto de filas segun el criterio elegido, que es la clase de error que no se ve
+    // hasta que alguien compara dos paginas.
+    // -----------------------------------------------------------------------
+    const colegiosParaOrden = await db
+      .select({ id: colegios.id, nombre: colegios.nombre, orden: colegios.orden, creadoEn: colegios.creadoEn })
+      .from(colegios);
+    const posiciones = posicionesDeColegios(colegiosParaOrden as any);
+    const nombrePorColegio = new Map<string, string>(
+      colegiosParaOrden.map((c: any) => [String(c.id), String(c.nombre)])
+    );
+
+    const q = c.req.query();
+    const criterio = esCriterioValido(q.orden) ? q.orden : 'defecto';
+    const agruparPorColegio = String(q.compararEntreColegios ?? '') !== 'true';
+
+    // PRECIO REPRESENTATIVO de la prenda para el orden por precio: el MAYOR de sus tallas
+    // ofrecidas. La prenda no tiene un precio unico —tiene uno por talla— asi que hay que
+    // elegir. El mayor es el de la talla mas grande, es estable, y no se mueve porque una
+    // talla chica no tenga precio cargado. Tomar la primera talla seria arbitrario, y el
+    // promedio movería el orden al agregar una talla.
+    for (const fila of gridData) {
+      let mayor: number | null = null;
+      for (const celda of Object.values(fila.tallas as Record<string, any>)) {
+        if (celda?.seOfrece && Number(celda.precioVenta) > 0) {
+          mayor = mayor === null ? Number(celda.precioVenta) : Math.max(mayor, Number(celda.precioVenta));
+        }
+      }
+      fila.precio = mayor;
+      fila.colegioNombre = nombrePorColegio.get(String(fila.colegioId)) ?? null;
+    }
+
+    const ordenadas = ordenarPrendas(gridData as any, criterio as any, posiciones, { agruparPorColegio });
+    const { pagina, porPagina } = leerPaginacion(q as any);
+    const pag = paginar(ordenadas, pagina, porPagina);
+
     return c.json({
       success: true,
       tallas: allTallas.map((t: any) => ({ id: t.id, codigo: t.codigo, orden: t.orden })),
+      // El orden y la paginacion se DECLARAN, para que la pantalla pueda mostrar lo que de
+      // verdad esta viendo en vez de suponerlo.
+      orden: criterio,
+      agrupadoPorColegio: agruparPorColegio,
+      paginacion: { total: pag.total, pagina: pag.pagina, porPagina: pag.porPagina, paginas: pag.paginas },
       // Huella para el arnes de paridad: distingue esta version de la heredada.
       implementacion: 'unificada',
       // Huella del modo fiscal, para que la pantalla pueda verificar que le
@@ -361,7 +420,7 @@ api.get('/matriz-consolidada', async (c) => {
       modalidadEtiqueta: etiquetaModalidad(fiscal.modalidad),
       descuentoSinFacturaPct: parseFloat((fiscal.descuentoFraccion * 100).toFixed(2)),
       avisos: avisosFiscales,
-      data: gridData,
+      data: pag.filas,
     });
   } catch (e: any) {
     console.error('matriz-consolidada:', e);

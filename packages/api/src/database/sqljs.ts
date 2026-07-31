@@ -88,6 +88,8 @@ CREATE TABLE IF NOT EXISTS "colegio" (
  "nit" text,
  "telefono" text,
  "activo" integer DEFAULT true NOT NULL,
+ -- Posicion cuando se ven varios colegios juntos. NULL = ordenar por fecha de creacion.
+ "orden" integer,
  "creado_en" text DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 CREATE TABLE IF NOT EXISTS "anio_escolar" (
@@ -369,6 +371,12 @@ export async function getDb(opciones: OpcionesGetDb = {}) {
   // las tablas se crean con IF NOT EXISTS: en una base ya existente el CREATE no
   // se vuelve a ejecutar y la columna nunca apareceria.
   try { dbInstance.run("ALTER TABLE \"producto\" ADD COLUMN \"modo_costeo\" TEXT DEFAULT 'confeccion';"); } catch (e) {}
+
+  // Posicion del colegio cuando se ven varios juntos. NULL significa "ordenar por fecha de
+  // creacion", asi que la columna nace vacia y el comportamiento no cambia hasta que el
+  // usuario arrastre en Perfil & Colegios. Va como ALTER porque las tablas se crean con
+  // IF NOT EXISTS y en una base existente el CREATE no se vuelve a ejecutar.
+  try { dbInstance.run('ALTER TABLE "colegio" ADD COLUMN "orden" INTEGER;'); } catch (e) {}
 
   // Codigo del POS en precio_venta. Va como ALTER ademas del CREATE por la misma razon
   // que modo_costeo: las tablas se crean con IF NOT EXISTS, asi que en una base que ya

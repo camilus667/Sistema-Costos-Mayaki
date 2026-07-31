@@ -11,6 +11,18 @@ export const colegios = sqliteTable('colegio', {
   nit: text('nit'),
   telefono: text('telefono'),
   activo: integer('activo', { mode: 'boolean' }).default(true).notNull(),
+  /**
+   * En que posicion va este colegio cuando se ven varios juntos. Lo escribe el arrastrar y
+   * soltar de Perfil & Colegios.
+   *
+   * ES NULLABLE A PROPOSITO, con la misma regla que `colegio_talla`: sin valor manda la
+   * FECHA DE CREACION. Asi la columna nace vacia sin cambiar el comportamiento de una base
+   * que ya existe, y el default coincide con lo que pidio el usuario —"que se organice por
+   * el orden en que se agregaron los colegios"— sin escribir nada.
+   *
+   * El criterio completo vive en services/ordenPrendas.ts, no aca.
+   */
+  orden: integer('orden'),
   creadoEn: text('creado_en').default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
