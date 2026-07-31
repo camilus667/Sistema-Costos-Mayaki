@@ -18,6 +18,7 @@ import { referenciasDesdeBase } from '../services/referenciaPrendaDb';
 // Emparejar tallas sin depender de si la base guarda `2` o `02`.
 import { buscarTallaPorCodigo } from '../services/tallas';
 import XLSX from 'xlsx';
+import { codigosPosDesdeBase, claveCodigoPos } from '../services/codigoPos';
 import { resolverPrendaPorItem } from '../services/resolucion.service';
 import {
   construirContextoFiscal,
@@ -587,6 +588,14 @@ api.get('/matriz-prenda/:productoId', async (c) => {
     const avisosFiscales: string[] = [];
     const fiscal = construirContextoFiscal(c, ctx, avisosFiscales);
 
+    // El codigo del POS de cada talla, y la referencia de la prenda. En esta pantalla la fila es un
+    // concepto y las columnas son tallas, asi que el codigo NO puede ser una columna: va en una
+    // fila `Cod` con un codigo por talla, que es la unica forma en que no miente.
+    const [codigosPos, referencias] = await Promise.all([
+      codigosPosDesdeBase(db),
+      referenciasDesdeBase(db),
+    ]);
+
     const matriz = filas.map((f) => {
       const { meta, resultado } = f;
 
@@ -608,6 +617,9 @@ api.get('/matriz-prenda/:productoId', async (c) => {
         tallaId: meta.tallaId,
         tallaCodigo: meta.tallaCodigo,
         tallaNombre: meta.tallaNombre,
+        // null cuando esa talla todavia no tiene codigo: la pantalla pone un guion en vez de
+        // inventar uno.
+        codigoPos: codigosPos.get(claveCodigoPos(prod.id, meta.tallaId)) ?? null,
         pesoExacto: r2(meta.pesoExactoGramos),
         pesoConMerma: r2(resultado.pesoConMerma),
         mermaPorcentaje: meta.mermaPorcentaje ?? 8,
@@ -649,6 +661,7 @@ api.get('/matriz-prenda/:productoId', async (c) => {
       producto: {
         id: prod.id,
         itemNumero: prod.itemNumero,
+        prod: referencias.get(String(prod.id)) ?? null,
         descripcion: prod.descripcion,
         factorComplejidad: prod.factorComplejidad,
         modoCosteo: prod.modoCosteo === 'adquirido' ? 'adquirido' : 'confeccion',

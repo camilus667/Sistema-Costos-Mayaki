@@ -39,12 +39,13 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
-import { inventarioTransacciones, inventario, productos, tallas, preciosVenta } from '../database/schema';
+import { inventarioTransacciones, inventario, productos, tallas } from '../database/schema';
 import { desc, eq, and, asc, sql } from 'drizzle-orm';
 import XLSX from 'xlsx';
 import { costearLote } from '../services/calculo/costeoInputs.service';
 import { referenciasDesdeBase } from '../services/referenciaPrendaDb';
 import { ordenarPrendasDesdeBase } from '../services/ordenPrendasDb';
+import { codigosPosDesdeBase, claveCodigoPos } from '../services/codigoPos';
 import { colegios } from '../database/schema';
 import { saveDbToDisk } from '../database/sqljs';
 import {
@@ -159,19 +160,7 @@ async function construirFilasInventario(c: any, opciones: { soloConStock: boolea
   // columna. Es la unica pantalla donde el codigo cabe en una columna sin mentir: aca una fila ES
   // una prenda con su talla, y el codigo identifica exactamente esa combinacion. En una matriz
   // donde la fila es una prenda y las columnas son tallas, el codigo va en la celda.
-  const codigosPos = new Map<string, string>();
-  {
-    const filasCodigo = await db
-      .select({
-        productoId: preciosVenta.productoId,
-        tallaId: preciosVenta.tallaId,
-        codigoExterno: preciosVenta.codigoExterno,
-      })
-      .from(preciosVenta);
-    for (const f of filasCodigo) {
-      if (f.codigoExterno) codigosPos.set(`${f.productoId}_${f.tallaId}`, String(f.codigoExterno));
-    }
-  }
+  const codigosPos = await codigosPosDesdeBase(db);
 
   const data = filasInv
     .filter((i: any) => (opciones.soloConStock ? Number(i.cantidad) > 0 : true))
@@ -188,7 +177,7 @@ async function construirFilasInventario(c: any, opciones: { soloConStock: boolea
         itemNumero: i.itemNumero,
         // null cuando esa combinacion todavia no tiene codigo: la pantalla muestra un guion en vez
         // de inventar uno. Los codigos entran con la importacion del POS.
-        codigoPos: codigosPos.get(`${i.productoId}_${i.tallaId}`) ?? null,
+        codigoPos: codigosPos.get(claveCodigoPos(i.productoId, i.tallaId)) ?? null,
         producto: i.producto || 'Producto',
         talla: i.talla || 'N/A',
         tallaOrden: i.tallaOrden ?? 99,

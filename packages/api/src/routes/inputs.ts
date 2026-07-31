@@ -5,6 +5,7 @@ import { saveDbToDisk } from '../database/sqljs';
 import { getSystemConfig, setSystemConfig } from '../services/configService';
 import { costoUnitarioDeInsumo, costoUsoDeInsumo } from '../services/costoInsumo';
 import { agregarReferencias } from '../services/referenciaPrendaDb';
+import { codigosPosDesdeBase, claveCodigoPos } from '../services/codigoPos';
 import { buscarTallaPorCodigo } from '../services/tallas';
 import { cargarContextoCosteo, ensamblarInputs } from '../services/calculo/costeoInputs.service';
 import { calcularCostoTotal } from '../services/calculo/costoTotal.service';
@@ -968,6 +969,10 @@ api.get('/desglose-inteligente-producto', async (c) => {
     const fiscal = construirContextoFiscal(c, ctx, avisosFiscales);
     const sysConfig = ctx.sysConfig;
 
+    // El codigo del POS de cada prenda+talla. Se lee una vez para todas las prendas: es la misma
+    // casa que usan Inventario Real y Costeo Multitalla.
+    const codigosPos = await codigosPosDesdeBase(db);
+
     const data = ctx.productos.map((p: any) => {
       const tallasColegio = ctx.tallasPorColegio.get(p.colegioId) || [];
 
@@ -983,6 +988,9 @@ api.get('/desglose-inteligente-producto', async (c) => {
           orden: t.orden,
           pesoGramos: pesoVal,
           tienePesoReal: pesoVal !== null && pesoVal > 0,
+          // Va por talla porque el codigo ES por talla. Sirve para que el selector muestre el
+          // codigo de la que se elija sin volver a pedir nada.
+          codigoPos: codigosPos.get(claveCodigoPos(p.id, t.id)) ?? null,
         };
       });
 
@@ -1057,7 +1065,12 @@ api.get('/desglose-inteligente-producto', async (c) => {
         itemNumero: p.itemNumero,
         descripcion: p.descripcion,
         tallasDisponibles,
-        tallaActual: { tallaId: sel.tallaId, codigo: sel.codigo, nombre: sel.nombre },
+        tallaActual: {
+          tallaId: sel.tallaId,
+          codigo: sel.codigo,
+          nombre: sel.nombre,
+          codigoPos: codigosPos.get(claveCodigoPos(p.id, sel.tallaId)) ?? null,
+        },
         tela: {
           nombre: meta.telaNombre || 'Sin tela asignada',
           precioBsGramo: meta.precioBsG ?? 0,

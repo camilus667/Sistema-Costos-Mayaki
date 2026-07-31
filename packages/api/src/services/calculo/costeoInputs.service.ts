@@ -15,6 +15,7 @@ import {
   costoSnapshots,
 } from '../../database/schema';
 import { getSystemConfig, type SystemConfig } from '../configService';
+import { ordenarPrendasDesdeBase } from '../ordenPrendasDb';
 import {
   calcularCostoTotal,
   calcularCostoAccesorios,
@@ -240,7 +241,7 @@ export async function cargarContextoCosteo(
       if (opts.productoId && p.id !== opts.productoId) return false;
       if (opts.colegioId && opts.colegioId !== 'all' && p.colegioId !== opts.colegioId) return false;
       return true;
-    }).sort((a: any, b: any) => (num(a.orden) || 0) - (num(b.orden) || 0) || (num(a.itemNumero) || 0) - (num(b.itemNumero) || 0));
+    });
   } else {
     const filtrosProducto: any[] = [];
     if (opts.productoId) filtrosProducto.push(eq(productos.id, opts.productoId));
@@ -250,9 +251,24 @@ export async function cargarContextoCosteo(
     listaProductos = filtrosProducto.length
       ? await db.select().from(productos)
           .where(filtrosProducto.length === 1 ? filtrosProducto[0] : and(...filtrosProducto))
-          .orderBy(asc(productos.orden), asc(productos.itemNumero))
-      : await db.select().from(productos).orderBy(asc(productos.orden), asc(productos.itemNumero));
+      : await db.select().from(productos);
   }
+
+  // EL ORDEN DE LAS PRENDAS, UNA SOLA VEZ Y PARA TODO EL MOTOR.
+  //
+  // Aca vivian la DUODECIMA y la DECIMOTERCERA copia del orden, y las dos con el criterio
+  // equivocado: la rama de instantanea ordenaba en JavaScript y la rama viva en SQL, ambas por
+  // `orden, item_numero`. `producto.orden` se numera POR COLEGIO, asi que la unica prenda de
+  // Internacional SM tiene `orden = 1` igual que la primera de Cambridge, empatan, y el desempate
+  // por item la mete en medio.
+  //
+  // No era invisible: el selector de Costeo Individual ofrecia `CAM-01, ISM-01, CAM-02, CAM-03`.
+  // Las pantallas que ya pasaban por `ordenarPrendasDesdeBase` lo tapaban reordenando la salida;
+  // las que confiaban en el contexto, no.
+  //
+  // Ordenar ACA y no en cada consumidor es la unica forma de que no aparezca una copia numero
+  // catorce: `ctx.productos` lo recorren siete lugares entre rutas y servicios.
+  listaProductos = await ordenarPrendasDesdeBase(db, listaProductos as any, 'defecto');
 
   // --- tallas ---
   // FASE 5. Las tallas pasan a ser vocabulario COMPARTIDO: colegio_id NULL. Antes

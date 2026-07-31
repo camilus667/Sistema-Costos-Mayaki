@@ -313,6 +313,21 @@
               </select>
             </div>
 
+            <!-- IDENTIDAD DE LO SELECCIONADO. `Prod` es la referencia interna (CC-01) y `Cod. POS`
+                 es el codigo con el que esa prenda EN ESA TALLA se vende en el punto de venta. Son
+                 dos datos distintos y por eso van los dos: uno sirve para leer un reporte, el otro
+                 para volver al POS. -->
+            <div style="display:flex; flex-direction:column; gap:0.35rem; border-top:1px solid #334155; padding-top:0.85rem;">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem;">
+                <span style="font-size:0.72rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em;">Prod</span>
+                <strong id="desglose-referencia" style="font-size:0.82rem; color:#e2e8f0;">—</strong>
+              </div>
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem;">
+                <span style="font-size:0.72rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em;">Cod. POS</span>
+                <span id="desglose-codigo-pos">—</span>
+              </div>
+            </div>
+
 
           </div>
 
@@ -1548,7 +1563,10 @@
             const avgMargin = p.margenPromedioPct || 0;
             const marginColor = getMarginColor(avgMargin);
             const marginText = avgMargin > 0 ? ` (+${avgMargin.toFixed(1)}% margen)` : '';
-            return `<option value="${p.id}" data-color="${marginColor}" style="color: ${marginColor}; background: #0d131f; font-weight: 600;">#${p.itemNumero} - ${p.descripcion}${marginText}</option>`;
+            // La referencia `CC-01`, la misma que muestra la tabla de arriba. Este selector era el
+            // ultimo lugar que seguia rotulando las prendas con el `item_numero` global.
+            const ref = p.prod || ('#' + p.itemNumero);
+            return `<option value="${p.id}" data-color="${marginColor}" style="color: ${marginColor}; background: #0d131f; font-weight: 600;">${escAttr(ref)} - ${p.descripcion}${marginText}</option>`;
           }).join('');
           if (currentSel) selectProd.value = currentSel;
 
@@ -1655,8 +1673,11 @@
         // no existen en el ambito actual no es un detalle cosmetico: es la entrada
         // de una consulta que no puede devolver nada.
         const previo = selectedItemNum;
+        // El VALOR sigue siendo `itemNumero` —es lo que la consulta espera— y lo que se MUESTRA es
+        // la referencia `CC-01`. Cambiar el value romperia el pedido; cambiar el texto es lo que se
+        // pidio: que ninguna pantalla siga mostrando el numero global.
         selectEl.innerHTML = allData.map(x =>
-          `<option value="${escAttr(x.itemNumero)}">#${escAttr(x.itemNumero)} – ${escAttr(x.descripcion)}</option>`
+          `<option value="${escAttr(x.itemNumero)}">${escAttr(x.prod || ('#' + x.itemNumero))} – ${escAttr(x.descripcion)}</option>`
         ).join('');
         if (previo && allData.some(x => String(x.itemNumero) === String(previo))) {
           selectEl.value = String(previo);
@@ -1699,6 +1720,21 @@
             tallaSel.value = tallaActual.tallaId;
           }
         }
+
+        // EL CODIGO DEL POS DE LO QUE SE ESTA MIRANDO. Aca cabe sin ambiguedad: la pantalla
+        // muestra UNA prenda en UNA talla, que es exactamente el alcance del codigo.
+        //
+        // Se muestra "—" y no se esconde el recuadro cuando falta: un espacio vacio no dice si esa
+        // combinacion no tiene codigo o si la pantalla se olvido de traerlo.
+        const cajaCod = document.getElementById('desglose-codigo-pos');
+        if (cajaCod) {
+          const cod = tallaActual && tallaActual.codigoPos ? tallaActual.codigoPos : null;
+          cajaCod.innerHTML = cod
+            ? `<span class="col-item">${escAttr(cod)}</span>`
+            : '<span style="color:#64748b; font-size:0.78rem;">— sin código del POS</span>';
+        }
+        const cajaRef = document.getElementById('desglose-referencia');
+        if (cajaRef) cajaRef.textContent = p.prod || ('#' + p.itemNumero);
 
         // Valores del API. El navegador NO calcula: si un campo falta se muestra 0
         // y se avisa, nunca un numero inventado.
@@ -1774,7 +1810,12 @@
 
             <!-- Header -->
             <div style="background: linear-gradient(135deg, #1e293b 60%, #0f172a); border:1px solid #334155; border-radius:14px; padding:1.5rem 1.75rem; display:flex; align-items:center; gap:1.25rem; flex-wrap:wrap;">
-              <div style="background:#059669; color:#fff; font-size:1.35rem; font-weight:900; border-radius:10px; padding:0.55rem 1rem; min-width:52px; text-align:center;">#${p.itemNumero}</div>
+              <!-- La referencia CC-01, no el numero global. Es el rotulo mas visible de la pantalla
+                   y era el ultimo que seguia mostrando el numero que no concuerda con las matrices.
+                   Tipografia algo menor y sin salto de linea porque CAM-01 son seis caracteres
+                   donde antes habia dos. NADA DE BACKTICKS EN ESTE COMENTARIO: esta dentro de un
+                   template literal y lo terminarian. -->
+              <div style="background:#059669; color:#fff; font-size:1.05rem; font-weight:900; border-radius:10px; padding:0.55rem 0.9rem; min-width:52px; text-align:center; white-space:nowrap; letter-spacing:0.01em;">${escAttr(p.prod || ('#' + p.itemNumero))}</div>
               <div style="flex:1; min-width:200px;">
                 <div style="font-size:1.3rem; font-weight:800; color:#f8fafc;">${p.descripcion} ${tallaLabel}</div>
               </div>
@@ -2968,7 +3009,7 @@
           const tbody = document.getElementById('tb-matriz-body');
 
           container.style.display = 'block';
-          if (titulo) titulo.textContent = `Matriz de costeo por prenda: ${json.producto.descripcion} (#${json.producto.itemNumero})`;
+          if (titulo) titulo.textContent = `Matriz de costeo por prenda: ${json.producto.descripcion} (${json.producto.prod || '#' + json.producto.itemNumero})`;
 
           const tallas = json.data;
 
@@ -2982,13 +3023,18 @@
               if (opt) {
                 opt.setAttribute('data-color', marginColor);
                 opt.style.color = marginColor;
-                opt.textContent = `#${json.producto.itemNumero} - ${json.producto.descripcion} (+${realAvgMargin.toFixed(1)}% margen)`;
+                // La referencia `CC-01`, no el `item_numero` global. Ese numero es el que hacia
+                // que Internacional SM apareciera como #28 entre las prendas de Cambridge.
+                const ref = json.producto.prod || ('#' + json.producto.itemNumero);
+                opt.textContent = `${ref} - ${json.producto.descripcion} (+${realAvgMargin.toFixed(1)}% margen)`;
                 selectElem.style.color = marginColor;
               }
             }
           }
 
-          let htmlHead = `<tr><th>Concepto / Talla</th>${tallas.map(t => `<th style="text-align:center;">${t.tallaCodigo}</th>`).join('')}</tr>`;
+          // Dos digitos, igual que en el resto del sistema: `03` y no `3`. Es solo presentacion,
+          // el codigo que viaja al servidor sigue siendo el de la base.
+          let htmlHead = `<tr><th>Concepto / Talla</th>${tallas.map(t => `<th style="text-align:center;">${escAttr(fmtTalla(t.tallaCodigo))}</th>`).join('')}</tr>`;
           document.querySelector('#matriz-container table thead').innerHTML = htmlHead;
 
           const totalCols = tallas.length + 1;
@@ -3057,7 +3103,23 @@
             }
           ];
 
-          let tbodyHtml = '';
+          // LA FILA `Cod`: el codigo del POS de cada talla.
+          //
+          // Va como FILA y no como columna porque el codigo es por prenda+talla, y en esta tabla la
+          // fila es un concepto y la columna es una talla. `Pantalon de Varon, CC` tiene ocho
+          // codigos, uno por talla; una sola columna `Cod` tendria que elegir uno y mentir sobre
+          // los otros siete.
+          //
+          // Es lo que permite volver al POS desde la pantalla donde se mira el costo: se ve el
+          // costo de la talla 8 y el codigo con el que esa talla se vende.
+          let tbodyHtml = `
+            <tr style="background:rgba(129,140,248,0.06); border-bottom:1px solid #334155;">
+              <td title="Codigo del POS de cada talla. Es el dato con el que esta prenda se identifica en el punto de venta." style="cursor:help; border-right:1px solid var(--border); padding:0.45rem 0.5rem 0.45rem 0.75rem; font-size:0.82rem;">
+                <span style="border-bottom:1px dotted #818cf8;"><strong>Cod. POS</strong></span>
+              </td>
+              ${tallas.map(t => `<td style="text-align:center; padding:0.4rem 0.35rem;">${t.codigoPos ? `<span class="col-item">${escAttr(t.codigoPos)}</span>` : '<span style="color:#475569;">—</span>'}</td>`).join('')}
+            </tr>
+          `;
           for (const sec of sections) {
             tbodyHtml += `
               <tr style="background:${sec.bg}; border-top:2px solid #334155; border-bottom:1px solid #334155;">
