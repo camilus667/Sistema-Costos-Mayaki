@@ -921,42 +921,74 @@
           </div>
 
           <!-- SUBTAB 4: COLEGIOS & PERFIL -->
-          <div id="admin-sec-colegios" style="display:none;">
+          <!--
+            ANCHO ACOTADO. Antes cada bloque ocupaba el panel completo: a 1920 px, el campo de
+            un NIT medía 865 px y la fila de un colegio 1740 px para mostrar un nombre de
+            quince caracteres. No es solo fealdad: un formulario que se estira hace que el ojo
+            recorra media pantalla entre la etiqueta y el dato, y una lista de dos elementos
+            parece una tabla vacia.
+            El limite es el CONTENIDO, no el contenedor: 62rem para el formulario y 34rem para
+            la lista de colegios, que es lo que necesitan un nombre y un telefono.
+          -->
+          <div id="admin-sec-colegios" style="display:none; max-width:62rem;">
             <div
-              style="background:#1e293b; padding:1.25rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.5rem;">
-              <h4 style="margin-top:0; color:#f8fafc;">🏛️ Datos del Colegio</h4>
-              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
+              style="background:#1e293b; padding:1.1rem 1.25rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
+              <h4 style="margin-top:0; margin-bottom:0.85rem; color:#f8fafc;">🏛️ Datos del Colegio</h4>
+
+              <!-- Aviso cuando no hay un colegio elegido. Antes esta seccion mostraba un
+                   formulario VACIO y editable con el ambito en TODA LA EMPRESA: se podia
+                   escribir y apretar Guardar, y el pedido iba a `PUT /api/colegios/all`, que
+                   devuelve 404. La pantalla no mostraba nada, asi que el usuario no sabia si
+                   habia guardado. Ahora se dice antes de dejar escribir. -->
+              <div id="col-edit-sin-colegio" style="display:none; font-size:0.78rem; color:#fbbf24; border-left:3px solid #f59e0b; padding:0.4rem 0.65rem; line-height:1.5; margin-bottom:0.85rem;">
+                Estás en <strong>TODA LA EMPRESA</strong>. Elegí un colegio en el selector de arriba para editar sus datos.
+              </div>
+
+              <!-- Las columnas piden lo que necesitan: el nombre y la direccion son largos, el
+                   NIT y el telefono son cortos. Con `1fr 1fr` los cuatro quedaban iguales y los
+                   dos cortos desperdiciaban la mitad de su caja. -->
+              <!-- `form-campos` alinea el texto a la IZQUIERDA. `cell-editable-sm` lo centra
+                   porque esta hecha para celdas de tabla; en un formulario eso aleja la
+                   etiqueta del dato. Ver el bloque en styles.css. -->
+              <div id="col-edit-campos" class="form-campos" style="display:grid; grid-template-columns: minmax(0,1.6fr) minmax(0,1fr); gap:0.75rem 1rem; margin-bottom:1rem;">
                 <div>
-                  <label style="font-size:0.78rem; color:#94a3b8;">Nombre del Colegio</label>
+                  <label style="font-size:0.74rem; color:#94a3b8;">Nombre del Colegio</label>
                   <input type="text" id="col-edit-nombre" class="cell-editable-sm" style="width:100%; font-weight:700;">
                 </div>
                 <div>
-                  <label style="font-size:0.78rem; color:#94a3b8;">NIT / Identificación</label>
+                  <label style="font-size:0.74rem; color:#94a3b8;">NIT / Identificación</label>
                   <input type="text" id="col-edit-nit" class="cell-editable-sm" style="width:100%;">
                 </div>
                 <div>
-                  <label style="font-size:0.78rem; color:#94a3b8;">Dirección</label>
+                  <label style="font-size:0.74rem; color:#94a3b8;">Dirección</label>
                   <input type="text" id="col-edit-dir" class="cell-editable-sm" style="width:100%;">
                 </div>
                 <div>
-                  <label style="font-size:0.78rem; color:#94a3b8;">Teléfono de Contacto</label>
+                  <label style="font-size:0.74rem; color:#94a3b8;">Teléfono de Contacto</label>
                   <input type="text" id="col-edit-tel" class="cell-editable-sm" style="width:100%;">
                 </div>
               </div>
-              <button class="btn" onclick="actualizarColegioActualAdmin()">Guardar Datos del Colegio</button>
+              <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+                <button class="btn" id="btn-guardar-datos-colegio" onclick="actualizarColegioActualAdmin()"
+                  style="font-size:0.78rem; padding:0.45rem 0.9rem;">Guardar Datos del Colegio</button>
+                <span id="col-edit-estado" style="font-size:0.74rem;"></span>
+              </div>
             </div>
 
             <!-- ORDEN DE LOS COLEGIOS, arrastrando. Define en que posicion va cada uno cuando
                  se ven varios juntos: la vista de empresa, los reportes y las matrices.
                  Mientras nadie arrastre, el orden es la FECHA en que se agregaron, que es lo
                  que pidio el usuario y lo que hace que esta pantalla sea opcional. -->
-            <div style="background:#1e293b; padding:1.25rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.5rem;">
-              <h4 style="margin-top:0; color:#93c5fd;">↕️ Orden de los Colegios</h4>
+            <div style="background:#1e293b; padding:1.1rem 1.25rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
+              <h4 style="margin-top:0; margin-bottom:0.5rem; color:#93c5fd;">↕️ Orden de los Colegios</h4>
               <div style="font-size:0.78rem; color:#94a3b8; margin-bottom:0.85rem; line-height:1.55;">
                 Arrastrá para cambiar en qué orden aparecen cuando se ven varios juntos.
                 Sin tocar nada, van por la fecha en que los agregaste.
               </div>
-              <div id="orden-colegios-lista" style="display:flex; flex-direction:column; gap:0.35rem; margin-bottom:0.85rem;"></div>
+              <!-- 34rem: lo que necesita un nombre de colegio con su insignia. A ancho completo,
+                   una lista de dos filas de 1740 px se lee como una tabla a la que le faltan
+                   columnas. -->
+              <div id="orden-colegios-lista" style="display:flex; flex-direction:column; gap:0.3rem; margin-bottom:0.85rem; max-width:34rem;"></div>
               <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
                 <button class="btn" id="btn-guardar-orden-colegios" onclick="guardarOrdenColegios()"
                   style="background:#38bdf8; color:#0f172a; font-weight:800; font-size:0.78rem; padding:0.45rem 0.95rem;"
@@ -967,7 +999,7 @@
 
             <div style="background:#0f172a; padding:1.25rem; border-radius:10px; border:1px solid #1e293b;">
               <h4 style="margin-top:0; color:#34d399;">➕ Dar de Alta un Nuevo Colegio en el Sistema</h4>
-              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
+              <div class="form-campos" style="display:grid; grid-template-columns: minmax(0,1.6fr) minmax(0,1fr); gap:0.75rem 1rem; margin-bottom:1rem;">
                 <div>
                   <label style="font-size:0.78rem; color:#94a3b8;">Nombre del Nuevo Colegio *</label>
                   <input type="text" id="ncol-nombre" class="cell-editable-sm" style="width:100%;"
@@ -3452,7 +3484,7 @@
       if (tabName === 'sistema') cargarConfigSistemaAdmin();
       if (tabName === 'insumos') cargarInsumosAdmin();
       if (tabName === 'importar') impAlEntrar();
-      if (tabName === 'colegios') cargarOrdenColegios();
+      if (tabName === 'colegios') { cargarOrdenColegios(); actualizarVisibilidadDatosColegio(); }
       actualizarAlcanceConfig(tabName);
     }
 
@@ -3620,6 +3652,10 @@
     const TABS_DE_LA_EMPRESA = ['telas', 'insumos', 'tallas', 'sistema'];
 
     function actualizarAlcanceConfig(tabName) {
+      // La visibilidad del formulario de datos depende del AMBITO, y esta funcion ya se llama
+      // en cada cambio de ambito y de sub-pestaña. Enganchar aca evita tener que acordarse de
+      // llamarla en los tres lugares que cambian el colegio.
+      actualizarVisibilidadDatosColegio();
       const badge = document.getElementById('modal-colegio-name-badge');
       if (!badge) return;
 
@@ -4719,12 +4755,50 @@
       document.getElementById('col-edit-tel').value = col.telefono || '';
     }
 
+    /**
+     * Muestra u oculta el formulario de datos segun haya un colegio elegido.
+     *
+     * Sin esto la seccion presentaba cuatro campos VACIOS y editables con el ambito en TODA LA
+     * EMPRESA. Se podia escribir un nombre, apretar Guardar, y el pedido salia a
+     * `PUT /api/colegios/all` —que devuelve 404— sin que la pantalla dijera nada.
+     */
+    function actualizarVisibilidadDatosColegio() {
+      const sinColegio = !colegioFiltroActual || String(colegioFiltroActual) === 'all';
+      const aviso = document.getElementById('col-edit-sin-colegio');
+      const campos = document.getElementById('col-edit-campos');
+      const btn = document.getElementById('btn-guardar-datos-colegio');
+      if (aviso) aviso.style.display = sinColegio ? 'block' : 'none';
+      // El mensaje de estado se limpia al cambiar de ambito. Sin esto quedaba pegado el
+      // "Elegí un colegio" despues de haber elegido uno, y un cartel que ya no aplica es peor
+      // que ninguno: hace dudar de si la accion siguiente tambien fallo.
+      const est = document.getElementById('col-edit-estado');
+      if (est) est.innerHTML = '';
+      if (campos) campos.style.display = sinColegio ? 'none' : 'grid';
+      if (btn) { btn.disabled = sinColegio; btn.style.opacity = sinColegio ? '0.45' : '1'; }
+    }
+
     async function actualizarColegioActualAdmin() {
+      const est = document.getElementById('col-edit-estado');
+      const decir = (txt, color) => { if (est) est.innerHTML = `<span style="color:${color}">${txt}</span>`; };
+
+      // GUARDA CONTRA EL AMBITO DE EMPRESA. `PUT /api/colegios/all` devuelve 404 porque no hay
+      // ningun colegio con ese id, y sin este chequeo el usuario veia un boton que no hacia
+      // nada. Se dice que hacer en vez de dejarlo adivinando.
+      if (!colegioFiltroActual || String(colegioFiltroActual) === 'all') {
+        decir('Elegí un colegio en el selector de arriba: con TODA LA EMPRESA no hay a cuál guardar.', '#fbbf24');
+        return;
+      }
+
       const nombre = document.getElementById('col-edit-nombre').value.trim();
+      if (!nombre) {
+        decir('El nombre no puede quedar vacío.', '#f87171');
+        return;
+      }
       const nit = document.getElementById('col-edit-nit').value.trim();
       const direccion = document.getElementById('col-edit-dir').value.trim();
       const telefono = document.getElementById('col-edit-tel').value.trim();
 
+      decir('Guardando...', '#94a3b8');
       try {
         const res = await fetch('/api/colegios/' + colegioFiltroActual, {
           method: 'PUT',
@@ -4732,11 +4806,22 @@
           body: JSON.stringify({ nombre, nit, direccion, telefono })
         });
         const json = await res.json();
-        if (json.success) {
-          alert('✅ Datos del colegio actualizados.');
-          await cargarColegiosHeader();
+
+        // UN FALLO SE DICE. La version anterior era `if (json.success) { ... }` sin `else`: con
+        // un 404 o un 500 la pantalla no mostraba nada y el usuario no sabia si habia guardado.
+        // Es la misma familia que el `return` mudo que dejaba Costeo Individual en "Cargando".
+        if (!json.success) {
+          decir('No se guardó: ' + (json.error || `el servidor respondió ${res.status}`), '#f87171');
+          return;
         }
-      } catch (e) { alert('Error al actualizar colegio: ' + e); }
+
+        decir('Datos guardados.', '#34d399');
+        await cargarColegiosHeader();
+        // El nombre pudo cambiar, y con el la lista de orden y el separador de las matrices.
+        if (typeof cargarOrdenColegios === 'function') cargarOrdenColegios();
+      } catch (e) {
+        decir('Error de red: ' + e, '#f87171');
+      }
     }
 
     async function crearNuevoColegioAdmin() {

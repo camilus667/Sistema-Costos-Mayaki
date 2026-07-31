@@ -1315,3 +1315,29 @@ footer {
     }
     .btn-pdf:hover { color: #f8fafc; border-color: #64748b; background: #334155; }
     .btn-pdf:active { transform: translateY(0.5px); }
+
+
+/* ===========================================================================
+   CAMPOS DE FORMULARIO
+
+   Reusan `.cell-editable-sm` por su caja y su borde, pero esa clase CENTRA el
+   texto: esta hecha para celdas de tabla con numeros, donde centrar ayuda a
+   comparar columnas. En un formulario hace lo contrario —aleja la etiqueta del
+   dato y obliga a buscarlo con la vista—, asi que aca se alinea a la izquierda.
+
+   Se resuelve con una clase en el CONTENEDOR y no editando `.cell-editable-sm`,
+   porque esa clase la usan las matrices para editar precios e inventario y
+   cambiarla ahi seria tocar tres pantallas para arreglar una.
+   =========================================================================== */
+.form-campos input,
+.form-campos select,
+.form-campos textarea {
+  text-align: left !important;
+  padding-left: 0.55rem !important;
+  padding-right: 0.55rem !important;
+}
+
+.form-campos label {
+  display: block;
+  margin-bottom: 0.2rem;
+}
