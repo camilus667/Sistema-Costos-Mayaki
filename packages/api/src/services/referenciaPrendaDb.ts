@@ -78,3 +78,28 @@ export async function colegioPorNombreCategoria(db: any): Promise<Map<string, st
   }
   return salida;
 }
+
+/**
+ * Agrega el campo `prod` —la referencia `CC-01`— a una lista de filas por prenda.
+ *
+ * EXISTE PARA NO REPETIRSE EN SEIS ENDPOINTS. Peso de materia prima, precios de adquisicion,
+ * matriz de accesorios, mano de obra, factor de complejidad y desglose inteligente devuelven
+ * todos filas por prenda, y cada uno tenia que aprender por separado a traer la referencia. Sin
+ * esto, agregar un endpoint nuevo significa acordarse de un septimo lugar —y olvidarse es
+ * exactamente lo que hizo que "Adquisicion" y "Factor de Complejidad" mostraran el numero viejo—.
+ *
+ * La clave de la prenda se lee de `productoId` o de `id`: cinco de las seis usan `productoId`,
+ * `fijos-x-prenda` usa `id`. Aceptar las dos formas evita tocar el shape de las respuestas, que
+ * es lo que la pantalla ya consume.
+ */
+export async function agregarReferencias<T extends Record<string, any>>(
+  db: any,
+  filas: T[],
+): Promise<T[]> {
+  if (!Array.isArray(filas) || filas.length === 0) return filas;
+  const refs = await referenciasDesdeBase(db);
+  return filas.map((f) => ({
+    ...f,
+    prod: refs.get(String(f?.productoId ?? f?.id ?? '')) ?? null,
+  }));
+}

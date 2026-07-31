@@ -121,7 +121,7 @@
           <table>
             <thead>
               <tr>
-                <th>Prod</th>
+                <th style="width:78px;">Prod</th>
                 <th>Prenda</th>
                 <th>Stock Total (Unid.)</th>
                 <th>Rango Costo Prod. (Bs.)</th>
@@ -249,7 +249,7 @@
           <table id="tb-consolidada-table" class="table-consolidada-fixed">
             <thead>
               <tr id="tr-consolidada-head">
-                <th>Prod</th>
+                <th style="width:78px;">Prod</th>
                 <th>Prenda</th>
                 <th colspan="16" style="text-align:center;">Cargando tallas...</th>
                 <th style="text-align:right;">SUBTOTAL PRENDA</th>
@@ -376,7 +376,12 @@
           <table>
             <thead>
               <tr>
-                <th>Prod</th>
+                <!-- Aca la columna NO es la referencia `Prod`: es el CODIGO del POS.
+                     Una fila de Inventario Real es una prenda CON su talla, y el codigo del POS
+                     identifica exactamente esa combinacion —`Pantalon de Varon, CC` tiene ocho
+                     codigos, uno por talla—. Es la unica pantalla donde el codigo real cabe en
+                     una columna sin mentir. -->
+                <th style="width:88px;">Código</th>
                 <th>Prenda</th>
                 <th>Talla</th>
                 <th>Stock Físico</th>
@@ -440,7 +445,7 @@
           <table class="table-compact-auto" style="width:100%;">
             <thead>
               <tr style="background:#0d131f;">
-                <th style="width:50px; text-align:center;">Prod</th>
+                <th style="width:78px; text-align:center;">Prod</th>
                 <th style="text-align:left; padding-left:0.5rem;">Prenda</th>
                 <th style="width:140px; text-align:center;">COLEGIO</th>
                 <th style="width:110px; text-align:center;">TIPO COSTEO</th>
@@ -789,7 +794,7 @@
                 <thead>
                   <tr>
                     <th style="width:60px; text-align:center;">Orden</th>
-                    <th style="width:65px; text-align:center;">Prod</th>
+                    <th style="width:78px; text-align:center;">Prod</th>
                     <th style="text-align:left; min-width:300px;">Prenda</th>
                     <th style="width:360px; text-align:left; padding-left:0.5rem;">Tela Asignada (Selector)</th>
                     <th style="width:90px; text-align:center;">Factor Comp.</th>
@@ -1883,7 +1888,7 @@
 
         thead.innerHTML = `
           <tr>
-            <th style="width:38px; text-align:center; vertical-align:middle;">Prod</th>
+            <th style="width:78px; text-align:center; vertical-align:middle;">Prod</th>
             <th style="width:180px; text-align:left; vertical-align:middle;">Prenda</th>
             ${json.tallas.map(t => `<th style="text-align:center; vertical-align:middle;">${t.codigo}</th>`).join('')}
           </tr>
@@ -1925,7 +1930,7 @@
         const json = await res.json();
         thead.innerHTML = `
           <tr>
-            <th>Prod</th><th>Prenda</th>
+            <th style="width:78px;">Prod</th><th>Prenda</th>
             <th style="text-align:center;">Tallas 2 - 10</th>
             <th style="text-align:center;">Tallas 12 - S</th>
             <th style="text-align:center;">Tallas M - 4XL</th>
@@ -1968,7 +1973,7 @@
             <table class="table-compact-auto" style="width:100%;">
               <thead>
                 <tr>
-                  <th>Prod</th><th>Prenda</th>
+                  <th style="width:78px;">Prod</th><th>Prenda</th>
                   <th style="text-align:center;">Factor Complejidad</th>
                   <th style="text-align:right;">Costo Fijo Base (Bs.)</th>
                 </tr>
@@ -2071,7 +2076,7 @@
 
           thead.innerHTML = `
             <tr>
-              <th style="width:38px; text-align:center; vertical-align:middle;">Prod</th>
+              <th style="width:78px; text-align:center; vertical-align:middle;">Prod</th>
               <th style="width:130px; text-align:left; vertical-align:middle;">Prenda</th>
               <th style="width:62px; color:var(--warning); border-right:2px solid var(--border); text-align:right; padding-right:0.25rem; vertical-align:middle;">Total Acc.</th>
               ${json.accesorios.map(a => {
@@ -2139,7 +2144,7 @@
         tableElem.style.minWidth = '';
         thead.innerHTML = `
           <tr style="background:#0d131f;">
-            <th style="width:36px; text-align:center; padding:0.35rem 0.15rem; font-size:0.68rem;">Prod</th>
+            <th style="width:68px; text-align:center; padding:0.35rem 0.15rem; font-size:0.68rem;">Prod</th>
             <th style="text-align:left; padding:0.35rem 0.35rem; font-size:0.7rem;">Prenda (semiterminada / adquirida)</th>
             ${tallasHeader.map(t => `<th style="width:70px; text-align:center; padding:0.35rem 0.15rem; font-size:0.68rem;">${t.codigo}</th>`).join('')}
           </tr>
@@ -2709,7 +2714,7 @@
 
       const trHead = document.getElementById('tr-consolidada-head');
       trHead.innerHTML = `
-        <th>Prod</th>
+        <th style="width:78px;">Prod</th>
         <th>Prenda</th>
         ${tallas.map(t => `<th style="text-align:center; padding:0.4rem 0.15rem;">${t.codigo}</th>`).join('')}
         ${showSubtotalColumn
@@ -3046,9 +3051,16 @@
         const json = await res.json();
         const tbody = document.getElementById('tb-inventario');
         if (json.data && json.data.length > 0) {
+                    // La primera columna de Inventario Real es el CODIGO DEL POS, no la referencia `Prod`.
+          // Aca una fila ES una prenda con su talla, y el codigo del POS identifica exactamente esa
+          // combinacion: `Pantalon de Varon, CC` tiene ocho codigos, uno por talla. Mostrar `CAM-01`
+          // en una columna rotulada "Codigo" seria afirmar que ese es su codigo del POS.
+          //
+          // OJO al editar la plantilla de abajo: NO se pueden usar backticks dentro del template
+          // literal, ni en un comentario HTML. Terminan la cadena y rompen todo el script.
           tbody.innerHTML = json.data.map(i => `
             <tr>
-              <td><span class="col-item">${i.prod || i.itemNumero || '-'}</span></td>
+              <td><span class="col-item">${escAttr(i.codigoPos || '—')}</span></td>
               <td><strong>${i.producto || '-'}</strong></td>
               <td>Talla ${i.talla || '-'}</td>
               <td><strong style="color:var(--primary);">${fmtNum(i.cantidad)} Unid.</strong></td>

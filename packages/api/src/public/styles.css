@@ -566,12 +566,17 @@ td, th {
   white-space: nowrap !important;
 }
 
-/* Columna 1: ITEM */
+/* Columna 1: Prod (la referencia CC-01)
+   ERA 44px, pensado para un numero de dos digitos como `27`. La referencia es `CAM-01` y con una
+   abreviatura de seis letras llega a `INTLSM-01`: nueve caracteres. El badge pedia 69px y la
+   celda lo recortaba, porque estas reglas llevan `!important` y le ganan al `width` inline del
+   `<th>`.
+   El presupuesto cierra: 78 + 195 + 16x68 + 88 = 1449px, y el contenedor mide ~1495px. */
 .table-consolidada-fixed th:nth-child(1),
 .table-consolidada-fixed td:nth-child(1) {
-  width: 44px !important;
-  min-width: 44px !important;
-  max-width: 44px !important;
+  width: 78px !important;
+  min-width: 78px !important;
+  max-width: 78px !important;
   text-align: center !important;
 }
 
@@ -861,6 +866,9 @@ td, th {
 /* ESTILO UNIFICADO Y LISO PARA LA COLUMNA ITEM (Sin #, badge limpio) */
 .col-item,
 .badge-tag {
+  /* El `min-width` propio de .col-item esta mas abajo: la referencia dejo de ser un numero de
+     dos digitos y pasó a ser `CAM-01`, que con una abreviatura de seis letras llega a
+     `INTLSM-01`. Los 28 px que alcanzaban para `27` le cortaban el texto. */
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -874,6 +882,16 @@ td, th {
   font-size: 0.76rem;
   font-weight: 700;
   text-align: center;
+}
+
+/* La columna Prod pide mas ancho que un badge: `INTLSM-01` son nueve caracteres.
+   Se separa de .badge-tag a proposito —esa clase se usa en etiquetas cortas y estirarlas
+   dejaria huecos en toda la interfaz—. `white-space: nowrap` evita que `CAM-01` se parta en
+   dos lineas cuando la columna queda justa. */
+.col-item {
+  min-width: 64px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Botones Generales */

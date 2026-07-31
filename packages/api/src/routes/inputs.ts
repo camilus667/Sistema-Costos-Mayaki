@@ -4,6 +4,7 @@ import { productos, tallas, pesoMateriaPrima, manoObra, telas, accesorios, detal
 import { saveDbToDisk } from '../database/sqljs';
 import { getSystemConfig, setSystemConfig } from '../services/configService';
 import { costoUnitarioDeInsumo, costoUsoDeInsumo } from '../services/costoInsumo';
+import { agregarReferencias } from '../services/referenciaPrendaDb';
 import { cargarContextoCosteo, ensamblarInputs } from '../services/calculo/costeoInputs.service';
 import { calcularCostoTotal } from '../services/calculo/costoTotal.service';
 import { resolverPrendaPorItem, nuevoIdHex } from '../services/resolucion.service';
@@ -318,11 +319,14 @@ api.get('/peso-mat-prima', async (c) => {
     return rowObj;
   });
 
+  // La referencia `CC-01` de cada fila. Ver `agregarReferencias`: existe para que los seis
+  // endpoints por prenda no aprendan esto por separado.
+  const conRef = await agregarReferencias(db, data as any[]);
   return c.json({
     success: true,
     mermaGlobalPct: globalMermaPct,
     tallas: allTallas.map((t: any) => ({ id: t.id, codigo: t.codigo })),
-    data
+    data: conRef,
   });
 });
 
@@ -370,10 +374,13 @@ api.get('/precios-adquisicion', async (c) => {
     return rowObj;
   });
 
+  // La referencia `CC-01` de cada fila. Ver `agregarReferencias`: existe para que los seis
+  // endpoints por prenda no aprendan esto por separado.
+  const conRef = await agregarReferencias(db, data as any[]);
   return c.json({
     success: true,
     tallas: allTallas.map((t: any) => ({ id: t.id, codigo: t.codigo, nombre: t.nombre })),
-    data
+    data: conRef,
   });
 });
 
@@ -533,11 +540,14 @@ api.get('/accesorios-matriz', async (c) => {
     return rowObj;
   });
 
+  // La referencia `CC-01` de cada fila. Ver `agregarReferencias`: existe para que los seis
+  // endpoints por prenda no aprendan esto por separado.
+  const conRef = await agregarReferencias(db, data as any[]);
   return c.json({
     success: true,
     accesorios: headerList,
     accesoriosInfo,
-    data,
+    data: conRef,
     fuente: 'detalle_acc',
     avisos,
   });
@@ -698,10 +708,13 @@ api.get('/mano-de-obra', async (c) => {
     };
   });
 
+  // La referencia `CC-01` de cada fila. Ver `agregarReferencias`: existe para que los seis
+  // endpoints por prenda no aprendan esto por separado.
+  const conRef = await agregarReferencias(db, data as any[]);
   return c.json({
     success: true,
     gruposTallas: ['Tallas 2 - 10', 'Tallas 12 - S', 'Tallas M - 4XL'],
-    data
+    data: conRef,
   });
 });
 
@@ -751,12 +764,15 @@ api.get('/fijos-x-prenda', async (c) => {
     montoMensual: item.montoMensual,
   }));
 
+  // La referencia `CC-01` de cada fila. Ver `agregarReferencias`: existe para que los seis
+  // endpoints por prenda no aprendan esto por separado.
+  const conRef = await agregarReferencias(db, data as any[]);
   return c.json({
     success: true,
     tarifaPuntoComplejidad: parseFloat(tarifaPuntoComplejidad.toFixed(6)),
     totalIndirectosMensual: parseFloat(totalIndirectosMensual.toFixed(2)),
     prendasProducidasMes,
-    data,
+    data: conRef,
     indirectos: indirectosFormatted,
   });
 });
@@ -1097,13 +1113,16 @@ api.get('/desglose-inteligente-producto', async (c) => {
       };
     });
 
+    // Igual que los otros cinco endpoints por prenda: la referencia se agrega en un solo lugar.
+    const conRef = await agregarReferencias(db, data as any[]);
+
     return c.json({
       success: true,
       modalidad: fiscal.modalidad,
       modalidadEtiqueta: etiquetaModalidad(fiscal.modalidad),
       descuentoSinFacturaPct: parseFloat((fiscal.descuentoFraccion * 100).toFixed(2)),
       avisos: avisosFiscales,
-      data,
+      data: conRef,
     });
   } catch (e: any) {
     console.error('desglose-inteligente-producto:', e);
