@@ -694,9 +694,9 @@
               <div
                 style="display:grid; grid-template-columns: 80px 1fr 340px 100px auto; gap:0.75rem; align-items:end;">
                 <div>
-                  <label style="font-size:0.72rem; color:#94a3b8;">N° interno</label>
+                  <label style="font-size:0.72rem; color:#94a3b8;" title="Número de item interno. Vacío = el que siga en este colegio.">N° interno</label>
                   <input type="number" id="np-item" class="cell-editable-sm" style="width:100%; text-align:center;"
-                    value="28">
+                    placeholder="auto" title="Dejalo vacío y el sistema le da el siguiente número libre de este colegio.">
                 </div>
                 <div>
                   <label style="font-size:0.72rem; color:#94a3b8;">Descripción Prenda</label>
@@ -4470,8 +4470,15 @@
             <button class="btn-move" onclick="moverPrendaUp(${idx})" ${idx === 0 ? 'disabled style="opacity:0.3;"' : ''}>▲</button>
             <button class="btn-move" onclick="moverPrendaDown(${idx})" ${idx === prods.length - 1 ? 'disabled style="opacity:0.3;"' : ''}>▼</button>
           </td>
+          <!-- LA REFERENCIA, y de lectura. Esta pantalla es la que DEFINE el numero: sale de la
+               POSICION en esta lista, que se cambia arrastrando la fila o con las flechas de la
+               columna Orden. Un campo para teclear el numero a mano era una segunda forma de fijar
+               el mismo orden, y las dos se contradecian: se arrastraba la prenda al principio y el
+               numero tecleado seguia diciendo otra cosa.
+               El numero de item interno no se pierde, va en el title: lo usan las matrices por
+               debajo y sirve para rastrear un dato viejo. -->
           <td style="text-align:center;">
-            <input type="number" id="ap-item-${p.id}" class="cell-editable-sm" style="width:45px; text-align:center; font-weight:700;" value="${p.itemNumero}">
+            <span class="col-item" title="Número de item interno: ${escAttr(p.itemNumero)}. La referencia sale de la posición en esta lista: arrastrá la fila para cambiarla.">${escAttr(p.prod || p.itemNumero)}</span>
           </td>
           <td>
             <input type="text" id="ap-desc-${p.id}" class="cell-editable-sm" style="width:100%; font-weight:600; color:#f8fafc;" value="${p.descripcion}">
@@ -4493,7 +4500,7 @@
           </td>
           <td style="text-align:center;">
             <button class="btn" style="background:#065f46; padding:0.25rem 0.6rem; font-size:0.72rem; white-space:nowrap;"
-              onclick="abrirReceta('${p.id}', ${p.itemNumero}, '${String(p.descripcion).replace(/'/g, "\\'")}')"
+              onclick="abrirReceta('${p.id}', '${String(p.prod || p.itemNumero).replace(/'/g, "\\'")}', '${String(p.descripcion).replace(/'/g, "\\'")}')"
               title="Ver y editar los insumos que lleva esta prenda">🧵 Receta</button>
           </td>
         </tr>
@@ -4514,9 +4521,11 @@
       recetaProductoActual = null;
     }
 
-    async function abrirReceta(productoId, itemNumero, descripcion) {
+    async function abrirReceta(productoId, referencia, descripcion) {
       recetaProductoActual = productoId;
-      document.getElementById('receta-titulo').textContent = 'item ' + itemNumero + ' — ' + descripcion;
+      // La referencia CAM-01, no "item 1": es el mismo rotulo que muestra la columna Prod de la
+      // fila desde la que se abrio este panel.
+      document.getElementById('receta-titulo').textContent = referencia + ' — ' + descripcion;
       document.getElementById('panel-receta').style.display = 'block';
 
       // Las prendas de origen las propone el servidor, por tela y cruzando colegios.
@@ -4825,7 +4834,9 @@
       const payload = adminConfigData.productos.map((p, i) => ({
         id: p.id,
         orden: i + 1,
-        itemNumero: parseInt(document.getElementById('ap-item-' + p.id).value) || p.itemNumero,
+        // El item interno se manda TAL CUAL. Ya no hay campo donde teclearlo —la referencia sale
+        // del orden— y reenviarlo sin cambios evita que guardar lo borre.
+        itemNumero: p.itemNumero,
         descripcion: document.getElementById('ap-desc-' + p.id).value.trim(),
         telaId: document.getElementById('ap-tela-' + p.id).value || null,
         factorComplejidad: parseFloat(document.getElementById('ap-factor-' + p.id).value) || 1,
@@ -4857,7 +4868,12 @@
     }
 
     async function crearNuevaPrendaAdmin() {
-      const itemNumero = parseInt(document.getElementById('np-item').value) || 28;
+      // EL SIGUIENTE NUMERO SE CALCULA. Estaba escrito `|| 28`, que era el proximo item cuando la
+      // base tenia 27 prendas: con 39 prendas ese 28 ya existe y la creacion se rechaza por
+      // duplicado. Vacio significa "el que siga", y el servidor lo resuelve con el maximo del
+      // colegio, que es la unica fuente que no envejece.
+      const itemCampo = document.getElementById('np-item').value.trim();
+      const itemNumero = itemCampo === '' ? null : (parseInt(itemCampo) || null);
       const descripcion = document.getElementById('np-desc').value.trim();
       const telaId = document.getElementById('np-tela').value || null;
       const factorComplejidad = parseFloat(document.getElementById('np-factor').value) || 1;

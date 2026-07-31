@@ -9,6 +9,9 @@ import { crearPrendaConTallas } from '../services/crearPrenda.service';
 // tres versiones distintas, y ninguna mencionaba el colegio: por eso el item de un colegio
 // aparecia entre los de otro.
 import { ordenarPrendasDesdeBase } from '../services/ordenPrendasDb';
+// La referencia `CC-01` de cada prenda. Prendas & Recetas es la pantalla que DEFINE el numero
+// —el orden se arrastra ahi mismo—, asi que es la que menos puede mostrar otro.
+import { agregarReferencias } from '../services/referenciaPrendaDb';
 
 const api = new Hono();
 
@@ -257,8 +260,8 @@ api.get('/:id/config', async (c) => {
 
   // Un colegio solo: el agrupado no cambia nada, pero se usa la misma funcion para que el
   // orden interno —`orden` con `item_numero` de respaldo— sea el mismo en todas las pantallas.
-  const prods = await ordenarPrendasDesdeBase(db,
-    await db.select().from(productos).where(eq(productos.colegioId, id)).orderBy(asc(productos.orden), asc(productos.itemNumero)));
+  const prods = await agregarReferencias(db, await ordenarPrendasDesdeBase(db,
+    await db.select().from(productos).where(eq(productos.colegioId, id)).orderBy(asc(productos.orden), asc(productos.itemNumero))));
 
   // FASE 5, tercera vez que aparece este patron: `= colegio OR IS NULL`, nunca
   // `= colegio` a secas. Con las telas y tallas compartidas (colegio_id NULL) el
