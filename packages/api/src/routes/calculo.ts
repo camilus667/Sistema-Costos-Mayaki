@@ -14,7 +14,6 @@ import {
 // origenPeso, telaVinculada y tieneManoObra en el meta de cada fila.
 import { diagnosticarPorPrenda, resumirDiagnosticos } from '../services/diagnosticoCosto';
 import XLSX from 'xlsx';
-import { findExcelPath } from '../scripts/seed';
 import { resolverPrendaPorItem } from '../services/resolucion.service';
 import {
   construirContextoFiscal,
@@ -101,98 +100,6 @@ const calcularSchema = z.object({
     })
     .optional(),
 });
-
-// Cache global compartido en memoria para sincronía 100% entre todas las pestañas
-let excelMatricesCache: any = null;
-
-export function loadExcelMatrices() {
-  if (excelMatricesCache) return excelMatricesCache;
-
-  try {
-    const excelPath = findExcelPath();
-    const parseXLSX = (XLSX as any).default || XLSX;
-    const workbook = parseXLSX.readFile(excelPath);
-
-    const sheetMap: Record<string, string> = {
-      costoBruto: 'CostoBruto',
-      precioVenta: 'PrecioDeVenta',
-      costoAntesImp: 'CostoAntesImp',
-      costoTotal: 'CostoTotal',
-      utilidadNeta: 'UtilidadNeta',
-      margenPorcentaje: '%Ganancia',
-      inventarioUnidades: 'INVENTARIO',
-      costoInventario: 'CostoInventario',
-    };
-
-    const parsedSheets: Record<string, Map<string, number>> = {};
-
-    Object.entries(sheetMap).forEach(([conceptKey, sheetName]) => {
-      const sheet = workbook.Sheets[sheetName];
-      const conceptMap = new Map<string, number>();
-
-      if (sheet) {
-        const rows = parseXLSX.utils.sheet_to_json(sheet, { header: 1 });
-        const headerRowIdx = rows.findIndex((r: any) => r && r.some((c: any) => String(c).toUpperCase() === 'ITEM' || String(c).toUpperCase().includes('DETALLE')));
-        const headerIdx = headerRowIdx !== -1 ? headerRowIdx : 0;
-        const tallasHeader = rows[headerIdx]?.slice(2) || [];
-
-        rows.slice(headerIdx + 1).forEach((row: any) => {
-          if (row && row[0] !== undefined && row[0] !== null && !isNaN(Number(row[0]))) {
-            const itemNum = Number(row[0]);
-            if (itemNum > 0) {
-              tallasHeader.forEach((tallaCode: any, idx: number) => {
-                const val = row[2 + idx];
-                const numVal = Number(val);
-                const codeStr = String(tallaCode).trim();
-                conceptMap.set(`${itemNum}_${codeStr}`, !isNaN(numVal) ? numVal : 0);
-              });
-            }
-          }
-        });
-      }
-      parsedSheets[conceptKey] = conceptMap;
-    });
-
-    const accSheet = workbook.Sheets['Acc'];
-    const itemAccMap = new Map<number, number>();
-    if (accSheet) {
-      const rows = parseXLSX.utils.sheet_to_json(accSheet, { header: 1 });
-      const auxHeaderIdx = rows.findIndex((r: any) => r && r.some((c: any) => String(c).includes('UNIDAD DE COMPRA') || String(c).includes('COSTO Unitario')));
-      const matrixRows = rows.slice(2, auxHeaderIdx !== -1 ? auxHeaderIdx : 30);
-
-      const parseItemNumbers = (val: any): number[] => {
-        if (typeof val === 'number') return [val];
-        const str = String(val).trim();
-        if (str.includes('-')) {
-          const parts = str.split('-').map(p => parseInt(p.trim())).filter(p => !isNaN(p));
-          if (parts.length === 2) {
-            const nums = [];
-            for (let i = parts[0]; i <= parts[1]; i++) nums.push(i);
-            return nums;
-          }
-        }
-        const num = parseInt(str);
-        return !isNaN(num) ? [num] : [];
-      };
-
-      matrixRows.forEach((r: any) => {
-        if (r && r[1] !== undefined) {
-          const itemNums = parseItemNumbers(r[1]);
-          itemNums.forEach((itemNum) => {
-            const accVal = Number(r[41]) || 0;
-            if (itemNum > 0) itemAccMap.set(itemNum, accVal);
-          });
-        }
-      });
-    }
-
-    excelMatricesCache = { ...parsedSheets, itemAccMap };
-    return excelMatricesCache;
-  } catch (err) {
-    console.error('Error al cargar matrices desde Excel:', err);
-    return null;
-  }
-}
 
 // POST /api/calculo/calcular - Simulador instantáneo
 api.post('/calcular', zValidator('json', calcularSchema), async (c) => {
@@ -567,19 +474,10 @@ api.put('/precio-venta', async (c) => {
     return c.json({ success: false, error: 'No se pudo guardar el precio: ' + (e?.message || String(e)) }, 500);
   }
 
-  // Cache heredado del Excel. Se actualiza recien ahora, con la base ya escrita.
-  const key = `${itemNumero}_${tallaCodigo}`;
-  const excelData = loadExcelMatrices();
-  if (excelData) {
-    excelData.precioVenta.set(key, nuevoPv);
-
-    const ct = excelData.costoTotal.get(key) || 0;
-    const nuevaUn = nuevoPv > 0 && ct > 0 ? nuevoPv - ct : 0;
-    const nuevoMg = nuevoPv > 0 ? (nuevaUn / nuevoPv) * 100 : 0;
-
-    excelData.utilidadNeta.set(key, nuevaUn);
-    excelData.margenPorcentaje.set(key, nuevoMg);
-  }
+  // Aca vivia el mantenimiento del cache heredado del Excel: despues de guardar el precio en la
+  // base, copiaba el valor —y recalculaba utilidad y margen— dentro de un mapa en memoria que
+  // salia de CAMBRIDGE.xlsx. Nadie leia ese mapa: era una escritura sin lector. Los tres numeros
+  // los da el motor de costeo cuando la pantalla vuelve a pedir la matriz.
 
   return c.json({ success: true, message: 'Precio de venta actualizado exitosamente' });
 });
@@ -624,28 +522,28 @@ api.put('/inventario-unidades', async (c) => {
   // El volcado a disco lo hace ahora el middleware de server.ts. La llamada
   // explicita a saveDbToDisk() que vivia aca era la unica de este archivo, y por eso
   // el precio de venta se guardaba solo si despues tocabas el inventario.
-  const key = `${itemNumero}_${tallaCodigo}`;
-  const excelData = loadExcelMatrices();
-  if (excelData) {
-    excelData.inventarioUnidades.set(key, cantNum);
-    const ct = excelData.costoTotal.get(key) || 0;
-    excelData.costoInventario.set(key, cantNum * ct);
-  }
+  // Igual que en el precio de venta: aca se mantenia el cache del Excel, sin lector. Se fue.
 
   return c.json({ success: true, message: 'Inventario actualizado exitosamente' });
 });
 
-// PUT /api/calculo/accesorio-total - Actualizar Total de Accesorios por prenda en tiempo real
+// PUT /api/calculo/accesorio-total
+//
+// ESTE ENDPOINT YA NO HACE NADA, y se deja a proposito respondiendo 200.
+//
+// Su cuerpo entero era una linea que escribia el total de accesorios en el cache del Excel en
+// memoria. Nadie leia ese cache, asi que el efecto real siempre fue ninguno: el total de
+// accesorios lo calcula el motor de costeo desde `detalle_acc` cada vez que se pide la matriz.
+//
+// No se borra porque la pantalla lo sigue llamando al editar una receta (dashboard.html). Si
+// devolviera 404, la edicion mostraria un error donde antes no habia ninguno —y por un pedido
+// que nunca sirvio para nada—. Se saca junto con su llamada del frontend, no antes.
 api.put('/accesorio-total', async (c) => {
-  const body = await c.req.json(); // { itemNumero, totalAccBs }
-  const { itemNumero, totalAccBs } = body;
-
-  const excelData = loadExcelMatrices();
-  if (excelData && itemNumero > 0) {
-    excelData.itemAccMap.set(Number(itemNumero), Number(totalAccBs) || 0);
-  }
-
-  return c.json({ success: true, message: 'Total de accesorios actualizado exitosamente' });
+  await c.req.json().catch(() => ({}));
+  return c.json({
+    success: true,
+    message: 'El total de accesorios lo calcula el motor de costeo; no hay nada que guardar.',
+  });
 });
 
 // GET /api/calculo/matriz-prenda/:productoId - Matriz por prenda individual

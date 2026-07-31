@@ -386,6 +386,12 @@ export async function getDb(opciones: OpcionesGetDb = {}) {
   // existe el CREATE no se vuelve a ejecutar y la columna nunca apareceria. El try vacio
   // es correcto aca: si la columna ya esta, ALTER tira y no hay nada que hacer.
   try { dbInstance.run('ALTER TABLE "precio_venta" ADD COLUMN "codigo_externo" TEXT;'); } catch (e) {}
+  // Los cuatro INPUTS de un insumo que hasta ahora vivian solo en la tabla auxiliar de
+  // CAMBRIDGE.xlsx. El costo de uso NO se agrega: se calcula (ver costoInsumo.ts).
+  try { dbInstance.run('ALTER TABLE "accesorio" ADD COLUMN "unidades_por_prenda" REAL;'); } catch (e) {}
+  try { dbInstance.run('ALTER TABLE "accesorio" ADD COLUMN "ojales" TEXT;'); } catch (e) {}
+  try { dbInstance.run('ALTER TABLE "accesorio" ADD COLUMN "unidades_por_metro" REAL;'); } catch (e) {}
+  try { dbInstance.run('ALTER TABLE "accesorio" ADD COLUMN "costo_cm2" REAL;'); } catch (e) {}
 
   // Un codigo del POS no puede apuntar a dos producto-talla distintos. El indice es
   // PARCIAL —solo sobre las filas que tienen codigo— porque las 297 que ya existen lo

@@ -49,7 +49,56 @@
 import { getDb } from '../database/sqljs';
 import { productos, accesorios, detalleAccesorio } from '../database/schema';
 import { asc } from 'drizzle-orm';
-import { loadExcelInputs } from '../routes/inputs';
+import * as XLSX from 'xlsx';
+import { findExcelPath } from './seed';
+
+// Cache en memoria de la planilla, para no releerla en cada llamada dentro de una corrida.
+let inputsExcelCache: any = null;
+
+// ESTA FUNCION VIVIA EN routes/inputs.ts, donde el servidor la llamaba en cada pedido. Se mudo
+// aca porque este script existe justamente para comparar la planilla contra la base: es el unico
+// lugar donde leer CAMBRIDGE.xlsx sigue teniendo sentido. Ninguna ruta la toca mas.
+export function loadExcelInputs() {
+  if (inputsExcelCache) return inputsExcelCache;
+
+  try {
+    const excelPath = findExcelPath();
+    const parseXLSX = (XLSX as any).default || XLSX;
+    const workbook = parseXLSX.readFile(excelPath);
+
+    // 1. PesoMatPrima
+    const pesoSheet = workbook.Sheets['PesoMatPrima'];
+    const pesoRows: any[][] = pesoSheet ? parseXLSX.utils.sheet_to_json(pesoSheet, { header: 1 }) : [];
+    const tallasHeaderPeso = pesoRows[1]?.slice(2) || [];
+
+    // 2. Acc (Accesorios por prenda + Tabla Auxiliar)
+    const accSheet = workbook.Sheets['Acc'];
+    const accRows: any[][] = accSheet ? parseXLSX.utils.sheet_to_json(accSheet, { header: 1 }) : [];
+    const accHeaders = accRows[1]?.slice(2, 40).map(h => String(h || '').trim()).filter(Boolean) || [];
+
+    // Cargar Tabla Auxiliar (fila 31 en adelante)
+    const auxHeaderIdx = accRows.findIndex((r: any) => r && r.some((c: any) => String(c).includes('UNIDAD DE COMPRA') || String(c).includes('COSTO Unitario')));
+    const tablaAuxiliarRows = auxHeaderIdx !== -1 ? accRows.slice(auxHeaderIdx + 1).filter((r: any) => r && r[0] && (typeof r[1] === 'number' || !isNaN(Number(r[1])))) : [];
+
+    // 3. ManoDeObra
+    const moSheet = workbook.Sheets['ManoDeObra'];
+    const moRows: any[][] = moSheet ? parseXLSX.utils.sheet_to_json(moSheet, { header: 1 }) : [];
+
+    // 4. fijosXprenda
+    const fxpSheet = workbook.Sheets['fijosXprenda'];
+    const fxpRows: any[][] = fxpSheet ? parseXLSX.utils.sheet_to_json(fxpSheet, { header: 1 }) : [];
+
+    // 5. Fij&Var
+    const fjvSheet = workbook.Sheets['Fij&Var'];
+    const fjvRows: any[][] = fjvSheet ? parseXLSX.utils.sheet_to_json(fjvSheet, { header: 1 }) : [];
+
+    inputsExcelCache = { pesoRows, tallasHeaderPeso, accRows, accHeaders, tablaAuxiliarRows, moRows, fxpRows, fjvRows };
+    return inputsExcelCache;
+  } catch (e) {
+    console.error('Error al cargar datos fijos desde Excel:', e);
+    return null;
+  }
+}
 
 const SEP = '='.repeat(78);
 const TOL = 0.001;

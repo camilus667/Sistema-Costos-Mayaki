@@ -18,7 +18,7 @@ import telaRoutes from './routes/tela';
 import accesorioRoutes from './routes/accesorio';
 import detalleAccesorioRoutes from './routes/detalleAccesorio';
 import copiaPrendaRoutes from './routes/copiaPrenda';
-import calculoRoutes, { loadExcelMatrices } from './routes/calculo';
+import calculoRoutes from './routes/calculo';
 import inventarioRoutes from './routes/inventario';
 import precioRoutes from './routes/precio';
 import exportRoutes from './routes/export';

@@ -212,6 +212,27 @@ export const accesorios = sqliteTable('accesorio', {
   cantidadXUd: real('cantidad_x_ud').notNull(),
   costoUdCompra: real('costo_ud_compra').notNull(),
   costoUnitario: real('costo_unitario').notNull(),
+  /**
+   * CUANTO SE USA DE ESTE INSUMO EN UNA PRENDA. Es un INPUT y puede ser fraccionario: 0,6 de un
+   * elastico, 1,5 de un forro, 100 de hilo.
+   *
+   * Antes este numero no existia en ninguna parte de la base: vivia escrito a mano DENTRO de la
+   * formula de cada celda de la tabla auxiliar de CAMBRIDGE.xlsx, y el servidor parseaba ese
+   * archivo en cada pedido para recuperarlo. De ahi que 17 de 37 filas no siguieran ninguna
+   * formula reproducible.
+   *
+   * El costo de uso NO se guarda: se calcula con `costoUsoDeInsumo`. Un costo derivado guardado
+   * se desactualiza en silencio el dia que cambia el precio de compra.
+   *
+   * NULLABLE: sin valor se asume 1, que es el caso de la mayoria —un cierre, un cuello—.
+   */
+  unidadesPorPrenda: real('unidades_por_prenda'),
+  /** Cuantos ojales lleva la prenda con este insumo. Input, y venia solo en la planilla. */
+  ojales: text('ojales'),
+  /** Cuantas unidades salen de un metro. Input de referencia para los insumos por metro. */
+  unidadesPorMetro: real('unidades_por_metro'),
+  /** Costo por centimetro cuadrado, para entretelas y vinilos. Input. */
+  costoCm2: real('costo_cm2'),
   activo: integer('activo', { mode: 'boolean' }).default(true).notNull(),
 });
 

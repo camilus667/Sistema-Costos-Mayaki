@@ -1,10 +1,9 @@
 import { Hono } from 'hono';
 import { eq, and, asc, or, isNull } from 'drizzle-orm';
 import { productos, tallas, pesoMateriaPrima, manoObra, telas, accesorios, detalleAccesorio, costosIndirectos, preciosAdquisicion } from '../database/schema';
-import * as XLSX from 'xlsx';
-import { findExcelPath } from '../scripts/seed';
 import { saveDbToDisk } from '../database/sqljs';
 import { getSystemConfig, setSystemConfig } from '../services/configService';
+import { costoUnitarioDeInsumo, costoUsoDeInsumo } from '../services/costoInsumo';
 import { cargarContextoCosteo, ensamblarInputs } from '../services/calculo/costeoInputs.service';
 import { calcularCostoTotal } from '../services/calculo/costoTotal.service';
 import { resolverPrendaPorItem, nuevoIdHex } from '../services/resolucion.service';
@@ -125,47 +124,6 @@ let inputsExcelCache: any = null;
  * parseo, una diferencia contra la base podria ser un bug del parser y no un dato
  * distinto, y la comparacion no serviria para decidir nada.
  */
-export function loadExcelInputs() {
-  if (inputsExcelCache) return inputsExcelCache;
-
-  try {
-    const excelPath = findExcelPath();
-    const parseXLSX = (XLSX as any).default || XLSX;
-    const workbook = parseXLSX.readFile(excelPath);
-
-    // 1. PesoMatPrima
-    const pesoSheet = workbook.Sheets['PesoMatPrima'];
-    const pesoRows: any[][] = pesoSheet ? parseXLSX.utils.sheet_to_json(pesoSheet, { header: 1 }) : [];
-    const tallasHeaderPeso = pesoRows[1]?.slice(2) || [];
-
-    // 2. Acc (Accesorios por prenda + Tabla Auxiliar)
-    const accSheet = workbook.Sheets['Acc'];
-    const accRows: any[][] = accSheet ? parseXLSX.utils.sheet_to_json(accSheet, { header: 1 }) : [];
-    const accHeaders = accRows[1]?.slice(2, 40).map(h => String(h || '').trim()).filter(Boolean) || [];
-
-    // Cargar Tabla Auxiliar (fila 31 en adelante)
-    const auxHeaderIdx = accRows.findIndex((r: any) => r && r.some((c: any) => String(c).includes('UNIDAD DE COMPRA') || String(c).includes('COSTO Unitario')));
-    const tablaAuxiliarRows = auxHeaderIdx !== -1 ? accRows.slice(auxHeaderIdx + 1).filter((r: any) => r && r[0] && (typeof r[1] === 'number' || !isNaN(Number(r[1])))) : [];
-
-    // 3. ManoDeObra
-    const moSheet = workbook.Sheets['ManoDeObra'];
-    const moRows: any[][] = moSheet ? parseXLSX.utils.sheet_to_json(moSheet, { header: 1 }) : [];
-
-    // 4. fijosXprenda
-    const fxpSheet = workbook.Sheets['fijosXprenda'];
-    const fxpRows: any[][] = fxpSheet ? parseXLSX.utils.sheet_to_json(fxpSheet, { header: 1 }) : [];
-
-    // 5. Fij&Var
-    const fjvSheet = workbook.Sheets['Fij&Var'];
-    const fjvRows: any[][] = fjvSheet ? parseXLSX.utils.sheet_to_json(fjvSheet, { header: 1 }) : [];
-
-    inputsExcelCache = { pesoRows, tallasHeaderPeso, accRows, accHeaders, tablaAuxiliarRows, moRows, fxpRows, fjvRows };
-    return inputsExcelCache;
-  } catch (e) {
-    console.error('Error al cargar datos fijos desde Excel:', e);
-    return null;
-  }
-}
 
 // GET /api/inputs/tabla-auxiliar-accesorios - Tabla Auxiliar completa de Definición y Costos de Accesorios (Hoja Acc)
 api.get('/tabla-auxiliar-accesorios', async (c) => {
@@ -183,44 +141,29 @@ api.get('/tabla-auxiliar-accesorios', async (c) => {
   }
   const list = await accQuery;
 
-  const inputs = loadExcelInputs();
-  const auxRows = inputs ? inputs.tablaAuxiliarRows : [];
-
-  const auxMap = new Map<number, any>();
-  auxRows.forEach((r: any) => {
-    const code = Number(r[1]);
-    if (code > 0) {
-      const cantUd = Number(r[3]) || 1;
-      const costoUd = Number(r[4]) || Number(r[5]) || 0;
-      const costoUnit = Number(r[5]) || (cantUd > 0 ? costoUd / cantUd : 0);
-      const costoUso = Number(r[6]) || costoUnit;
-
-      auxMap.set(code, {
-        unidadCompra: r[2] ? String(r[2]).trim() : 'unidad',
-        cantidadXUd: cantUd,
-        costoUdCompra: parseFloat(costoUd.toFixed(2)),
-        costoUnitario: parseFloat(costoUnit.toFixed(4)),
-        costoUsoPrendas: parseFloat(costoUso.toFixed(2)),
-        ojales: r[7] ? Number(r[7]) : null,
-        unidadesPorPrenda: r[8] ? Number(r[8]) : 1,
-        unidadesPorMetro: r[9] ? Number(r[9]) : null,
-        costoCm2: r[10] ? Number(r[10]) : null,
-      });
-    }
-  });
+  // SE FUE LA PLANILLA. Estos nueve campos salian de la tabla auxiliar de la hoja `Acc` de
+  // CAMBRIDGE.xlsx, que el servidor parseaba en CADA pedido, y el Excel le ganaba a la base:
+  // `auxMap.get(codigo) || {respaldo de la base}`. Cuatro de los nueve no existian como columna,
+  // asi que el respaldo los inventaba —`unidadesPorPrenda` siempre 1, `costoUsoPrendas` igual al
+  // unitario—, y por eso 15 de 38 insumos habrian cambiado de valor al sacar el archivo: hasta
+  // 500x de diferencia en Entretela Corbata.
+  //
+  // Los cuatro INPUTS se mudaron a la base con `mudarInsumosDesdeExcel.ts`. Los dos DERIVADOS se
+  // calculan aca, que es donde corresponde: un costo derivado guardado se desactualiza en
+  // silencio el dia que cambia el precio de compra.
+  //
+  // MEDIDO antes de mudar: el `costo_unitario` de la base coincide con el de la planilla en las
+  // 38 filas, con cero diferencias. Por eso calcular el costo de uso reproduce exactamente los
+  // numeros que el sistema venia usando.
 
   const data = list.map((a: any, idx: number) => {
     const codeNum = parseInt(a.codigo || '') || (idx + 1);
-    const aux = auxMap.get(codeNum) || {
-      unidadCompra: a.unidadCompra || 'unidad',
-      cantidadXUd: a.cantidadXUd || 1,
-      costoUdCompra: a.costoUdCompra || 0,
-      costoUnitario: a.costoUnitario || 0,
-      costoUsoPrendas: a.costoUnitario || 0,
-      ojales: null,
-      unidadesPorPrenda: 1,
-      unidadesPorMetro: null,
-      costoCm2: null,
+
+    const entradas = {
+      costoUdCompra: a.costoUdCompra,
+      cantidadXud: a.cantidadXUd,
+      costoUnitarioGuardado: a.costoUnitario,
+      unidadesPorPrenda: a.unidadesPorPrenda,
     };
 
     return {
@@ -228,15 +171,17 @@ api.get('/tabla-auxiliar-accesorios', async (c) => {
       colegioId: a.colegioId,
       codigo: codeNum,
       descripcion: a.descripcion,
-      unidadCompra: aux.unidadCompra,
-      cantidadXUd: aux.cantidadXUd,
-      costoUdCompra: aux.costoUdCompra,
-      costoUnitario: aux.costoUnitario,
-      costoUsoPrendas: aux.costoUsoPrendas,
-      ojales: aux.ojales,
-      unidadesPorPrenda: aux.unidadesPorPrenda,
-      unidadesPorMetro: aux.unidadesPorMetro,
-      costoCm2: aux.costoCm2,
+      unidadCompra: a.unidadCompra || 'unidad',
+      cantidadXUd: a.cantidadXUd ?? 1,
+      costoUdCompra: a.costoUdCompra ?? 0,
+      // Los dos derivados. `costoUnitario` se calcula cuando las entradas alcanzan y se cae al
+      // guardado cuando no —pasa en 8 de 38 filas, donde `cantidadXUd` no es un numero—.
+      costoUnitario: costoUnitarioDeInsumo(entradas),
+      costoUsoPrendas: costoUsoDeInsumo(entradas),
+      ojales: a.ojales ?? null,
+      unidadesPorPrenda: a.unidadesPorPrenda ?? 1,
+      unidadesPorMetro: a.unidadesPorMetro ?? null,
+      costoCm2: a.costoCm2 ?? null,
     };
   });
 
@@ -288,25 +233,8 @@ api.put('/tabla-auxiliar-accesorios/:id', async (c) => {
       .set(setPayload)
       .where(eq(accesorios.id, id));
 
-    const inputs = loadExcelInputs();
-    if (inputs && inputs.tablaAuxiliarRows) {
-      const [accObj] = await db.select().from(accesorios).where(eq(accesorios.id, id)).limit(1);
-      if (accObj && accObj.codigo) {
-        const codeNum = parseInt(accObj.codigo);
-        const row = inputs.tablaAuxiliarRows.find((r: any) => Number(r[1]) === codeNum);
-        if (row) {
-          if (unidadCompra !== undefined) row[2] = unidadCompra;
-          if (cantidadXUd !== undefined) row[3] = Number(cantidadXUd) || 1;
-          if (costoUdCompra !== undefined) row[4] = Number(costoUdCompra) || 0;
-          if (costoUnitario !== undefined) row[5] = Number(costoUnitario) || 0;
-          if (costoUsoPrendas !== undefined) row[6] = Number(costoUsoPrendas) || 0;
-          if (ojales !== undefined) row[7] = ojales;
-          if (unidadesPorPrenda !== undefined) row[8] = unidadesPorPrenda;
-          if (unidadesPorMetro !== undefined) row[9] = unidadesPorMetro;
-          if (costoCm2 !== undefined) row[10] = costoCm2;
-        }
-      }
-    }
+    // Aca vivia un bloque que copiaba los valores recien guardados al cache del Excel en memoria.
+    // Nadie leia ese cache: era una escritura sin lector. Se fue con la planilla.
 
     return c.json({ success: true, message: 'Accesorio actualizado exitosamente' });
   } catch (e) {
@@ -333,42 +261,16 @@ api.get('/peso-mat-prima', async (c) => {
   const pesoMap = new Map<string, any>();
   pesos.forEach((p: any) => pesoMap.set(`${p.productoId}_${p.tallaId}`, p));
 
-  const inputs = loadExcelInputs();
-  const rows = inputs ? inputs.pesoRows : [];
-  const tallasHeader = inputs ? inputs.tallasHeaderPeso : [];
-
+  // SE FUE LA PLANILLA. Aca la base YA GANABA: los pesos del Excel entraban solo cuando no habia
+  // fila en `peso_mat_prima` (`dbRec ? dbRec.pesoGramos : topMap.get(key)`).
+  //
+  // MEDIDO: `peso_mat_prima` tiene 448 filas = 28 prendas x 16 tallas, cobertura COMPLETA. `dbRec`
+  // existe siempre, asi que los mapas del Excel no se consultaban ni una vez. Y la MERMA de la
+  // planilla era 8, el mismo valor que ya estaba escrito aca como defecto.
+  //
+  // El 8 queda como defecto de arranque y lo sobreescribe cualquier fila que traiga su merma,
+  // igual que antes.
   let globalMermaPct = 8;
-  if (rows && rows.length > 0) {
-    const mermaRow = rows.find((r: any) => r && String(r[0]).trim().toUpperCase() === 'MERMA');
-    if (mermaRow && typeof mermaRow[1] === 'number') {
-      globalMermaPct = Number(mermaRow[1]);
-    }
-  }
-
-  const topMap = new Map<string, number>();
-  const bottomMap = new Map<string, number>();
-
-  if (rows && rows.length > 0) {
-    const sinMermaHeaderIdx = rows.findIndex((r: any) => r && String(r[0]).toUpperCase().includes('ESTIMADO'));
-    const topRows = rows.slice(2, sinMermaHeaderIdx !== -1 ? sinMermaHeaderIdx : 30).filter((r: any) => r && typeof r[0] === 'number');
-    const bottomRows = sinMermaHeaderIdx !== -1 ? rows.slice(sinMermaHeaderIdx + 2).filter((r: any) => r && typeof r[0] === 'number') : [];
-
-    topRows.forEach((r: any) => {
-      const itemNum = Number(r[0]);
-      tallasHeader.forEach((code: any, idx: number) => {
-        const val = Number(r[2 + idx]) || 0;
-        topMap.set(`${itemNum}_${String(code).trim()}`, val);
-      });
-    });
-
-    bottomRows.forEach((r: any) => {
-      const itemNum = Number(r[0]);
-      tallasHeader.forEach((code: any, idx: number) => {
-        const val = Number(r[2 + idx]) || 0;
-        bottomMap.set(`${itemNum}_${String(code).trim()}`, val);
-      });
-    });
-  }
 
   // Detect DB merma global if any record has it
   pesos.forEach((p: any) => {
@@ -394,8 +296,11 @@ api.get('/peso-mat-prima', async (c) => {
       // merma cuando falta. Estaba declarado const, asi que esa rama lanzaba
       // TypeError en runtime. Se dispara con conMerma > 0 y exacto === 0, que es
       // el caso de 162 de las 432 filas de peso_mat_prima.
-      let exacto = dbRec ? dbRec.pesoExactoGramos : (bottomMap.get(key) || 0);
-      let conMerma = dbRec ? dbRec.pesoGramos : (topMap.get(key) || 0);
+      // Sin respaldo del Excel: si no hay fila en la base el peso es 0, y eso es lo correcto —una
+      // prenda sin peso cargado tiene que verse sin peso, no con el de una planilla vieja—. El
+      // marcado de prendas sin costo (`diagnosticoCosto.ts`) es el que avisa de ese caso.
+      let exacto = dbRec ? dbRec.pesoExactoGramos : 0;
+      let conMerma = dbRec ? dbRec.pesoGramos : 0;
 
       if (exacto > 0 && (!conMerma || conMerma === 0)) {
         conMerma = parseFloat((exacto * (1 + recMerma / 100)).toFixed(2));
@@ -763,22 +668,10 @@ api.get('/mano-de-obra', async (c) => {
   const moDbMap = new Map<string, number>();
   moList.forEach((m: any) => moDbMap.set(`${m.productoId}_${m.tallaId}`, m.costoBs));
 
-  const inputs = loadExcelInputs();
-  const moRows = inputs ? inputs.moRows : [];
+  // SE FUE LA PLANILLA. Igual que con los pesos, la base ya ganaba: el Excel entraba solo por el
+  // `?? excelMo`, y `mano_obra` tiene 448 filas con las 28 prendas cubiertas, asi que ese
+  // respaldo no se usaba nunca. Sin fila en la base, el costo es 0.
   const moExcelMap = new Map<number, { grupo1: number; grupo2: number; grupo3: number }>();
-
-  if (moRows && moRows.length > 0) {
-    moRows.slice(2).forEach((r: any) => {
-      if (r && typeof r[0] === 'number') {
-        const itemNum = Number(r[0]);
-        moExcelMap.set(itemNum, {
-          grupo1: Number(r[2]) || 0,
-          grupo2: Number(r[3]) || 0,
-          grupo3: Number(r[4]) || 0,
-        });
-      }
-    });
-  }
 
   const data = allProds.map((prod: any) => {
     const excelMo = moExcelMap.get(prod.itemNumero) || { grupo1: 0, grupo2: 0, grupo3: 0 };
