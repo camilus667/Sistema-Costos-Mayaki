@@ -272,6 +272,13 @@ nav.tabs {
   align-items: center;
   gap: 1rem;
   margin-bottom: 0.6rem;
+  /* Los controles van a la DERECHA, igual que en `.panel-header`.
+     Sin `justify-content` quedaban pegados al titulo: medido a 1600 px, el ordenador, la
+     paginacion y el boton PDF terminaban en 583 px con el borde del panel en 1572 —casi mil
+     pixeles de espacio vacio a la derecha—, y no coincidian con el PDF de Resumen General, que si
+     estaba alineado. Se usa el mismo idioma que `.panel-header` a proposito: dos barras de titulo
+     con dos mecanismos distintos es como se termina con dos alineaciones distintas. */
+  justify-content: space-between;
 }
 
 .panel-toolbar-h2 {

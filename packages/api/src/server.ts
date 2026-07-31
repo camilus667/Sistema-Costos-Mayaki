@@ -19,6 +19,10 @@ import accesorioRoutes from './routes/accesorio';
 import detalleAccesorioRoutes from './routes/detalleAccesorio';
 import copiaPrendaRoutes from './routes/copiaPrenda';
 import calculoRoutes from './routes/calculo';
+// El orden de las prendas y su referencia salen de las mismas casas que usan las matrices, para
+// que las dos pantallas no puedan discrepar.
+import { ordenarPrendasDesdeBase } from './services/ordenPrendasDb';
+import { referenciasDesdeBase } from './services/referenciaPrendaDb';
 import inventarioRoutes from './routes/inventario';
 import precioRoutes from './routes/precio';
 import exportRoutes from './routes/export';
@@ -244,7 +248,25 @@ app.get('/api/dashboard-resumen', async (c) => {
 
   let prodQuery = db.select().from(schema.productos);
   if (colegioId) prodQuery = prodQuery.where(eq(schema.productos.colegioId, colegioId));
-  const productos = await prodQuery.orderBy(asc(schema.productos.orden), asc(schema.productos.itemNumero));
+  const productosSinOrdenar = await prodQuery
+    .orderBy(asc(schema.productos.orden), asc(schema.productos.itemNumero));
+
+  // EL ORDEN LO DEFINE LA MISMA CASA QUE EL DE LAS MATRICES: `services/ordenPrendas.ts`.
+  //
+  // Este `orderBy` de SQL ordenaba por `orden, itemNumero` sin conocer los colegios, asi que
+  // Resumen General y Matrices Consolidadas mostraban las prendas en ORDEN DISTINTO. Con dos
+  // colegios eso se nota enseguida: la matriz las agrupa por colegio y el resumen las intercalaba.
+  //
+  // El `orderBy` se conserva para que el resultado sea ESTABLE antes de ordenar —dos filas
+  // empatadas no pueden venir en distinto orden entre dos llamadas—, pero el criterio real se
+  // aplica despues, igual que en `/api/productos`.
+  const productos = await ordenarPrendasDesdeBase(db, productosSinOrdenar as any, 'defecto', {
+    agruparPorColegio: !colegioId,
+  });
+
+  // La REFERENCIA `CC-01` de cada prenda, que es lo que va en la columna `Prod`. Sin esto el
+  // resumen caia al numero de item y mostraba codigos distintos que la matriz para la misma prenda.
+  const referencias = await referenciasDesdeBase(db);
 
   const telas = await db.select().from(schema.telas);
   const accesorios = await db.select().from(schema.accesorios);
@@ -358,6 +380,7 @@ app.get('/api/dashboard-resumen', async (c) => {
     return {
       id: p.id,
       itemNumero: p.itemNumero,
+      prod: referencias.get(String(p.id)) ?? null,
       descripcion: p.descripcion,
       stockTotal: prodStock,
       costoMin: minCosto !== Infinity ? parseFloat(minCosto.toFixed(2)) : 0,
