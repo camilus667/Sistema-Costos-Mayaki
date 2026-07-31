@@ -355,6 +355,13 @@ async function armarPlan(
 api.post('/preview', async (c) => {
   const db = (c as any).db;
 
+  // SE DECLARA QUE ESTA RUTA NO ESCRIBE, para que el middleware de server.ts no vuelque la
+  // base al terminar. Es un POST —recibe el archivo por multipart— y el middleware volcaba
+  // por metodo, no por lo que hizo el handler: el contenido logico no cambiaba pero el
+  // archivo si, porque sql.js re-serializa. La verificacion de punta a punta lo atrapo
+  // comparando bytes.
+  (c as any).__noEscribio = true;
+
   const leido = await leerArchivo(c);
   if (!leido.ok) return c.json({ success: false, error: leido.error }, leido.estado as any);
 

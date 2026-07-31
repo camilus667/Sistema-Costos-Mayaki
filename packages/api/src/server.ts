@@ -178,7 +178,22 @@ app.use('/api/*', async (c, next) => {
 
   const metodo = c.req.method;
   const esEscritura = metodo !== 'GET' && metodo !== 'HEAD' && metodo !== 'OPTIONS';
-  if (esEscritura && c.res.status < 400) {
+
+  // UNA RUTA PUEDE DECLARAR QUE NO ESCRIBIO, y entonces no se vuelca nada.
+  //
+  // Hace falta porque "es POST" no es lo mismo que "escribio". /api/importar/preview es un
+  // POST —recibe un .xlsx de 157 KB por multipart— y su promesa central es no tocar la
+  // base. El middleware la volcaba igual, y aunque el contenido logico no cambiaba, el
+  // archivo SI: sql.js re-serializa y los bytes salen distintos.
+  //
+  // Lo encontro la verificacion de punta a punta del importador, que compara el archivo byte
+  // a byte antes y despues del preview. Y solo aparecio DESPUES de sacar el sembrado del
+  // arranque: antes el arranque ya reescribia el archivo, asi que el volcado del middleware
+  // producia los mismos bytes y el defecto quedaba tapado. Un cambio destapo al otro.
+  //
+  // Ademas es puro desperdicio: volcar un MB de base tras una operacion de solo lectura.
+  const declaroNoEscribir = (c as any).__noEscribio === true;
+  if (esEscritura && !declaroNoEscribir && c.res.status < 400) {
     saveDbToDisk();
   }
 });

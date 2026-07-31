@@ -199,7 +199,32 @@
         <div class="panel-toolbar">
           <div class="panel-toolbar-top">
             <h2 class="panel-toolbar-h2">Matrices Consolidadas</h2>
-            <button class="btn-pdf" onclick="reporteConsolidada()" title="Exportar la matriz del concepto activo a PDF (una hoja, horizontal)">PDF</button>
+            <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
+              <!-- ORDEN Y PAGINACION. Los dos van al servidor: la pantalla no reordena ni
+                   recorta por su cuenta, asi que lo que se ve es lo que la base devolvio y
+                   el PDF puede pedir lo mismo sin paginar. -->
+              <select id="mc-orden" onchange="mcCambiarOrden()" title="Como se ordenan las prendas"
+                style="background:#1e293b; color:#cbd5e1; border:1px solid #334155; border-radius:4px; font-size:0.72rem; padding:0.2rem 0.35rem;">
+                <option value="defecto">Orden del colegio</option>
+                <option value="precio-desc">Precio, mayor primero</option>
+                <option value="precio-asc">Precio, menor primero</option>
+                <option value="nombre-asc">Nombre A-Z</option>
+                <option value="nombre-desc">Nombre Z-A</option>
+              </select>
+              <label id="mc-comparar-wrap" title="Ordenar mezclando los colegios, para comparar precios de toda la empresa"
+                style="display:none; align-items:center; gap:0.25rem; font-size:0.7rem; color:#94a3b8; cursor:pointer;">
+                <input type="checkbox" id="mc-comparar" onchange="mcCambiarOrden()"> mezclar colegios
+              </label>
+              <select id="mc-porpagina" onchange="mcCambiarPagina(1)" title="Cuantas prendas por pagina"
+                style="background:#1e293b; color:#cbd5e1; border:1px solid #334155; border-radius:4px; font-size:0.72rem; padding:0.2rem 0.35rem;">
+                <option value="10">10</option>
+                <option value="20">20</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="0">Todas</option>
+              </select>
+              <button class="btn-pdf" onclick="reporteConsolidada()" title="Exportar la matriz del concepto activo a PDF (una hoja, horizontal). Imprime TODAS las prendas, no solo la pagina visible.">PDF</button>
+            </div>
           </div>
           <!-- Rotulos cortos, con el nombre completo en el tooltip. El nombre largo
                sigue vivo donde hay lugar para leerlo: el titulo del reporte en PDF. -->
@@ -235,6 +260,19 @@
             <tfoot id="tf-consolidada-foot">
             </tfoot>
           </table>
+        <!-- Barra de paginacion. Dice el TOTAL y no solo la pagina: sin ese numero, una
+             tabla de 50 filas parece el catalogo completo. -->
+        <div id="mc-paginacion" style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem; margin-top:0.6rem; font-size:0.74rem; color:#94a3b8; flex-wrap:wrap;">
+          <span id="mc-pag-texto"></span>
+          <div style="display:flex; align-items:center; gap:0.3rem;">
+            <button class="btn" id="mc-pag-primera" onclick="mcCambiarPagina(1)" style="padding:0.2rem 0.5rem; font-size:0.7rem; background:#1e293b;">&laquo;</button>
+            <button class="btn" id="mc-pag-antes" onclick="mcCambiarPagina(mcPagina - 1)" style="padding:0.2rem 0.5rem; font-size:0.7rem; background:#1e293b;">&lsaquo;</button>
+            <span id="mc-pag-actual" style="min-width:5.5rem; text-align:center;"></span>
+            <button class="btn" id="mc-pag-despues" onclick="mcCambiarPagina(mcPagina + 1)" style="padding:0.2rem 0.5rem; font-size:0.7rem; background:#1e293b;">&rsaquo;</button>
+            <button class="btn" id="mc-pag-ultima" onclick="mcCambiarPagina(mcPaginas)" style="padding:0.2rem 0.5rem; font-size:0.7rem; background:#1e293b;">&raquo;</button>
+          </div>
+        </div>
+
         </div>
       </div>
     </div>
@@ -2356,15 +2394,107 @@
       } catch (e) { console.error('Error al actualizar Costo Indirecto:', e); }
     }
 
+    // ==========================================================================
+    // ORDEN Y PAGINACION DE LA MATRIZ.
+    //
+    // LOS DOS SE RESUELVEN EN EL SERVIDOR. La pantalla manda el criterio y la pagina, y
+    // dibuja lo que le devuelven. No reordena ni recorta por su cuenta, por dos razones:
+    // el criterio ya vive en services/ordenPrendas.ts y tenerlo tambien aca crearia una
+    // segunda verdad que se desincroniza, y el PDF necesita pedir lo MISMO sin paginar.
+    //
+    // La eleccion se recuerda en localStorage: cambiar de pestaña y volver no puede
+    // devolverte a la pagina 1 de un orden que no elegiste.
+    // ==========================================================================
+    let mcOrden = localStorage.getItem('mc-orden') || 'defecto';
+    let mcPorPagina = Number(localStorage.getItem('mc-porpagina') ?? 50);
+    let mcComparar = localStorage.getItem('mc-comparar') === 'true';
+    let mcPagina = 1;
+    let mcPaginas = 1;
+
+    function mcCambiarOrden() {
+      mcOrden = document.getElementById('mc-orden').value;
+      mcComparar = document.getElementById('mc-comparar').checked;
+      localStorage.setItem('mc-orden', mcOrden);
+      localStorage.setItem('mc-comparar', String(mcComparar));
+      // Cambiar el orden vuelve a la pagina 1: quedarse en la 3 de un orden nuevo muestra
+      // filas que el usuario no pidio y parece que se perdieron las primeras.
+      mcPagina = 1;
+      cargarMatrizConsolidada();
+    }
+
+    function mcCambiarPagina(n) {
+      const pp = Number(document.getElementById('mc-porpagina').value);
+      if (pp !== mcPorPagina) { mcPorPagina = pp; localStorage.setItem('mc-porpagina', String(pp)); mcPagina = 1; }
+      else mcPagina = Math.max(1, Math.min(Number(n) || 1, mcPaginas || 1));
+      cargarMatrizConsolidada();
+    }
+
+    function mcParams() {
+      const p = new URLSearchParams();
+      p.set('orden', mcOrden);
+      if (mcComparar) p.set('compararEntreColegios', 'true');
+      p.set('porPagina', String(mcPorPagina));
+      p.set('pagina', String(mcPagina));
+      return '&' + p.toString();
+    }
+
     async function cargarMatrizConsolidada() {
       try {
-        const res = await fetch('/api/calculo/matriz-consolidada?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam());
+        // Los controles pueden no estar sincronizados con el estado si se llega desde otra
+        // pestaña: se ponen ANTES de pedir, para que lo que se ve sea lo que se pidio.
+        const selO = document.getElementById('mc-orden');
+        if (selO) selO.value = mcOrden;
+        const selP = document.getElementById('mc-porpagina');
+        if (selP) selP.value = String(mcPorPagina);
+        const chk = document.getElementById('mc-comparar');
+        if (chk) chk.checked = mcComparar;
+
+        const res = await fetch('/api/calculo/matriz-consolidada?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam() + mcParams());
         const json = await res.json();
         if (json.success) {
           rawConsolidadaData = json;
+          // La pagina que MANDA es la que devolvio el servidor, no la que se pidio: si se
+          // pidio la 20 y solo hay 3, el servidor acota y la pantalla tiene que reflejarlo.
+          mcPagina = json.paginacion?.pagina ?? 1;
+          mcPaginas = json.paginacion?.paginas ?? 1;
           renderMatrizConsolidada();
+          mcRenderPaginacion(json);
         }
       } catch (e) { console.error(e); }
+    }
+
+    function mcRenderPaginacion(json) {
+      const p = json.paginacion || {};
+      const txt = document.getElementById('mc-pag-texto');
+      const act = document.getElementById('mc-pag-actual');
+      if (!txt || !act) return;
+
+      // Se dice el TOTAL siempre. Sin ese numero una tabla de 50 filas parece el catalogo
+      // completo, que es exactamente como se pierde de vista que faltan prendas.
+      const desde = p.porPagina ? (p.pagina - 1) * p.porPagina + 1 : 1;
+      const hasta = p.porPagina ? Math.min(p.pagina * p.porPagina, p.total) : p.total;
+      txt.textContent = p.porPagina
+        ? `Mostrando ${desde} a ${hasta} de ${p.total} prenda(s)`
+        : `Mostrando las ${p.total} prenda(s), sin paginar`;
+      act.textContent = p.porPagina ? `Pág. ${p.pagina} de ${p.paginas}` : '';
+
+      const unaSola = !p.porPagina || p.paginas <= 1;
+      ['mc-pag-primera', 'mc-pag-antes', 'mc-pag-despues', 'mc-pag-ultima'].forEach((id, i) => {
+        const b = document.getElementById(id);
+        if (!b) return;
+        b.style.display = unaSola ? 'none' : '';
+        b.disabled = i < 2 ? p.pagina <= 1 : p.pagina >= p.paginas;
+        b.style.opacity = b.disabled ? '0.4' : '1';
+      });
+
+      // El interruptor de mezclar colegios solo tiene sentido con mas de un colegio a la
+      // vista y con un orden alternativo: en el orden del colegio no cambia nada.
+      const wrap = document.getElementById('mc-comparar-wrap');
+      if (wrap) {
+        const variosColegios = new Set((json.data || []).map(x => x.colegioId)).size > 1
+          || String(colegioFiltroActual || 'all') === 'all';
+        wrap.style.display = (mcOrden !== 'defecto' && variosColegios) ? 'flex' : 'none';
+      }
     }
 
     function switchExcelConcept(concept, btnElem) {
@@ -2505,7 +2635,27 @@
       let grandTotal = 0;
 
       const tbody = document.getElementById('tb-consolidada-body');
+
+      // FILA SEPARADORA POR COLEGIO. Se pone solo cuando hay mas de uno a la vista, y
+      // resuelve una ambiguedad real: los item_numero se numeran POR COLEGIO, asi que en
+      // cuanto Internacional SM tenga sus propias prendas van a existir dos "item 1"
+      // distintos en la misma tabla. Sin una marca de colegio, eso no se puede leer.
+      const colegiosVisibles = [...new Set(prods.map(x => String(x.colegioId ?? '')))].filter(Boolean);
+      const mostrarSeparador = colegiosVisibles.length > 1;
+      let colegioAnterior = null;
+      const anchoTotal = 2 + tallas.length + 1;
+
       tbody.innerHTML = prods.map(p => {
+        let filaSeparadora = '';
+        if (mostrarSeparador && String(p.colegioId ?? '') !== colegioAnterior) {
+          colegioAnterior = String(p.colegioId ?? '');
+          const cuantas = prods.filter(x => String(x.colegioId ?? '') === colegioAnterior).length;
+          filaSeparadora =
+            `<tr><td colspan="${anchoTotal}" style="background:#0f172a; border-top:2px solid #475569; border-bottom:1px solid #334155; padding:0.35rem 0.5rem; font-size:0.72rem; font-weight:800; letter-spacing:0.5px; color:#93c5fd;">` +
+            `${(p.colegioNombre || 'Sin colegio')}` +
+            `<span style="color:#64748b; font-weight:600; margin-left:0.5rem;">${cuantas} prenda(s)</span>` +
+            `</td></tr>`;
+        }
         let rowSubtotal = 0;
 
         const cellsHtml = tallas.map(t => {
@@ -2549,7 +2699,8 @@
           subtotalCellHtml = `<td style="text-align:right; border-left:2px solid var(--border); padding-right:0.4rem;">${formattedSubtotal}</td>`;
         }
 
-        return `
+        // La fila separadora va ADELANTE de la primera prenda de cada colegio.
+        return filaSeparadora + `
           <tr>
             <td><span class="col-item">${p.itemNumero}</span></td>
             <td><strong>${p.descripcion}</strong></td>
@@ -5278,8 +5429,25 @@
 
     async function reporteConsolidada() {
       try {
-        const j = await (await fetch('/api/calculo/matriz-consolidada?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam())).json();
+        // EL PDF PIDE TODO, no la pagina visible: `todo=true`. Y respeta el ORDEN elegido,
+        // para que la hoja coincida con lo que se estaba mirando.
+        //
+        // Un reporte que se entrega a un banco imprimiendo 20 de 2400 filas, sin decirlo, es
+        // el error silencioso mas caro que puede tener este sistema: las cifras serian
+        // correctas y el documento estaria incompleto, y nada en la hoja lo indicaria.
+        const paramsPdf = '&orden=' + encodeURIComponent(mcOrden) +
+          (mcComparar ? '&compararEntreColegios=true' : '') + '&todo=true';
+        const j = await (await fetch('/api/calculo/matriz-consolidada?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam() + paramsPdf)).json();
         if (!j.success || !j.data || !j.data.length) return _sinDatos('Matrices Consolidadas');
+
+        // Se comprueba que el servidor devolvio TODO y no una pagina. Si algun dia alguien
+        // cambia el default, el reporte tiene que fallar ruidosamente en vez de imprimir
+        // una hoja incompleta que parece completa.
+        if (j.paginacion && j.paginacion.porPagina !== 0 && j.data.length < j.paginacion.total) {
+          alert('El reporte no se genero: el servidor devolvio ' + j.data.length + ' de ' +
+                j.paginacion.total + ' prendas. Una hoja incompleta que parece completa es peor que ninguna.');
+          return;
+        }
 
         const cfg = CONCEPTOS_RP[currentExcelConcept] || CONCEPTOS_RP.costoBruto;
         const tallas = j.tallas || [];
