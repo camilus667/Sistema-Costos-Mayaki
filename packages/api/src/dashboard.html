@@ -844,6 +844,16 @@
                         onclick="agregarTallaCatalogo()">➕ Agregar talla</button>
                 <div id="alta-talla-estado" style="font-size:0.72rem; align-self:center;"></div>
               </div>
+              <div style="display:flex; align-items:center; gap:0.6rem; margin-top:0.6rem; padding-top:0.6rem; border-top:1px solid #1e293b; flex-wrap:wrap;">
+                <span style="font-size:0.72rem; color:#94a3b8;">
+                  Arrastrá las tallas para cambiar el orden de la curva. Es el orden en que salen
+                  las columnas de todas las tablas.
+                </span>
+                <button class="btn" id="btn-guardar-orden-tallas" disabled
+                        style="background:#38bdf8; color:#0f172a; font-weight:700; font-size:0.74rem; padding:0.3rem 0.7rem;"
+                        onclick="guardarOrdenTallas()">💾 Guardar orden</button>
+                <div id="orden-tallas-estado" style="font-size:0.72rem;"></div>
+              </div>
               <div style="font-size:0.68rem; color:#64748b; margin-top:0.4rem;">
                 Elegí un colegio arriba para tildar cuáles de estas tallas ofrece.
               </div>
@@ -4892,17 +4902,26 @@
       const enEmpresa = !colegioFiltroActual || colegioFiltroActual === 'all';
       const lista = catalogoEmpresa.tallas || [];
 
+      // El borrador del arrastre se rearma con lo que hay: si se agrego o borro una talla, el
+      // borrador viejo tendria ids que ya no existen o le faltarian los nuevos.
+      ordenTallasBorrador = lista.map(t => String(t.id));
+
       // Las tallas son vocabulario de la empresa: las del catalogo tienen colegio_id NULL.
       container.innerHTML = lista.map(t => `
-        <div style="background:#1e293b; padding:0.75rem; border-radius:8px; border:1px solid #334155; display:flex; align-items:center; justify-content:space-between; gap:0.5rem;">
-          <div style="min-width:0;">
-            <strong style="color:#f8fafc; display:block; font-size:0.9rem;">${fmtTalla(t.codigo)}</strong>
-            <span style="font-size:0.7rem; color:#94a3b8;">${esc(t.nombre)}</span>
+        <div data-id="${escAttr(t.id)}"
+             ${enEmpresa ? 'draggable="true" ondragstart="ordenTallaDragStart(event)" ondragover="ordenTallaDragOver(event)" ondrop="ordenTallaDrop(event)" ondragend="ordenTallaDragEnd()"' : ''}
+             style="background:#1e293b; padding:0.75rem; border-radius:8px; border:1px solid #334155; display:flex; align-items:center; justify-content:space-between; gap:0.5rem;${enEmpresa ? ' cursor:grab;' : ''}">
+          <div style="min-width:0; display:flex; align-items:center; gap:0.4rem;">
+            ${enEmpresa ? '<span style="color:#475569; font-size:0.85rem; letter-spacing:-2px;" title="Arrastrá para reordenar la curva">⋮⋮</span>' : ''}
+            <div style="min-width:0;">
+              <strong style="color:#f8fafc; display:block; font-size:0.9rem;">${fmtTalla(t.codigo)}</strong>
+              <span style="font-size:0.7rem; color:#94a3b8;">${esc(t.nombre)}</span>
+            </div>
           </div>
           ${enEmpresa
             ? `<button class="btn" title="Eliminar del catálogo de la empresa"
                  style="background:#7f1d1d; padding:0.2rem 0.5rem; font-size:0.72rem;"
-                 data-id="${escAttr(t.id)}" data-codigo="${escAttr(fmtTalla(t.codigo))}"
+                 data-talla="${escAttr(t.id)}" data-codigo="${escAttr(fmtTalla(t.codigo))}"
                  onclick="eliminarTallaCatalogo(this)">✕</button>`
             : `<input type="checkbox" id="atalla-act-${t.id}" ${t.activo ? 'checked' : ''} style="width:18px; height:18px;">`}
         </div>
@@ -4913,6 +4932,98 @@
       const btnGuardar = document.getElementById('btn-guardar-tallas');
       if (alta) alta.style.display = enEmpresa ? '' : 'none';
       if (btnGuardar) btnGuardar.style.display = enEmpresa ? 'none' : '';
+    }
+
+    /**
+     * ARRASTRE DE LA CURVA DE TALLAS.
+     *
+     * `orden` define la SECUENCIA DE COLUMNAS de todas las matrices, asi que esto no es cosmetico:
+     * una curva desordenada hace ilegible cualquier tabla de tallas. Es el mismo mecanismo que el
+     * arrastre de colegios, y por la misma razon: escribir la posicion a mano en un campo obliga a
+     * pensar en numeros cuando lo que se quiere es mover una talla de lugar.
+     *
+     * Solo en el ambito de EMPRESA: la curva es del catalogo, no de un colegio. Lo que cada colegio
+     * decide es cuales ofrece, no en que orden van.
+     */
+    let ordenTallasBorrador = [];
+    let ordenTallaArrastrada = null;
+
+    function ordenTallaDragStart(ev) {
+      ordenTallaArrastrada = ev.currentTarget.dataset.id;
+      ev.currentTarget.style.opacity = '0.45';
+      // Sin esto, Firefox no dispara `drop`.
+      try { ev.dataTransfer.setData('text/plain', ordenTallaArrastrada); } catch (e) {}
+      const btn = document.getElementById('btn-guardar-orden-tallas');
+      if (btn) btn.disabled = false;
+    }
+
+    function ordenTallaDragOver(ev) {
+      ev.preventDefault();
+      const sobre = ev.currentTarget.dataset.id;
+      if (!ordenTallaArrastrada || sobre === ordenTallaArrastrada) return;
+      const desde = ordenTallasBorrador.indexOf(ordenTallaArrastrada);
+      const hasta = ordenTallasBorrador.indexOf(sobre);
+      if (desde < 0 || hasta < 0) return;
+
+      // Se reordena EN VIVO mientras se arrastra, para que la posicion final sea la que se ve.
+      ordenTallasBorrador.splice(desde, 1);
+      ordenTallasBorrador.splice(hasta, 0, ordenTallaArrastrada);
+
+      // Se reordena el catalogo en memoria y se redibuja: no hace falta volver a pedir las tallas.
+      const porId = new Map((catalogoEmpresa.tallas || []).map(t => [String(t.id), t]));
+      catalogoEmpresa.tallas = ordenTallasBorrador.map(id => porId.get(id)).filter(Boolean);
+      renderAdminTallas();
+
+      const btnG = document.getElementById('btn-guardar-orden-tallas');
+      if (btnG) btnG.disabled = false;
+      const est = document.getElementById('orden-tallas-estado');
+      if (est) { est.textContent = 'Orden cambiado, sin guardar.'; est.style.color = '#fbbf24'; }
+
+      const nuevo = document.querySelector(`#container-admin-tallas [data-id="${ordenTallaArrastrada}"]`);
+      if (nuevo) nuevo.style.opacity = '0.45';
+    }
+
+    function ordenTallaDrop(ev) { ev.preventDefault(); }
+
+    function ordenTallaDragEnd() {
+      ordenTallaArrastrada = null;
+      document.querySelectorAll('#container-admin-tallas [data-id]')
+        .forEach(el => { el.style.opacity = '1'; });
+    }
+
+    /**
+     * Guarda la curva. El orden se manda como la SECUENCIA de ids, no como numeros: el servidor
+     * asigna 1..N, asi que la pantalla no puede dejar huecos ni dos tallas en la misma posicion.
+     */
+    async function guardarOrdenTallas() {
+      const btn = document.getElementById('btn-guardar-orden-tallas');
+      const est = document.getElementById('orden-tallas-estado');
+      const decir = (t, c) => { if (est) { est.textContent = t; est.style.color = c; } };
+
+      if (!ordenTallasBorrador.length) { decir('No hay tallas para ordenar.', '#f87171'); return; }
+      if (btn) btn.disabled = true;
+      decir('Guardando...', '#94a3b8');
+      try {
+        const res = await fetch('/api/tallas/orden', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orden: ordenTallasBorrador }),
+        });
+        const json = await res.json();
+        // UN FALLO SE DICE, y el servidor manda el motivo: ids repetidos, ids que no existen.
+        if (!json.success) {
+          decir('No se guardó: ' + (json.error || ('el servidor respondió ' + res.status)), '#f87171');
+          if (btn) btn.disabled = false;
+          return;
+        }
+        // Se vuelve a leer y se redibuja TODO lo que depende del orden de tallas: el orden de la
+        // curva es el orden de las columnas de cada matriz.
+        await recargarTallasYPantallas();
+        decir((json.avisos || []).join(' ') || 'Orden guardado.', '#34d399');
+      } catch (e) {
+        decir('Error de red: ' + e, '#f87171');
+        if (btn) btn.disabled = false;
+      }
     }
 
     /**
@@ -4967,7 +5078,7 @@
      * todas filtran por talla.
      */
     async function eliminarTallaCatalogo(boton) {
-      const id = boton.dataset.id;
+      const id = boton.dataset.talla;
       const codigo = boton.dataset.codigo || '';
       if (!confirm(`¿Eliminar la talla ${codigo} del catálogo de la empresa?\n\n` +
                    `Si tiene datos cargados el sistema no la va a eliminar y te va a decir qué la retiene.\n\n` +

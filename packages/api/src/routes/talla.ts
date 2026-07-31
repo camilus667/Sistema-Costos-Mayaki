@@ -43,6 +43,76 @@ api.get('/', async (c) => {
   });
 });
 
+/**
+ * PUT /api/tallas/orden — en que posicion va cada talla en la curva.
+ *
+ * Lo escribe el arrastrar y soltar del catalogo. `orden` es lo que define la SECUENCIA DE COLUMNAS
+ * de todas las matrices, asi que esto no es cosmetico: una curva desordenada hace ilegible cualquier
+ * tabla de tallas.
+ *
+ * VA ANTES DE /:id A PROPOSITO. Hono resuelve por orden de registro: con `PUT /:id` primero, la
+ * palabra "orden" se toma como un id de talla y el pedido termina en el handler de actualizar. Ya
+ * paso exactamente eso con `PUT /api/colegios/orden`, que devolvia Internal Server Error, y el 500
+ * fue suerte —con un cuerpo que pasara la validacion habria dado un 404 o un 200 que no hace nada,
+ * y el arrastre se veria guardado sin haberse guardado—.
+ *
+ * Las guardas son las mismas que las de colegios, y por las mismas razones: ids repetidos dejarian
+ * una talla con dos posiciones y otra sin ninguna; un id desconocido significa que la pantalla
+ * mando algo que no existe y no se guarda nada; las tallas que falten en la lista se aceptan y van
+ * al final, porque rechazar obligaria a recargar y perder el arrastre.
+ */
+api.put('/orden', async (c) => {
+  const db = (c as any).db;
+
+  let body: any = {};
+  try { body = await c.req.json(); } catch (e) {}
+
+  const ids = Array.isArray(body?.orden) ? body.orden.map((x: any) => String(x)) : null;
+  if (!ids || ids.length === 0) {
+    return c.json({
+      success: false,
+      error: 'Falta el cuerpo { "orden": ["id1", "id2", ...] } con los ids de talla en el orden deseado.',
+    }, 400);
+  }
+
+  const repetidos = ids.filter((x: string, i: number) => ids.indexOf(x) !== i);
+  if (repetidos.length) {
+    return c.json({
+      success: false,
+      error: `La lista trae ids repetidos: ${[...new Set(repetidos)].join(', ')}. ` +
+        `Cada talla puede aparecer una sola vez.`,
+    }, 400);
+  }
+
+  const existentes = await db.select({ id: tallas.id, codigo: tallas.codigo }).from(tallas);
+  const vivas = new Map<string, string>(existentes.map((x: any) => [String(x.id), String(x.codigo)]));
+
+  const desconocidos = ids.filter((x: string) => !vivas.has(x));
+  if (desconocidos.length) {
+    return c.json({
+      success: false,
+      error: `Estos ids no corresponden a ninguna talla: ${desconocidos.join(', ')}. No se guardo nada.`,
+    }, 404);
+  }
+
+  const faltantes = [...vivas.keys()].filter((x) => !ids.includes(x));
+  const secuencia = [...ids, ...faltantes];
+
+  for (let i = 0; i < secuencia.length; i++) {
+    await db.update(tallas).set({ orden: i + 1 }).where(eq(tallas.id, secuencia[i]));
+  }
+
+  return c.json({
+    success: true,
+    orden: secuencia.map((id, i) => ({ id, codigo: vivas.get(id), orden: i + 1 })),
+    avisos: faltantes.length
+      ? [`${faltantes.length} talla(s) no venian en la lista y quedaron al final: ` +
+         faltantes.map((f) => vivas.get(f)).join(', ')]
+      : [],
+    message: 'Orden de tallas guardado.',
+  });
+});
+
 // GET /api/tallas/:id - Obtener talla por ID
 api.get('/:id', async (c) => {
   const db = (c as any).db;
