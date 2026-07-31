@@ -946,6 +946,25 @@
               <button class="btn" onclick="actualizarColegioActualAdmin()">Guardar Datos del Colegio</button>
             </div>
 
+            <!-- ORDEN DE LOS COLEGIOS, arrastrando. Define en que posicion va cada uno cuando
+                 se ven varios juntos: la vista de empresa, los reportes y las matrices.
+                 Mientras nadie arrastre, el orden es la FECHA en que se agregaron, que es lo
+                 que pidio el usuario y lo que hace que esta pantalla sea opcional. -->
+            <div style="background:#1e293b; padding:1.25rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.5rem;">
+              <h4 style="margin-top:0; color:#93c5fd;">↕️ Orden de los Colegios</h4>
+              <div style="font-size:0.78rem; color:#94a3b8; margin-bottom:0.85rem; line-height:1.55;">
+                Arrastrá para cambiar en qué orden aparecen cuando se ven varios juntos.
+                Sin tocar nada, van por la fecha en que los agregaste.
+              </div>
+              <div id="orden-colegios-lista" style="display:flex; flex-direction:column; gap:0.35rem; margin-bottom:0.85rem;"></div>
+              <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+                <button class="btn" id="btn-guardar-orden-colegios" onclick="guardarOrdenColegios()"
+                  style="background:#38bdf8; color:#0f172a; font-weight:800; font-size:0.78rem; padding:0.45rem 0.95rem;"
+                  disabled>💾 Guardar orden</button>
+                <span id="orden-colegios-estado" style="font-size:0.74rem; color:#94a3b8;"></span>
+              </div>
+            </div>
+
             <div style="background:#0f172a; padding:1.25rem; border-radius:10px; border:1px solid #1e293b;">
               <h4 style="margin-top:0; color:#34d399;">➕ Dar de Alta un Nuevo Colegio en el Sistema</h4>
               <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
@@ -3268,6 +3287,147 @@
         '</div>';
     }
 
+    // ==========================================================================
+    // ORDEN DE LOS COLEGIOS, ARRASTRANDO.
+    //
+    // Escribe `colegio.orden`, que es lo que services/ordenPrendas.ts usa para agrupar. La
+    // pantalla NO ordena nada por su cuenta: manda la secuencia y vuelve a leer.
+    //
+    // El guardado es EXPLICITO, con un boton. Guardar en cada soltada convertiria un arrastre
+    // exploratorio —"a ver cómo queda"— en un cambio a la base, y sin forma de comparar contra
+    // lo anterior. El boton arranca deshabilitado y se prende solo si el orden cambio.
+    //
+    // Sin librerias: HTML5 draggable alcanza para una lista de cinco elementos, y una
+    // dependencia nueva para esto seria mas codigo del que ahorra.
+    // ==========================================================================
+    let ordenColegiosActual = [];   // lo que esta en la base
+    let ordenColegiosBorrador = []; // lo que el usuario arrastro
+
+    async function cargarOrdenColegios() {
+      const cont = document.getElementById('orden-colegios-lista');
+      if (!cont) return;
+      try {
+        const j = await (await fetch('/api/colegios')).json();
+        const lista = j.data || j || [];
+        // Se ordena con el MISMO criterio que el servidor: `orden` cuando esta, y si no la
+        // fecha de creacion. Si esta pantalla usara otro, mostraria una secuencia distinta de
+        // la que el resto del sistema aplica, que es peor que no mostrarla.
+        const ordenados = [...lista].sort((a, b) => {
+          const oa = a.orden === null || a.orden === undefined ? Number.MAX_SAFE_INTEGER : Number(a.orden);
+          const ob = b.orden === null || b.orden === undefined ? Number.MAX_SAFE_INTEGER : Number(b.orden);
+          if (oa !== ob) return oa - ob;
+          return String(a.creadoEn || '').localeCompare(String(b.creadoEn || ''));
+        });
+        ordenColegiosActual = ordenados.map(c => String(c.id));
+        ordenColegiosBorrador = [...ordenColegiosActual];
+        renderOrdenColegios(ordenados);
+      } catch (e) {
+        cont.innerHTML = '<div style="color:#f87171; font-size:0.76rem;">No se pudieron cargar los colegios: ' + e + '</div>';
+      }
+    }
+
+    function renderOrdenColegios(colegios) {
+      const cont = document.getElementById('orden-colegios-lista');
+      if (!cont) return;
+      const porId = new Map(colegios.map(c => [String(c.id), c]));
+      cont.innerHTML = ordenColegiosBorrador.map((id, i) => {
+        const c = porId.get(id);
+        if (!c) return '';
+        const sinOrden = c.orden === null || c.orden === undefined;
+        return `
+          <div draggable="true" data-id="${escAttr(id)}"
+            ondragstart="ordenColDragStart(event)" ondragover="ordenColDragOver(event)"
+            ondrop="ordenColDrop(event)" ondragend="ordenColDragEnd(event)"
+            style="display:flex; align-items:center; gap:0.6rem; background:#0f172a; border:1px solid #334155; border-radius:6px; padding:0.5rem 0.7rem; cursor:grab; user-select:none;">
+            <span style="color:#475569; font-size:0.9rem;">⋮⋮</span>
+            <span style="min-width:1.4rem; text-align:center; font-size:0.7rem; font-weight:800; color:#93c5fd;">${i + 1}</span>
+            <strong style="color:#f8fafc; font-size:0.82rem;">${escAttr(c.nombre)}</strong>
+            ${sinOrden ? '<span style="font-size:0.65rem; color:#64748b;">por fecha de creación</span>' : ''}
+          </div>`;
+      }).join('');
+      marcarCambioOrdenColegios();
+    }
+
+    function marcarCambioOrdenColegios() {
+      const cambio = ordenColegiosBorrador.join('|') !== ordenColegiosActual.join('|');
+      const btn = document.getElementById('btn-guardar-orden-colegios');
+      const est = document.getElementById('orden-colegios-estado');
+      if (btn) { btn.disabled = !cambio; btn.style.opacity = cambio ? '1' : '0.45'; }
+      if (est) est.textContent = cambio ? 'Hay cambios sin guardar.' : '';
+    }
+
+    let ordenColArrastrado = null;
+
+    function ordenColDragStart(ev) {
+      ordenColArrastrado = ev.currentTarget.dataset.id;
+      ev.currentTarget.style.opacity = '0.45';
+      // Sin esto, Firefox no dispara `drop`.
+      try { ev.dataTransfer.setData('text/plain', ordenColArrastrado); } catch (e) {}
+    }
+
+    function ordenColDragOver(ev) {
+      ev.preventDefault();
+      const sobre = ev.currentTarget.dataset.id;
+      if (!ordenColArrastrado || sobre === ordenColArrastrado) return;
+      const desde = ordenColegiosBorrador.indexOf(ordenColArrastrado);
+      const hasta = ordenColegiosBorrador.indexOf(sobre);
+      if (desde < 0 || hasta < 0) return;
+      // Se reordena EN VIVO mientras se arrastra, para que la posicion final sea la que se ve.
+      ordenColegiosBorrador.splice(desde, 1);
+      ordenColegiosBorrador.splice(hasta, 0, ordenColArrastrado);
+      const nombres = new Map([...document.querySelectorAll('#orden-colegios-lista [data-id]')]
+        .map(el => [el.dataset.id, el.querySelector('strong').textContent]));
+      // Se redibuja con lo que ya esta en el DOM: no hace falta volver a pedir los colegios.
+      renderOrdenColegios(ordenColegiosBorrador.map(id => ({ id, nombre: nombres.get(id), orden: 1 })));
+      const nuevo = document.querySelector(`#orden-colegios-lista [data-id="${ordenColArrastrado}"]`);
+      if (nuevo) nuevo.style.opacity = '0.45';
+    }
+
+    function ordenColDrop(ev) { ev.preventDefault(); }
+
+    function ordenColDragEnd() {
+      ordenColArrastrado = null;
+      document.querySelectorAll('#orden-colegios-lista [data-id]').forEach(el => { el.style.opacity = '1'; });
+    }
+
+    async function guardarOrdenColegios() {
+      const btn = document.getElementById('btn-guardar-orden-colegios');
+      const est = document.getElementById('orden-colegios-estado');
+      btn.disabled = true; est.textContent = 'Guardando...';
+      try {
+        const r = await fetch('/api/colegios/orden', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orden: ordenColegiosBorrador }),
+        });
+        const j = await r.json();
+        if (!j.success) { est.innerHTML = '<span style="color:#f87171;">' + (j.error || 'no se pudo guardar') + '</span>'; return; }
+
+        // Se vuelve a LEER en vez de dar por bueno el borrador: el servidor pudo agregar al
+        // final colegios que no venian en la lista, y la pantalla tiene que mostrar lo que
+        // quedo guardado y no lo que se pidio.
+        //
+        // Y EL MENSAJE VA DESPUES DE RELEER, no antes. Al reves lo borraba en el acto:
+        // cargarOrdenColegios redibuja, y el redibujado llama a marcarCambioOrdenColegios, que
+        // limpia el estado cuando no hay cambios pendientes —que es justo lo que pasa despues
+        // de un guardado exitoso—. El guardado funcionaba y no se veia; lo encontro un test que
+        // busca la palabra "guardado" en la pantalla.
+        await cargarOrdenColegios();
+
+        est.innerHTML = '<span style="color:#34d399;">Orden guardado.</span>' +
+          (j.avisos && j.avisos.length ? ' <span style="color:#fbbf24;">' + j.avisos.join(' ') + '</span>' : '');
+        // Y el resto de la aplicacion cambio de orden: se refresca lo que este a la vista.
+        if (typeof cargarColegiosHeader === 'function') cargarColegiosHeader();
+        if (typeof cargarMatrizConsolidada === 'function' && document.getElementById('tab-matriz-excel')?.classList.contains('active')) {
+          cargarMatrizConsolidada();
+        }
+      } catch (e) {
+        est.innerHTML = '<span style="color:#f87171;">Error de red: ' + e + '</span>';
+        // Solo en el camino de error hace falta recalcular el boton: en el exitoso ya lo hizo
+        // cargarOrdenColegios, y llamarlo de nuevo aca borraria el mensaje otra vez.
+        marcarCambioOrdenColegios();
+      }
+    }
+
     function switchAdminTab(tabName) {
       adminTabActual = tabName;
       document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
@@ -3292,6 +3452,7 @@
       if (tabName === 'sistema') cargarConfigSistemaAdmin();
       if (tabName === 'insumos') cargarInsumosAdmin();
       if (tabName === 'importar') impAlEntrar();
+      if (tabName === 'colegios') cargarOrdenColegios();
       actualizarAlcanceConfig(tabName);
     }
 
