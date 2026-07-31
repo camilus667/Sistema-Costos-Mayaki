@@ -260,7 +260,11 @@ async function armarPlan(
     );
   }
 
-  const todosLosColegios = await db.select({ id: colegios.id, nombre: colegios.nombre }).from(colegios);
+  // La ABREVIATURA viaja con el catalogo: es lo que resuelve el colegio contra el sufijo del
+  // codigo del POS, y es exacta. El nombre queda como respaldo para una base que no las cargo.
+  const todosLosColegios = await db
+    .select({ id: colegios.id, nombre: colegios.nombre, abreviatura: colegios.abreviatura })
+    .from(colegios);
 
   // Tallas ACTIVAS de este colegio: el flag global y la configuracion por colegio, con la
   // regla de que sin fila la talla esta activa.
@@ -285,7 +289,11 @@ async function armarPlan(
   const r = resolverFilas({
     filas: parseo.filas,
     colegioId: datos.colegioId,
-    colegios: todosLosColegios.map((x: any) => ({ id: String(x.id), nombre: String(x.nombre) })),
+    colegios: todosLosColegios.map((x: any) => ({
+      id: String(x.id),
+      nombre: String(x.nombre),
+      abreviatura: x.abreviatura ?? null,
+    })),
     tallasActivas,
     productos: productosDelColegio,
   });

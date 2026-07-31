@@ -269,10 +269,13 @@ describe('categorias sin colegio en el sistema', () => {
       ]),
       categoriasConColegio: new Set(['C Cambridge', 'C Intl. San Marcos']),
     });
+    // Cada una viaja con el nombre y la ABREVIATURA sugeridos, que es lo que permite crear el
+    // colegio desde el importador con un clic. La abreviatura sale del sufijo que el POS ya usa en
+    // sus codigos: si fuera otra, el colegio nuevo no encontraria ninguna de sus filas.
     expect(p.categoriasSinColegio).toEqual([
-      { categoria: 'C Edad de Oro', filas: 126 },
-      { categoria: 'C Infantil San Marcos', filas: 95 },
-      { categoria: 'C Saint Jude', filas: 48 },
+      { categoria: 'C Edad de Oro', filas: 126, nombreSugerido: 'C Edad de Oro', abreviaturaSugerida: 'EO' },
+      { categoria: 'C Infantil San Marcos', filas: 95, nombreSugerido: 'C Infantil San Marcos', abreviaturaSugerida: 'INFSM' },
+      { categoria: 'C Saint Jude', filas: 48, nombreSugerido: 'C Saint Jude', abreviaturaSugerida: 'JS' },
     ]);
     // 126 + 95 + 48 = 269, el numero medido.
     expect(p.avisos.some((a) => a.includes('269'))).toBe(true);

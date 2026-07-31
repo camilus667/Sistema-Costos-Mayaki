@@ -380,7 +380,16 @@ export interface FilaResuelta {
 
 export interface CatalogoTalla { id: string; codigo: string }
 export interface CatalogoProducto { id: string; descripcion: string; colegioId: string }
-export interface CatalogoColegio { id: string; nombre: string }
+export interface CatalogoColegio {
+  id: string;
+  nombre: string;
+  /**
+   * La abreviatura cargada en Perfil & Colegios. Cuando existe, es la que RESUELVE el colegio:
+   * empareja exacto contra el sufijo del codigo del POS y no depende de como este escrito el
+   * nombre. Sin ella se cae al emparejamiento por nombre de `CATEGORIAS_POS`.
+   */
+  abreviatura?: string | null;
+}
 
 export interface OpcionesResolucion {
   filas: FilaPos[];
@@ -415,11 +424,58 @@ export function categoriaDeColegio(
 ): string | null {
   const col = colegios.find((c) => String(c.id) === String(colegioId));
   if (!col) return null;
+
+  // PRIMERO LA ABREVIATURA, que es exacta. El sufijo del codigo del POS es `-cc`, `-EO`, `-JS`,
+  // `-InfSM`, `-IntlSM`, y la abreviatura del colegio guarda ese mismo token. Emparejar por ahi no
+  // depende de como este escrito el nombre, que es justo donde el emparejamiento por nombre falla:
+  // el POS dice `C Intl. San Marcos` y el sistema `Internacional SM`.
+  const abrev = normalizarAbreviatura(col.abreviatura);
+  if (abrev) {
+    for (const [categoria, cfg] of Object.entries(CATEGORIAS_POS)) {
+      if (normalizarAbreviatura(cfg.sufijo) === abrev) return categoria;
+    }
+  }
+
+  // DESPUES EL NOMBRE, para los colegios que todavia no tienen abreviatura cargada. Se conserva
+  // para que una base sin abreviaturas siga importando igual que antes.
   const nombre = sinAcentos(col.nombre);
   for (const [categoria, cfg] of Object.entries(CATEGORIAS_POS)) {
     if (cfg.agujas.some((a) => nombre.includes(sinAcentos(a)))) return categoria;
   }
   return null;
+}
+
+/**
+ * Forma comparable de una abreviatura: sin el guion del sufijo, sin espacios y en mayusculas.
+ *
+ * `-cc` y `CC` son el mismo token escrito de dos maneras: el POS lo pone en minuscula dentro del
+ * codigo y el sistema lo guarda en mayuscula. Sin normalizar, ninguno de los cinco emparejaria.
+ */
+export function normalizarAbreviatura(x: unknown): string {
+  return String(x ?? '').trim().replace(/^-+/, '').toUpperCase();
+}
+
+/**
+ * El nombre y la abreviatura que conviene proponer para un colegio que falta en el sistema.
+ *
+ * QUE FALTAN Y CUANTAS FILAS SON ya lo calcula `planImportacion.service.ts`, que tiene las cuentas
+ * por categoria a mano. Aca vive solo la SUGERENCIA, que es lo unico que faltaba para que crear el
+ * colegio desde el importador sea un clic en vez de un formulario a completar.
+ *
+ * La abreviatura sale del sufijo que el POS ya usa en sus codigos, asi que el colegio nace
+ * emparejando: sin eso habria que adivinarla y la primera importacion no encontraria sus filas.
+ */
+export function sugerenciaDeColegio(categoria: string): {
+  nombreSugerido: string;
+  abreviaturaSugerida: string;
+} {
+  const cat = String(categoria ?? '').trim();
+  const cfg = CATEGORIAS_POS[cat];
+  return {
+    // El nombre del POS ya viene con el prefijo `C `, que es como estan nombrados los colegios.
+    nombreSugerido: cat,
+    abreviaturaSugerida: cfg ? normalizarAbreviatura(cfg.sufijo) : '',
+  };
 }
 
 /**

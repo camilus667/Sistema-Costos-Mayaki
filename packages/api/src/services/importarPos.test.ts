@@ -11,6 +11,8 @@ import {
   CONFIANZA_MINIMA,
   COL,
   type FilaPos,
+  sugerenciaDeColegio,
+  normalizarAbreviatura,
 } from './importarPos.service';
 
 /**
@@ -335,5 +337,75 @@ describe('resolucion contra los catalogos', () => {
     expect(r.resumen).toMatchObject({
       total: 5, ok: 1, sinPrecio: 1, sinTalla: 1, otroColegio: 1, revisar: 1,
     });
+  });
+});
+
+describe('normalizarAbreviatura', () => {
+  it('el sufijo del POS y la abreviatura del sistema son el mismo token', () => {
+    // El POS escribe `-cc` dentro del codigo y el sistema guarda `CC`. Sin normalizar, ninguno de
+    // los cinco colegios emparejaria.
+    expect(normalizarAbreviatura('-cc')).toBe('CC');
+    expect(normalizarAbreviatura('CC')).toBe('CC');
+    expect(normalizarAbreviatura('-IntlSM')).toBe('INTLSM');
+    expect(normalizarAbreviatura(' -js ')).toBe('JS');
+  });
+
+  it('no revienta con vacio ni con nulo', () => {
+    expect(normalizarAbreviatura('')).toBe('');
+    expect(normalizarAbreviatura(null)).toBe('');
+    expect(normalizarAbreviatura(undefined)).toBe('');
+  });
+});
+
+describe('categoriaDeColegio: la abreviatura manda sobre el nombre', () => {
+  it('resuelve por abreviatura aunque el nombre NO se parezca a la categoria', () => {
+    // Es el caso real que el emparejamiento por nombre no puede resolver: el POS dice
+    // `C Intl. San Marcos` y el sistema `Internacional SM`.
+    const cols = [{ id: 'a', nombre: 'Cualquier Nombre Sin Relacion', abreviatura: 'IntlSM' }];
+    expect(categoriaDeColegio('a', cols)).toBe('C Intl. San Marcos');
+  });
+
+  it('acepta la abreviatura en minuscula, como la escribe el POS', () => {
+    const cols = [{ id: 'a', nombre: 'X', abreviatura: 'cc' }];
+    expect(categoriaDeColegio('a', cols)).toBe('C Cambridge');
+  });
+
+  it('sin abreviatura se cae al nombre, para una base que todavia no las cargo', () => {
+    const cols = [{ id: 'a', nombre: 'Col. Cambridge' }];
+    expect(categoriaDeColegio('a', cols)).toBe('C Cambridge');
+  });
+
+  it('una abreviatura que no corresponde a ninguna categoria NO inventa una', () => {
+    // Devolver una categoria al azar meteria los precios de un colegio en las prendas de otro.
+    const cols = [{ id: 'a', nombre: 'Colegio Nuevo', abreviatura: 'ZZ' }];
+    expect(categoriaDeColegio('a', cols)).toBeNull();
+  });
+
+  it('con abreviatura desconocida pero nombre reconocible, el nombre salva la fila', () => {
+    const cols = [{ id: 'a', nombre: 'Col. Cambridge', abreviatura: 'ZZ' }];
+    expect(categoriaDeColegio('a', cols)).toBe('C Cambridge');
+  });
+});
+
+describe('sugerenciaDeColegio', () => {
+  it('sugiere la abreviatura del POS, que es lo que hace que crearlo sea un clic', () => {
+    // Sin la abreviatura correcta el colegio nace sin emparejar y su primera importacion no
+    // encuentra ninguna de sus filas.
+    expect(sugerenciaDeColegio('C Edad de Oro'))
+      .toEqual({ nombreSugerido: 'C Edad de Oro', abreviaturaSugerida: 'EO' });
+    expect(sugerenciaDeColegio('C Saint Jude').abreviaturaSugerida).toBe('JS');
+    expect(sugerenciaDeColegio('C Infantil San Marcos').abreviaturaSugerida).toBe('INFSM');
+    expect(sugerenciaDeColegio('C Intl. San Marcos').abreviaturaSugerida).toBe('INTLSM');
+  });
+
+  it('una categoria desconocida no inventa abreviatura', () => {
+    // Devolver una al azar haria que el colegio nuevo se coma las filas de otro.
+    expect(sugerenciaDeColegio('C Que No Existe'))
+      .toEqual({ nombreSugerido: 'C Que No Existe', abreviaturaSugerida: '' });
+  });
+
+  it('no revienta con vacio ni con nulo', () => {
+    expect(sugerenciaDeColegio('').abreviaturaSugerida).toBe('');
+    expect(sugerenciaDeColegio(null as any).nombreSugerido).toBe('');
   });
 });

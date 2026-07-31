@@ -37,6 +37,8 @@
  */
 
 import type { FilaPos, FilaResuelta, EstadoFila, Candidato } from './importarPos.service';
+// El nombre y la abreviatura sugeridos para un colegio que falta. Ver `sugerenciaDeColegio`.
+import { sugerenciaDeColegio } from './importarPos.service';
 
 /**
  * A partir de que porcentaje un cambio de precio se marca para que salte a la vista.
@@ -162,7 +164,9 @@ export interface PlanImportacion {
    * tiene dos colegios y el archivo trae cinco, asi que 269 de 732 filas no tienen a
    * donde ir. Descartarlas en silencio seria dejar creer que se importo todo.
    */
-  categoriasSinColegio: { categoria: string; filas: number }[];
+  categoriasSinColegio: {
+    categoria: string; filas: number; nombreSugerido: string; abreviaturaSugerida: string;
+  }[];
   avisos: string[];
   /** Huella del contenido resuelto. La ejecucion exige la misma; ver `huellaDePlan`. */
   huella: string;
@@ -377,9 +381,17 @@ export function planificarCambios(op: OpcionesPlan): PlanImportacion {
   });
 
   // ------------------------------------------------- categorias sin colegio en el sistema
-  const categoriasSinColegio: { categoria: string; filas: number }[] = [];
+  // Cada categoria que falta viaja con el nombre y la abreviatura que conviene proponer, para que
+  // crear ese colegio desde el importador sea un clic. La abreviatura sale del sufijo que el POS ya
+  // usa en sus codigos, asi que el colegio nace emparejando: adivinarla dejaria su primera
+  // importacion sin encontrar ninguna de sus filas.
+  const categoriasSinColegio: {
+    categoria: string; filas: number; nombreSugerido: string; abreviaturaSugerida: string;
+  }[] = [];
   for (const [cat, n] of op.filasPorCategoria) {
-    if (!op.categoriasConColegio.has(cat)) categoriasSinColegio.push({ categoria: cat, filas: n });
+    if (!op.categoriasConColegio.has(cat)) {
+      categoriasSinColegio.push({ categoria: cat, filas: n, ...sugerenciaDeColegio(cat) });
+    }
   }
   categoriasSinColegio.sort((a, b) => b.filas - a.filas);
 

@@ -3137,6 +3137,49 @@
       document.getElementById('imp-reporte').innerHTML = '';
     }
 
+    /**
+     * Crea uno de los colegios que el archivo trae y el sistema todavia no tiene.
+     *
+     * La ABREVIATURA se manda junto con el nombre. Sin ella el colegio nace sin emparejar y su
+     * primera importacion no encontraria ninguna de sus filas: el sufijo del codigo del POS es lo
+     * que lo conecta con el archivo.
+     *
+     * El nombre y la abreviatura llegan por `data-*` y no como argumentos del `onclick`: un nombre
+     * con apostrofo —"C Saint Jude's"— rompe la cadena del atributo, y esa clase de error aparece
+     * recien con el dato que lo dispara.
+     *
+     * Al terminar vuelve a pedir el preview, que es lo unico que recalcula que colegios faltan.
+     * Recargar la pantalla entera perderia el archivo ya elegido.
+     */
+    async function impCrearColegioFaltante(boton) {
+      const nombre = boton.dataset.nombre || '';
+      const abreviatura = boton.dataset.abrev || '';
+      const textoOriginal = boton.textContent;
+      boton.disabled = true;
+      boton.textContent = 'Creando...';
+      try {
+        const res = await fetch('/api/colegios', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre, abreviatura }),
+        });
+        const json = await res.json();
+        // UN FALLO SE DICE. Esta familia de guardados ya fallo en silencio una vez.
+        if (!json.success) {
+          alert('No se pudo crear el colegio: ' + (json.error || ('el servidor respondió ' + res.status)));
+          boton.disabled = false;
+          boton.textContent = textoOriginal;
+          return;
+        }
+        await cargarColegiosHeader();
+        await impGenerarPreview();
+      } catch (e) {
+        alert('Error de red al crear el colegio: ' + e);
+        boton.disabled = false;
+        boton.textContent = textoOriginal;
+      }
+    }
+
     async function impGenerarPreview() {
       const f = document.getElementById('imp-archivo').files[0];
       if (!f) return;
@@ -3199,7 +3242,29 @@
       const avisos = (impPlan.avisos || []).map(a =>
         '<div style="font-size:0.74rem; color:#fbbf24; border-left:3px solid #fbbf24; padding:0.35rem 0.6rem; margin-bottom:0.35rem; line-height:1.5;">' +
         a.replace(/</g, '&lt;') + '</div>').join('');
-      document.getElementById('imp-avisos').innerHTML = avisos;
+
+      // COLEGIOS QUE FALTAN, con un boton para crearlos. Medido sobre el export real: tres de los
+      // cinco no existen en el sistema y son 269 de las 766 filas. El aviso de texto ya los
+      // nombraba, pero obligaba a salir de la pantalla, crear el colegio a mano, adivinar su
+      // abreviatura y volver. Con el sufijo del POS como abreviatura, el colegio nace emparejando.
+      const faltantes = impPlan.categoriasSinColegio || [];
+      const bloqueFaltantes = faltantes.length ? (
+        '<div style="border:1px solid #b45309; background:#78350f22; border-radius:8px; padding:0.6rem 0.75rem; margin-bottom:0.6rem;">' +
+        '<div style="font-size:0.78rem; font-weight:700; color:#fbbf24; margin-bottom:0.4rem;">' +
+        faltantes.length + ' colegio(s) del archivo no existen todavía en el sistema</div>' +
+        faltantes.map(f =>
+          '<div style="display:flex; align-items:center; gap:0.6rem; font-size:0.74rem; color:#e2e8f0; padding:0.2rem 0;">' +
+          '<span style="flex:1;">' + esc(f.categoria) + ' <span style="color:#94a3b8;">(' + f.filas + ' filas)</span></span>' +
+          '<span style="color:#94a3b8;">abrev. <strong style="color:#e2e8f0;">' + esc(f.abreviaturaSugerida || '—') + '</strong></span>' +
+          '<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.7rem;" data-nombre="' +
+          escAttr(f.nombreSugerido) + '" data-abrev="' + escAttr(f.abreviaturaSugerida || '') +
+          '" onclick="impCrearColegioFaltante(this)">Crear</button>' +
+          '</div>').join('') +
+        '<div style="font-size:0.68rem; color:#94a3b8; margin-top:0.4rem;">Se crea vacío: después hay que cargarle sus prendas y tallas, e importar cada colegio por separado.</div>' +
+        '</div>'
+      ) : '';
+
+      document.getElementById('imp-avisos').innerHTML = bloqueFaltantes + avisos;
 
       // El nombre del colegio se toma del PLAN, que lo trae el servidor, y no de
       // nombreAmbito(). Esa funcion depende de un cache del navegador, y en un estado

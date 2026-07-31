@@ -62,11 +62,25 @@ api.get('/:id', async (c) => {
 });
 
 // POST /api/colegios - Crear colegio
+/**
+ * Deja la abreviatura en MAYUSCULAS, o en null si viene vacia.
+ *
+ * Se hace en el servidor y no solo en la pantalla porque es lo que empareja el sufijo del codigo
+ * del POS: `cc` y `CC` tienen que ser el mismo colegio, y guardar los dos crearia dos abreviaturas
+ * para uno solo. Y una cadena vacia no es una abreviatura: es la ausencia de una, y `null` es como
+ * se dice eso —si se guardara `''`, la columna diria que hay un valor cuando no lo hay—.
+ */
+function normalizarAbrev<T extends { abreviatura?: unknown }>(cuerpo: T): T {
+  if (!('abreviatura' in (cuerpo as any))) return cuerpo;
+  const v = String((cuerpo as any).abreviatura ?? '').trim().toUpperCase();
+  return { ...cuerpo, abreviatura: v || null } as T;
+}
+
 api.post('/', zValidator('json', crearColegioSchema), async (c) => {
   const db = (c as any).db;
   const body = c.req.valid('json');
 
-  const [newColegio] = await db.insert(colegios).values(body).returning();
+  const [newColegio] = await db.insert(colegios).values(normalizarAbrev(body)).returning();
 
   return c.json({
     success: true,
@@ -170,7 +184,7 @@ api.put('/:id', zValidator('json', crearColegioSchema.partial()), async (c) => {
 
   const [updatedColegio] = await db
     .update(colegios)
-    .set(body)
+    .set(normalizarAbrev(body))
     .where(eq(colegios.id, id))
     .returning();
 
