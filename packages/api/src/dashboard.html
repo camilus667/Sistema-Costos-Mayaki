@@ -3189,6 +3189,75 @@
       window.location.href = url;
     }
 
+    /**
+     * Enter guarda, Escape cancela.
+     *
+     * Escape REPONE el valor previo antes de soltar el foco, porque `onblur` guarda: sin reponer,
+     * cancelar terminaria guardando lo tecleado, que es lo contrario de cancelar.
+     */
+    function invCodTecla(ev, input) {
+      if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); return; }
+      if (ev.key === 'Escape') {
+        input.value = input.getAttribute('data-previo') || '';
+        input.blur();
+      }
+    }
+
+    /**
+     * Guarda el codigo del POS de una fila de Inventario Real.
+     *
+     * ES LA UNICA FORMA DE CORREGIR UN CODIGO A MANO. Hasta ahora el codigo lo escribia solamente
+     * el importador, asi que un emparejamiento equivocado no se podia arreglar desde ninguna
+     * pantalla. Se edita ACA porque es la unica tabla donde una fila ES una prenda con su talla,
+     * que es exactamente el alcance del codigo, y porque tiene el buscador para llegar a la fila.
+     *
+     * Se identifica por prenda y talla, no por el id del precio: es como se piensa el dato y como
+     * viene el export del POS.
+     */
+    async function guardarCodigoPos(input) {
+      const previo = input.getAttribute('data-previo') || '';
+      const valor = input.value.trim();
+      // Sin cambio no se pide nada. Abrir una celda, mirarla y salir no es un guardado, y mandar el
+      // PUT igual gastaria un viaje y ensuciaria el log con cambios que no ocurrieron.
+      if (valor === previo) { input.value = previo; return; }
+
+      try {
+        const res = await fetch('/api/precios/codigo-pos', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            productoId: input.getAttribute('data-producto'),
+            tallaId: input.getAttribute('data-talla'),
+            codigoPos: valor === '' ? null : valor,
+          }),
+        });
+        const json = await res.json();
+
+        if (!json.success) {
+          marcarCeldaError(input, json.error || ('el servidor respondio ' + res.status));
+          return;
+        }
+
+        // SE MUESTRA LO QUE EL SERVIDOR GUARDO, no lo que se tecleo. El servidor recorta, asi que
+        // escribir "  777-cc  " guarda "777-cc"; dejar el valor tecleado en pantalla haria que la
+        // celda y la base dijeran cosas distintas, y despues el buscador no encontraria la fila por
+        // su propio codigo.
+        const guardado = (json.data && json.data.codigoPos) ? json.data.codigoPos : '';
+        input.value = guardado;
+        input.setAttribute('data-previo', guardado);
+        marcarCeldaOk(input);
+
+        // Se actualiza la copia en memoria para que el buscador encuentre el codigo nuevo sin tener
+        // que recargar. Sin esto, buscar el codigo que acabas de escribir no daria nada.
+        const fila = inventarioFilas.find(f =>
+          String(f.productoId) === input.getAttribute('data-producto') &&
+          String(f.tallaId) === input.getAttribute('data-talla'));
+        if (fila) fila.codigoPos = guardado === '' ? null : guardado;
+      } catch (e) {
+        marcarCeldaError(input, 'Error de red: ' + e);
+      }
+    }
+
     /** Forma comparable de un texto de busqueda: sin acentos, sin mayusculas, sin bordes. */
     function normalizarBusqueda(t) {
       return String(t == null ? '' : t)
@@ -3255,7 +3324,7 @@
           // literal, ni en un comentario HTML. Terminan la cadena y rompen todo el script.
           tbody.innerHTML = json.data.map(i => `
             <tr>
-              <td><span class="col-item">${escAttr(i.codigoPos || '—')}</span></td>
+              <td><input class="col-item inv-cod" value="${escAttr(i.codigoPos || '')}" placeholder="—" data-producto="${escAttr(i.productoId)}" data-talla="${escAttr(i.tallaId)}" data-previo="${escAttr(i.codigoPos || '')}" onkeydown="invCodTecla(event, this)" onblur="guardarCodigoPos(this)" title="Codigo del POS de esta prenda en esta talla. Se puede corregir a mano: Enter guarda, Escape cancela."></td>
               <td><strong>${i.producto || '-'}</strong></td>
               <td>Talla ${i.talla || '-'}</td>
               <td><strong style="color:var(--primary);">${fmtNum(i.cantidad)} Unid.</strong></td>

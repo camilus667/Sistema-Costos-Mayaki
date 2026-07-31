@@ -56,3 +56,57 @@ export async function codigosPosDesdeBase(db: any): Promise<Map<string, string>>
   }
   return mapa;
 }
+
+/**
+ * La forma canonica de un codigo tecleado a mano, o `null` si no hay codigo.
+ *
+ * SE RECORTA Y NADA MAS. No se cambia la caja, y eso es una decision medida: en el export del POS
+ * conviven `001-cc` en minuscula y `619-JS` en mayuscula. Forzar mayusculas —o minusculas— haria que
+ * el codigo guardado dejara de ser identico al del POS, y el BUSCARV contra el export no
+ * encontraria nada. El unico trabajo legitimo aca es sacar los espacios, que son invisibles en
+ * pantalla y si rompen un emparejamiento.
+ *
+ * VACIO SIGNIFICA BORRAR. Devolver la cadena vacia dejaria una fila con codigo `''`, que no es lo
+ * mismo que sin codigo: el indice unico parcial solo excluye los NULL, asi que dos filas vacias
+ * chocarian entre si. Y las pantallas leen con `?? null`, que no atrapa la cadena vacia.
+ */
+export function normalizarCodigoPos(entrada: unknown): string | null {
+  if (entrada === null || entrada === undefined) return null;
+  const limpio = String(entrada).trim();
+  return limpio === '' ? null : limpio;
+}
+
+/** Una fila que ya tiene un codigo, para poder decir CUAL choca. */
+export interface DuenoDeCodigo {
+  productoId: string;
+  tallaId: string;
+  precioId?: string | null;
+}
+
+/**
+ * Quien ya tiene ese codigo, si alguien lo tiene.
+ *
+ * POR QUE NO SE DEJA QUE FALLE EL INDICE. La base tiene un indice unico parcial y cumple su
+ * trabajo, pero su error es `UNIQUE constraint failed: precio_venta.codigo_externo`: dice que hay
+ * un choque y NO dice contra que. Con 766 combinaciones, "esta repetido" sin decir donde manda a
+ * buscar a mano. Esta funcion existe para poder responder "ya lo tiene la prenda X en la talla Y".
+ *
+ * La MISMA fila no cuenta como choque: reescribir un codigo con el valor que ya tenia tiene que
+ * poder hacerse, y guardar sin cambiar nada es lo mas comun al corregir a mano.
+ */
+export function buscarDuenoDeCodigo(
+  codigo: string,
+  existentes: Array<{ productoId: string; tallaId: string; precioId?: string | null; codigo: string }>,
+  excluir?: { productoId?: string | null; tallaId?: string | null },
+): DuenoDeCodigo | null {
+  for (const e of existentes) {
+    if (e.codigo !== codigo) continue;
+    const esLaMisma =
+      excluir !== undefined &&
+      String(e.productoId) === String(excluir.productoId ?? '') &&
+      String(e.tallaId) === String(excluir.tallaId ?? '');
+    if (esLaMisma) continue;
+    return { productoId: e.productoId, tallaId: e.tallaId, precioId: e.precioId ?? null };
+  }
+  return null;
+}

@@ -29,6 +29,10 @@ import { zValidator } from '@hono/zod-validator';
 import { preciosVenta, historicoPrecios, productos, tallas } from '../database/schema';
 import { desc, eq, and, isNull, sql, type SQL } from 'drizzle-orm';
 import { saveDbToDisk } from '../database/sqljs';
+import {
+  normalizarCodigoPos,
+  buscarDuenoDeCodigo,
+} from '../services/codigoPos';
 
 const api = new Hono();
 
@@ -37,6 +41,22 @@ const crearPrecioSchema = z.object({
   tallaId: z.string(),
   precioBs: z.number().positive(),
   vigenteDesde: z.string().optional(),
+});
+
+/**
+ * El codigo del POS de UNA combinacion prenda+talla.
+ *
+ * Se identifica por prenda y talla, NO por el id del precio, y a proposito: asi se piensa el dato
+ * —"el codigo de la camisa en la talla 8"— y asi viene el export del POS. Quien corrige a mano no
+ * tiene por que saber que el codigo vive en la tabla de precios.
+ *
+ * `codigoPos` acepta `null` porque BORRAR un codigo es una operacion legitima: un codigo mal
+ * emparejado tiene que poder sacarse, no solo reemplazarse.
+ */
+const codigoPosSchema = z.object({
+  productoId: z.string().min(1),
+  tallaId: z.string().min(1),
+  codigoPos: z.string().nullable().optional(),
 });
 
 /**
@@ -349,6 +369,162 @@ api.post('/', zValidator('json', crearPrecioSchema), async (c) => {
 // ---------------------------------------------------------------------------------------
 // PUT /api/precios/:id
 // ---------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------
+// PUT /api/precios/codigo-pos
+//
+// VA ANTES DE /:id. Hono resuelve por orden de registro, asi que con `/:id` declarado primero
+// esta peticion entraria por ahi con id = "codigo-pos" y responderia 404 "Precio no encontrado".
+// Es la misma trampa que hizo inalcanzable /api/precios/historico, y la que ya dio un Internal
+// Server Error en PUT /api/colegios/orden.
+//
+// POR QUE EXISTE. Hasta aca el codigo del POS lo escribia UNICAMENTE el importador. No habia
+// ninguna forma de corregir uno a mano, y el emparejamiento manual es justamente lo que el usuario
+// dijo que iba a hacer. Validar la unicidad sin poder escribir el codigo era validar algo que
+// nadie podia hacer.
+// ---------------------------------------------------------------------------------------
+api.put('/codigo-pos', zValidator('json', codigoPosSchema), async (c) => {
+  const db = (c as any).db;
+  const body: any = c.req.valid('json');
+  const codigo = normalizarCodigoPos(body.codigoPos);
+
+  // --- la prenda y la talla, para poder hablar de ellas por nombre en los mensajes
+  const [prenda] = await db
+    .select({ id: productos.id, descripcion: productos.descripcion, colegioId: productos.colegioId })
+    .from(productos)
+    .where(eq(productos.id, body.productoId))
+    .limit(1);
+  if (!prenda) {
+    return c.json({ success: false, error: `No existe la prenda "${body.productoId}".` }, 404);
+  }
+  const [talla] = await db
+    .select({ id: tallas.id, codigo: tallas.codigo })
+    .from(tallas)
+    .where(eq(tallas.id, body.tallaId))
+    .limit(1);
+  if (!talla) {
+    return c.json({ success: false, error: `No existe la talla "${body.tallaId}".` }, 404);
+  }
+
+  // --- la fila donde el codigo vive
+  //
+  // EL CODIGO VIVE CON EL PRECIO, y no todas las combinaciones tienen precio: medido, 297 de las
+  // 448 filas de inventario lo tienen. En las otras 151 el codigo NO TIENE DONDE VIVIR.
+  //
+  // Se NIEGA en vez de crear la fila de precio para alojarlo. `precio_venta` es la fuente de verdad
+  // de si la prenda se ofrece en esa talla —regla del 29-jul-2026—, asi que una fila inventada la
+  // volveria "ofrecida" y le prorratearia costos fijos a una combinacion que no existe. Guardar un
+  // codigo no puede tener el efecto secundario de poner una prenda en venta.
+  const filasCombo = await db
+    .select({
+      id: preciosVenta.id,
+      codigoExterno: preciosVenta.codigoExterno,
+      vigenteDesde: preciosVenta.vigenteDesde,
+      vigenteHasta: preciosVenta.vigenteHasta,
+    })
+    .from(preciosVenta)
+    .where(and(eq(preciosVenta.productoId, body.productoId), eq(preciosVenta.tallaId, body.tallaId)));
+
+  if (filasCombo.length === 0) {
+    return c.json({
+      success: false,
+      error:
+        `"${prenda.descripcion}" no tiene precio cargado en la talla ${talla.codigo}, y el codigo ` +
+        `del POS se guarda junto al precio. Cargale el precio de venta a esa talla y despues ` +
+        `volve a poner el codigo. No se crea la fila de precio sola: eso pondria la prenda en ` +
+        `venta en una talla que hoy no se ofrece.`,
+    }, 409);
+  }
+
+  // La VIGENTE es la que manda; si no hubiera, la mas reciente. Hoy no hay historicos —0 filas con
+  // vigente_hasta— pero elegir explicitamente evita que el dia que los haya se escriba el codigo en
+  // un precio ya cerrado.
+  const objetivo =
+    filasCombo.find((f: any) => f.vigenteHasta === null || f.vigenteHasta === undefined) ||
+    [...filasCombo].sort((a: any, b: any) =>
+      String(b.vigenteDesde ?? '').localeCompare(String(a.vigenteDesde ?? '')))[0];
+
+  // --- el duplicado, ANTES de escribir
+  //
+  // La base ya tiene un indice unico parcial y cumple. Pero su error es `UNIQUE constraint failed:
+  // precio_venta.codigo_externo`: dice que hay choque y no dice contra que. Con 766 combinaciones,
+  // "esta repetido" sin decir donde manda a buscar a mano. Aca se responde con la prenda y la talla
+  // que ya lo tienen.
+  if (codigo) {
+    const conCodigo = await db
+      .select({
+        precioId: preciosVenta.id,
+        productoId: preciosVenta.productoId,
+        tallaId: preciosVenta.tallaId,
+        codigo: preciosVenta.codigoExterno,
+      })
+      .from(preciosVenta)
+      .where(sql`${preciosVenta.codigoExterno} IS NOT NULL`);
+
+    const dueno = buscarDuenoDeCodigo(
+      codigo,
+      conCodigo.map((f: any) => ({
+        productoId: String(f.productoId),
+        tallaId: String(f.tallaId),
+        precioId: String(f.precioId),
+        codigo: String(f.codigo),
+      })),
+      { productoId: body.productoId, tallaId: body.tallaId },
+    );
+
+    if (dueno) {
+      const [otraPrenda] = await db
+        .select({ descripcion: productos.descripcion })
+        .from(productos)
+        .where(eq(productos.id, dueno.productoId))
+        .limit(1);
+      const [otraTalla] = await db
+        .select({ codigo: tallas.codigo })
+        .from(tallas)
+        .where(eq(tallas.id, dueno.tallaId))
+        .limit(1);
+
+      return c.json({
+        success: false,
+        error:
+          `El codigo "${codigo}" ya lo tiene "${otraPrenda?.descripcion ?? dueno.productoId}" en la ` +
+          `talla ${otraTalla?.codigo ?? dueno.tallaId}. En el POS un codigo identifica UNA prenda en ` +
+          `UNA talla, asi que repetirlo haria que dos filas del sistema reclamen el mismo producto ` +
+          `del punto de venta. Sacalo de ahi primero si el que corresponde es este.`,
+        conflicto: {
+          productoId: dueno.productoId,
+          tallaId: dueno.tallaId,
+          prenda: otraPrenda?.descripcion ?? null,
+          talla: otraTalla?.codigo ?? null,
+        },
+      }, 409);
+    }
+  }
+
+  const anterior = objetivo.codigoExterno ?? null;
+  await db
+    .update(preciosVenta)
+    .set({ codigoExterno: codigo })
+    .where(eq(preciosVenta.id, objetivo.id));
+  saveDbToDisk();
+
+  return c.json({
+    success: true,
+    data: {
+      precioId: objetivo.id,
+      productoId: body.productoId,
+      tallaId: body.tallaId,
+      codigoPos: codigo,
+      anterior,
+    },
+    // Se dice si el valor cambio o no. Guardar sin cambio responde exito igual —no es un error—
+    // pero la pantalla no tiene que anunciar un cambio que no ocurrio.
+    cambio: anterior !== codigo,
+    message: codigo
+      ? `Codigo "${codigo}" guardado en "${prenda.descripcion}" talla ${talla.codigo}.`
+      : `Codigo borrado de "${prenda.descripcion}" talla ${talla.codigo}.`,
+  });
+});
+
 api.put('/:id', zValidator('json', crearPrecioSchema.partial()), async (c) => {
   const db = (c as any).db;
   const id = c.req.param('id');

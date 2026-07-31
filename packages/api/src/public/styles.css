@@ -1395,3 +1395,33 @@ footer {
   align-items: start;
   max-width: 96rem;
 }
+
+/* LA CELDA DE CODIGO DE INVENTARIO REAL ES UN INPUT, y tiene que parecer la insignia que era.
+   Se edita a mano porque el emparejamiento con el POS lo hace una persona; si pareciera un campo de
+   formulario, la tabla se leeria como un formulario de 766 filas. Se revela al pasar el mouse y al
+   enfocar. `width:100%` y `box-sizing` para que el ancho de la columna no cambie al escribir. */
+.inv-cod {
+  width: 100%;
+  box-sizing: border-box;
+  background: transparent;
+  border: 1px solid transparent;
+  color: inherit;
+  font: inherit;
+  /* El atajo `font` reinicia `font-variant`, asi que el `tabular-nums` que traia `.col-item` se
+     perdia y los codigos dejaban de alinear en columna. Se repone despues del atajo. */
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: inherit;
+  padding: 0.12rem 0.3rem;
+  border-radius: 4px;
+  cursor: text;
+}
+.inv-cod:hover { border-color: #334155; }
+.inv-cod:focus {
+  outline: none;
+  border-color: #818cf8;
+  background: #0f172a;
+}
+/* Sin codigo, el hueco se DICE: un placeholder visible en vez de una celda en blanco, que no
+   distingue "no tiene codigo" de "la pantalla no lo trajo". */
+.inv-cod::placeholder { color: #475569; opacity: 1; }
