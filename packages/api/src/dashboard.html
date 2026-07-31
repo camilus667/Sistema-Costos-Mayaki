@@ -370,7 +370,16 @@
       <div class="panel">
         <div class="panel-header">
           <h2 class="panel-title">Stock e Inventario por Colegio (Solo Artículos Disponible > 0)</h2>
-          <button class="btn-pdf" onclick="reporteInventario()" title="Exportar el inventario valorizado a PDF (una hoja, vertical)">PDF</button>
+          <!-- BUSCADOR. Es lo que hace util la columna Código: con los cinco colegios cargados esta
+               tabla tiene ~766 filas, y un código en una lista de 766 no se encuentra mirando. Se
+               busca por código del POS, por nombre de prenda y por talla. -->
+          <div style="display:flex; align-items:center; gap:0.5rem; margin-left:auto;">
+            <input type="text" id="inv-buscar" oninput="filtrarInventario()"
+                   placeholder="Buscar código del POS, prenda o talla..."
+                   style="background:#1e293b; color:#e2e8f0; border:1px solid #334155; border-radius:4px; font-size:0.78rem; padding:0.3rem 0.55rem; width:17rem;">
+            <span id="inv-buscar-conteo" style="font-size:0.72rem; color:#94a3b8; white-space:nowrap;"></span>
+            <button class="btn-pdf" onclick="reporteInventario()" title="Exportar el inventario valorizado a PDF (una hoja, vertical)">PDF</button>
+          </div>
         </div>
         <div class="table-container">
           <table>
@@ -3080,11 +3089,81 @@
       } catch (e) { console.error(e); }
     }
 
+    /**
+     * Las filas de Inventario Real, tal como las devolvio el servidor.
+     *
+     * Se guardan para poder FILTRAR sin volver a pedirlas. Son ~766 filas con los cinco colegios:
+     * filtrar en el navegador es instantaneo, y un viaje al servidor por cada tecla seria mas lento
+     * y ademas haria perder el foco del campo entre respuestas.
+     */
+    let inventarioFilas = [];
+
     async function cargarInventario() {
       try {
         const res = await fetch('/api/inventario/stock?colegioId=' + colegioFiltroActual + getModalidadFQueryParam());
         const json = await res.json();
-        const tbody = document.getElementById('tb-inventario');
+        inventarioFilas = json.data || [];
+        // Se respeta lo que ya este escrito en el buscador: recargar no puede deshacer un filtro.
+        filtrarInventario();
+      } catch (e) { console.error(e); }
+    }
+
+    /** Forma comparable de un texto de busqueda: sin acentos, sin mayusculas, sin bordes. */
+    function normalizarBusqueda(t) {
+      return String(t == null ? '' : t)
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().trim();
+    }
+
+    /**
+     * Filtra por codigo del POS, nombre de prenda o talla.
+     *
+     * Normaliza acentos y mayusculas: buscar `pantalon` tiene que encontrar `Pantalon` con acento,
+     * porque nadie escribe el acento cuando busca.
+     *
+     * El codigo se compara TAL CUAL y tambien SIN el sufijo, asi que 619 encuentra 619-JS. Es como
+     * se lee un codigo en voz alta o se copia de una factura.
+     */
+    function filtrarInventario() {
+      const campo = document.getElementById('inv-buscar');
+      const q = normalizarBusqueda(campo ? campo.value : '');
+      if (!q) { pintarInventario(inventarioFilas); return; }
+
+      const filtradas = inventarioFilas.filter(i => {
+        const cod = normalizarBusqueda(i.codigoPos || '');
+        return cod.includes(q)
+          || cod.split('-')[0] === q
+          || normalizarBusqueda(i.producto || '').includes(q)
+          || normalizarBusqueda('talla ' + (i.talla || '')).includes(q);
+      });
+      pintarInventario(filtradas, inventarioFilas.length);
+    }
+
+    function pintarInventario(filas, totalSinFiltro) {
+      const tbody = document.getElementById('tb-inventario');
+      if (!tbody) return;
+
+      const conteo = document.getElementById('inv-buscar-conteo');
+      if (conteo) {
+        conteo.textContent = totalSinFiltro !== undefined
+          ? filas.length + ' de ' + totalSinFiltro
+          : (filas.length ? filas.length + (filas.length === 1 ? ' fila' : ' filas') : '');
+      }
+
+      // SIN RESULTADOS SE DICE, y se dice QUE se buscaba y cuantas filas hay en total. Una tabla
+      // vacia sin explicacion parece que el inventario esta vacio, que es una conclusion muy
+      // distinta de "tu busqueda no coincide".
+      if (filas.length === 0 && totalSinFiltro !== undefined) {
+        const campo = document.getElementById('inv-buscar');
+        const q = campo ? campo.value : '';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:1.5rem; color:var(--text-muted);">' +
+          'Ninguna fila coincide con "' + escAttr(q) + '". Hay ' + totalSinFiltro + ' filas en total.' +
+          '</td></tr>';
+        return;
+      }
+
+      const json = { data: filas };
+      {
         if (json.data && json.data.length > 0) {
                     // La primera columna de Inventario Real es el CODIGO DEL POS, no la referencia `Prod`.
           // Aca una fila ES una prenda con su talla, y el codigo del POS identifica exactamente esa
@@ -3107,7 +3186,7 @@
         } else {
           tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 1.5rem; color: var(--text-muted);">No hay stock registrado en la BD para este filtro.</td></tr>';
         }
-      } catch (e) { console.error(e); }
+      }
     }
 
     let adminConfigData = null;
