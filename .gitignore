@@ -41,3 +41,16 @@ sistema_inventario.db.antes-*
 
 # Archivos de bloqueo de Excel, se crean al abrir el .xlsx
 ~$*.xlsx
+
+# EXPORTS DEL POS. No van al repo, nunca.
+#
+# Traen los precios, el inventario y los codigos de producto de los cinco colegios: son
+# datos del negocio y no tienen ninguna razon para vivir en control de versiones. El
+# importador los lee desde donde esten con --archivo o por el formulario de la pantalla, asi
+# que tampoco hace falta que esten aca.
+#
+# Hasta este commit la unica regla de .xlsx era la de los archivos de bloqueo, asi que un
+# `git add .` distraido se los llevaba. El usuario dejo el suyo como pos.xlsx en la raiz.
+pos.xlsx
+*export*.xlsx
+products_v2_export*.xlsx
