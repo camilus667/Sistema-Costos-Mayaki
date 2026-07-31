@@ -13,6 +13,7 @@ import {
   type FilaPos,
   sugerenciaDeColegio,
   normalizarAbreviatura,
+  tallaDeVariante,
 } from './importarPos.service';
 
 /**
@@ -407,5 +408,43 @@ describe('sugerenciaDeColegio', () => {
   it('no revienta con vacio ni con nulo', () => {
     expect(sugerenciaDeColegio('').abreviaturaSugerida).toBe('');
     expect(sugerenciaDeColegio(null as any).nombreSugerido).toBe('');
+  });
+});
+
+describe('tallaDeVariante', () => {
+  // MEDIDO: las 734 filas con variante del export empiezan con `Talla ` y todas tienen un espacio.
+  it('toma lo que sigue al primer espacio, que es la regla', () => {
+    expect(tallaDeVariante('Talla 02')).toBe('02');
+    expect(tallaDeVariante('Talla 03')).toBe('03');
+    expect(tallaDeVariante('Talla 16/34')).toBe('16/34');
+    expect(tallaDeVariante('Talla 46/2XL')).toBe('46/2XL');
+    expect(tallaDeVariante('Talla 36/XS')).toBe('36/XS');
+  });
+
+  it('NO depende de que la palabra sea "Talla"', () => {
+    // Es la razon de elegir la regla general: si el POS cambia la palabra, sacar el literal
+    // `talla` fallaria en las 734 filas.
+    expect(tallaDeVariante('Tamaño 02')).toBe('02');
+    expect(tallaDeVariante('T 02')).toBe('02');
+  });
+
+  it('sin espacio devuelve el texto completo: ya es el codigo', () => {
+    expect(tallaDeVariante('16/34')).toBe('16/34');
+    expect(tallaDeVariante('02')).toBe('02');
+  });
+
+  it('NO rellena a dos digitos: eso lo hace codigoTallaCanonico al comparar', () => {
+    // Rellenar en dos lugares es como se termina con dos formas canonicas que no coinciden.
+    expect(tallaDeVariante('Talla 2')).toBe('2');
+  });
+
+  it('aguanta espacios de sobra al principio, al final y entre las dos partes', () => {
+    expect(tallaDeVariante('  Talla   02  ')).toBe('02');
+  });
+
+  it('no revienta con vacio ni con nulo', () => {
+    expect(tallaDeVariante('')).toBe('');
+    expect(tallaDeVariante(null)).toBe('');
+    expect(tallaDeVariante(undefined)).toBe('');
   });
 });

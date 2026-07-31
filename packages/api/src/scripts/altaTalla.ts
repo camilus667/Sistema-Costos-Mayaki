@@ -46,6 +46,18 @@ const APLICAR = process.argv.includes('--aplicar');
 const CODIGO = codigoTallaCanonico(arg('codigo') ?? '');
 const ORDEN = arg('orden') != null ? Number(arg('orden')) : null;
 const COLEGIOS = (arg('colegios') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+/**
+ * Crea la talla en la lista DE LA EMPRESA y la deja APAGADA en todos los colegios que existen hoy.
+ *
+ * Es el caso de la talla 03: pertenece al catalogo de la empresa —son 17 tallas— pero solo la usa
+ * Saint Jude, que todavia no esta cargado. Sin esta opcion habia que elegir entre no crearla, o
+ * crearla activa en todos y meterle una columna vacia a cada matriz de Cambridge e Internacional SM.
+ *
+ * Una talla apagada aca queda ACTIVA para los colegios que se creen despues, porque la regla de
+ * `colegio_talla` es "sin fila = activa". Eso es lo deseado: el colegio nuevo la trae tildada y se
+ * destilda desde Configuracion -> Tallas si no corresponde.
+ */
+const APAGADA_EN_TODOS = process.argv.includes('--apagada-en-todos');
 const RUTA_DB = arg('db')
   ? path.resolve(arg('db')!)
   : path.resolve(process.cwd(), 'sistema_inventario.db');
@@ -90,7 +102,16 @@ async function main() {
   }));
 
   const destino: Col[] = [];
-  if (COLEGIOS.length === 0) {
+  if (APAGADA_EN_TODOS) {
+    if (COLEGIOS.length) {
+      console.error('ABORTA: --apagada-en-todos y --colegios se contradicen. Elegir uno.');
+      process.exit(1);
+    }
+    log(`Entra al catalogo de la empresa y queda APAGADA en los ${todosColegios.length} colegio(s) ` +
+        `que existen: ${todosColegios.map((c: Col) => c.nombre).join(', ')}.`);
+    log('Los colegios que se creen despues la traeran activa (sin fila = activa) y se');
+    log('pueden destildar desde Configuracion -> Tallas.');
+  } else if (COLEGIOS.length === 0) {
     log('Sin --colegios: la talla queda activa en todos.');
   } else {
     for (const aguja of COLEGIOS) {

@@ -451,6 +451,28 @@ export function categoriaDeColegio(
  * `-cc` y `CC` son el mismo token escrito de dos maneras: el POS lo pone en minuscula dentro del
  * codigo y el sistema lo guarda en mayuscula. Sin normalizar, ninguno de los cinco emparejaria.
  */
+/**
+ * El codigo de talla que hay dentro de la variante del POS: `Talla 02` -> `02`.
+ *
+ * LA REGLA ES "lo que sigue al primer espacio", no "sacar la palabra Talla".
+ *
+ * MEDIDO sobre el export: las 734 filas con variante empiezan con `Talla ` y las 734 tienen un
+ * espacio, asi que las dos reglas dan el mismo resultado hoy. Se elige la general porque no depende
+ * de que el POS siga escribiendo esa palabra: el dia que ponga `Tamaño 02` o `T 02`, sacar la
+ * palabra literal fallaria en 734 filas y esta regla sigue andando.
+ *
+ * Sin espacio se devuelve el texto completo: una variante que ya viene como `16/34` es el codigo.
+ *
+ * NO se rellena a dos digitos aca. Eso lo hace `codigoTallaCanonico` al comparar, y hacerlo en dos
+ * lugares es como se termina con dos formas canonicas que no coinciden.
+ */
+export function tallaDeVariante(variante: unknown): string {
+  const v = String(variante ?? '').trim();
+  if (!v) return '';
+  const i = v.indexOf(' ');
+  return i === -1 ? v : v.slice(i + 1).trim();
+}
+
 export function normalizarAbreviatura(x: unknown): string {
   return String(x ?? '').trim().replace(/^-+/, '').toUpperCase();
 }
@@ -558,7 +580,7 @@ export function resolverFilas(opciones: OpcionesResolucion): {
     }
 
     // --- talla ---
-    const crudo = f.variante.replace(/^talla\s+/i, '').trim();
+    const crudo = tallaDeVariante(f.variante);
     const codigoBuscado = crudo ? codigoTallaCanonico(crudo) : TALLA_PRODUCTOS_SIN_VARIANTE;
     const talla = tallaPorCodigo.get(codigoBuscado);
 
