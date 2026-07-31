@@ -910,15 +910,28 @@
           -->
           <div id="admin-sec-importar" style="display:none;">
             <div style="font-size:0.78rem; color:#94a3b8; margin-bottom:1rem; line-height:1.55;">
-              Trae <strong style="color:#cbd5e1;">precios y codigos</strong> del sistema POS para
+              Trae datos del sistema POS para
               <strong id="imp-ambito-nombre" style="color:#cbd5e1;">este colegio</strong>.
               Se importa un colegio por vez. La vista previa no escribe nada.
             </div>
 
-            <!-- ---------- PASO 1: archivo ---------- -->
+            <!-- ---------- PASO 1: QUE se importa ----------
+                 EL MODO VA PRIMERO, antes del archivo, porque cambia que hay que revisar: con
+                 "solo inventario" las tarjetas de precios que cambian no significan nada. Antes no
+                 se elegia: el texto decia "trae precios y codigos" y el precio se escribia siempre,
+                 asi que no habia forma de traer solo el inventario ni solo los nombres. -->
             <div style="border:1px solid #334155; border-radius:8px; padding:1rem; margin-bottom:1rem;">
               <div style="font-size:0.7rem; font-weight:800; color:#38bdf8; letter-spacing:1px; margin-bottom:0.75rem;">
-                PASO 1 — EL ARCHIVO
+                PASO 1 — QUÉ SE IMPORTA
+              </div>
+              <div id="imp-modos" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(15rem,1fr)); gap:0.6rem;"></div>
+              <div id="imp-modo-detalle" style="margin-top:0.85rem;"></div>
+            </div>
+
+            <!-- ---------- PASO 2: archivo ---------- -->
+            <div style="border:1px solid #334155; border-radius:8px; padding:1rem; margin-bottom:1rem;">
+              <div style="font-size:0.7rem; font-weight:800; color:#38bdf8; letter-spacing:1px; margin-bottom:0.75rem;">
+                PASO 2 — EL ARCHIVO
               </div>
               <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
                 <input type="file" id="imp-archivo" accept=".xlsx"
@@ -933,7 +946,7 @@
             <!-- ---------- PASO 2: revision ---------- -->
             <div id="imp-paso2" style="display:none; border:1px solid #334155; border-radius:8px; padding:1rem; margin-bottom:1rem;">
               <div style="font-size:0.7rem; font-weight:800; color:#fbbf24; letter-spacing:1px; margin-bottom:0.75rem;">
-                PASO 2 — REVISAR
+                PASO 3 — REVISAR
               </div>
               <div id="imp-resumen" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:0.6rem; margin-bottom:1rem;"></div>
               <div id="imp-avisos" style="margin-bottom:1rem;"></div>
@@ -942,12 +955,12 @@
                   <thead>
                     <tr style="border-bottom:2px solid #334155;">
                       <th style="text-align:left; padding:0.4rem;">Nombre en el POS</th>
-                      <th style="text-align:left; padding:0.4rem;">Prenda del sistema</th>
-                      <th style="text-align:right; padding:0.4rem;">Conf.</th>
+                      <th style="text-align:left; padding:0.4rem;">¿Se importa? ¿A qué prenda?</th>
+                      <th style="text-align:right; padding:0.4rem;" title="Cuánto se parece el nombre del POS al de la prenda del sistema. Por debajo del mínimo la fila no se importa.">Parecido</th>
                       <th style="text-align:right; padding:0.4rem;">Filas</th>
                       <th style="text-align:right; padding:0.4rem;">Precio POS</th>
                       <th style="text-align:right; padding:0.4rem;">Mayor cambio</th>
-                      <th style="text-align:left; padding:0.4rem;">Corregir</th>
+                      <th style="text-align:left; padding:0.4rem;" title="Elegí a mano la prenda del sistema, o pedí crearla, o salteá la fila.">Emparejar a mano</th>
                     </tr>
                   </thead>
                   <tbody id="imp-tbody"></tbody>
@@ -958,18 +971,17 @@
             <!-- ---------- PASO 3: confirmar ---------- -->
             <div id="imp-paso3" style="display:none; border:1px solid #334155; border-radius:8px; padding:1rem;">
               <div style="font-size:0.7rem; font-weight:800; color:#f87171; letter-spacing:1px; margin-bottom:0.75rem;">
-                PASO 3 — CONFIRMAR
+                PASO 4 — CONFIRMAR
               </div>
+              <!-- La casilla de inventario ya no vive aca: la decide el modo del Paso 1. Tenerla en
+                   los dos lugares permitiria pedir "solo precios" y marcar inventario, o sea un
+                   estado que se contradice consigo mismo. -->
+              <div id="imp-resumen-modo" style="margin-bottom:1rem;"></div>
               <div style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1rem; font-size:0.78rem; color:#cbd5e1;">
-                <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                <label id="imp-label-crear" style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
                   <input type="checkbox" id="imp-crear-prendas" onchange="impRenderPlan()">
                   Crear las prendas que el sistema no tiene
                   <span style="color:#94a3b8;">(nacen sin costo)</span>
-                </label>
-                <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
-                  <input type="checkbox" id="imp-inventario">
-                  Traer tambien las cantidades de inventario
-                  <span style="color:#f87171;">(reemplaza el conteo actual)</span>
                 </label>
               </div>
               <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
@@ -3362,6 +3374,10 @@
     function impAlEntrar() {
       const n = document.getElementById('imp-ambito-nombre');
       if (n) n.textContent = nombreAmbito ? nombreAmbito() : 'este colegio';
+      // Los modos se pintan al ENTRAR, no al generar la vista previa: es la primera decision de la
+      // pantalla y tiene que estar a la vista antes de elegir el archivo. Con el catalogo todavia
+      // sin llegar se muestran las cuatro etiquetas y se avisa que el detalle aparece con el archivo.
+      impPintarModos();
       impConsultarInstantanea();
       impCargarPrendas();
     }
@@ -3467,6 +3483,13 @@
         // seria una segunda verdad que se desincroniza el dia que cambie del otro lado, que
         // es exactamente como este proyecto termino con la formula de costeo en seis lugares.
         impPlan._umbral = j.umbralSalto;
+        // Los cuatro modos, con su descripcion y su advertencia, tal como los define el servidor.
+        // Recien aca se puede mostrar el texto exacto de cada uno.
+        // La confianza minima la decide el SERVIDOR, igual que el umbral de salto. La pantalla la
+        // necesita para poder explicar por que una fila no se importa.
+        impPlan._confianzaMinima = j.confianzaMinima;
+        if (Array.isArray(j.modos) && j.modos.length) impModosCatalogo = j.modos;
+        impPintarModos();
         impRenderPlan();
         document.getElementById('imp-paso2').style.display = 'block';
         document.getElementById('imp-paso3').style.display = 'block';
@@ -3489,19 +3512,175 @@
       return (p > 0 ? '+' : '') + p.toFixed(0) + '%';
     }
 
+    /**
+     * QUE se importa. Es la primera decision y la que cambia todo lo demas.
+     *
+     * Arranca en 'precios' porque es lo que el importador hacia siempre: quien ya lo usaba encuentra
+     * el mismo comportamiento sin tener que elegir nada.
+     */
+    let impModo = 'precios';
+
+    /**
+     * Los cuatro modos, tal como los describe el servidor.
+     *
+     * Se pintan desde el catalogo que manda el preview y NO desde una copia escrita aca. Tenerlos en
+     * los dos lados es la receta para que la pantalla prometa algo que el servidor no hace: los
+     * textos salen del mismo archivo que decide que se escribe.
+     */
+    let impModosCatalogo = null;
+
+    /** Lo que se muestra antes del primer preview: el servidor todavia no mando el catalogo. */
+    const IMP_MODOS_INICIALES = [
+      { valor: 'precios', etiqueta: 'Solo precios' },
+      { valor: 'inventario', etiqueta: 'Solo inventario' },
+      { valor: 'precios-inventario', etiqueta: 'Precios e inventario' },
+      { valor: 'prendas', etiqueta: 'Solo nombres de prendas' },
+    ];
+
+    function impModoActual() {
+      const lista = impModosCatalogo || [];
+      return lista.find(m => m.valor === impModo) || null;
+    }
+
+    /** Que escribe el modo elegido. Sin catalogo se deduce del nombre, que alcanza para la pantalla. */
+    function impEfectos() {
+      const m = impModoActual();
+      if (m && m.efectos) return m.efectos;
+      return {
+        escribePrecios: impModo === 'precios' || impModo === 'precios-inventario',
+        escribeInventario: impModo === 'inventario' || impModo === 'precios-inventario',
+        creaPrendasSiempre: impModo === 'prendas',
+      };
+    }
+
+    function impElegirModo(valor) {
+      impModo = valor;
+      impPintarModos();
+      // El plan ya revisado sigue siendo valido —el archivo no cambio— pero lo que hay que MIRAR si
+      // cambia, asi que se redibuja.
+      if (impPlan) impRenderPlan();
+    }
+
+    function impPintarModos() {
+      const cont = document.getElementById('imp-modos');
+      if (!cont) return;
+      const lista = impModosCatalogo || IMP_MODOS_INICIALES;
+
+      cont.innerHTML = lista.map(m => {
+        const activo = m.valor === impModo;
+        return '<button type="button" onclick="impElegirModo(\'' + m.valor + '\')" ' +
+          'style="text-align:left; cursor:pointer; border-radius:8px; padding:0.6rem 0.75rem; ' +
+          'border:1px solid ' + (activo ? '#38bdf8' : '#334155') + '; ' +
+          'background:' + (activo ? '#0c4a6e55' : '#1e293b') + '; ' +
+          'color:' + (activo ? '#e0f2fe' : '#cbd5e1') + '; font-size:0.78rem; font-weight:' + (activo ? '800' : '600') + ';">' +
+          (activo ? '● ' : '○ ') + esc(m.etiqueta) +
+          '</button>';
+      }).join('');
+
+      const det = document.getElementById('imp-modo-detalle');
+      if (!det) return;
+      const m = impModoActual();
+      // Sin catalogo no se inventa la descripcion: un texto adivinado en la pantalla es justamente
+      // lo que hay que evitar. Se dice que aparece al elegir el archivo.
+      if (!m) {
+        det.innerHTML = '<div style="font-size:0.74rem; color:#64748b;">Elegí el archivo para ver ' +
+          'exactamente qué escribe y qué deja intacto este modo.</div>';
+        return;
+      }
+      det.innerHTML =
+        '<div style="font-size:0.78rem; color:#e2e8f0; line-height:1.55;">' + esc(m.descripcion) + '</div>' +
+        (m.advertencia
+          ? '<div style="font-size:0.74rem; color:#fbbf24; border-left:3px solid #fbbf24; ' +
+            'padding:0.4rem 0.6rem; margin-top:0.5rem; line-height:1.5;">' + esc(m.advertencia) + '</div>'
+          : '');
+    }
+
+    /**
+     * POR QUE esta fila no se va a importar, en una linea.
+     *
+     * Se arma ACA y no viene del servidor porque el grupo no trae `motivo` —solo lo traen las filas
+     * sueltas— y el estado con la confianza alcanzan para decirlo. Sin esta linea la fila dice
+     * "NO SE IMPORTA" y deja al usuario adivinando si es culpa del nombre, de la talla o del precio,
+     * que son tres arreglos distintos.
+     */
+    function impMotivoSalteo(g) {
+      const min = impPlan && impPlan._confianzaMinima ? impPlan._confianzaMinima : 0.5;
+      const pct = (g.confianza * 100).toFixed(0);
+      if (g.estado === 'revisar') {
+        return 'El nombre se parece ' + pct + '%, y hace falta ' + (min * 100).toFixed(0) +
+               '%. Emparejala a mano acá al lado, o pedí crear la prenda.';
+      }
+      if (g.estado === 'sin-producto') {
+        return 'Ninguna prenda de este colegio se parece. Marcá "crear la prenda" o elegila a mano.';
+      }
+      if (g.estado === 'sin-talla') {
+        return 'Alguna talla del grupo no existe o está desactivada para este colegio. Se crea o se activa en Tallas.';
+      }
+      if (g.estado === 'sin-precio') {
+        return 'Alguna fila del archivo no trae precio. Con el modo "solo inventario" esta fila sí entraría.';
+      }
+      return 'Estado ' + g.estado + '.';
+    }
+
     function impRenderPlan() {
       if (!impPlan) return;
       const r = impPlan.resumen;
-      const crearPrendas = document.getElementById('imp-crear-prendas').checked;
+      const ef = impEfectos();
+      const crearPrendas = ef.creaPrendasSiempre ||
+        document.getElementById('imp-crear-prendas').checked;
 
-      document.getElementById('imp-resumen').innerHTML =
-        impTarjeta(r.decisiones, 'DECISIONES', '#f8fafc') +
-        impTarjeta(r.filasDelColegio, 'FILAS DEL ARCHIVO', '#cbd5e1') +
-        impTarjeta(r.actualizar, 'PRECIOS QUE CAMBIAN', '#fbbf24') +
-        impTarjeta(r.crear, 'PRECIOS NUEVOS', '#34d399') +
-        impTarjeta(r.sinCambio, 'SIN CAMBIO', '#94a3b8') +
-        impTarjeta(r.saltosExtremos, 'SALTOS GRANDES', r.saltosExtremos ? '#f87171' : '#94a3b8') +
-        impTarjeta(r.prendasPorCrear, 'PRENDAS QUE FALTAN', r.prendasPorCrear ? '#fbbf24' : '#94a3b8');
+      // LAS TARJETAS DEPENDEN DEL MODO.
+      //
+      // Con "solo inventario" o "solo nombres de prendas", "PRECIOS QUE CAMBIAN: 14" es una cifra
+      // que no va a pasar: se calcula igual —el archivo trae los precios— pero no se escribe.
+      // Mostrarla invita a revisar un cambio que no ocurre, y peor, a creer que ocurre.
+      const tarjetas = [
+        impTarjeta(r.decisiones, 'DECISIONES', '#f8fafc'),
+        impTarjeta(r.filasDelArchivo !== undefined ? r.filasDelArchivo : r.filasDelColegio, 'FILAS DEL ARCHIVO', '#cbd5e1'),
+      ];
+      if (ef.escribePrecios) {
+        tarjetas.push(impTarjeta(r.actualizar, 'PRECIOS QUE CAMBIAN', '#fbbf24'));
+        tarjetas.push(impTarjeta(r.crear, 'PRECIOS NUEVOS', '#34d399'));
+        tarjetas.push(impTarjeta(r.sinCambio, 'SIN CAMBIO', '#94a3b8'));
+        tarjetas.push(impTarjeta(r.saltosExtremos, 'SALTOS GRANDES', r.saltosExtremos ? '#f87171' : '#94a3b8'));
+      }
+      if (ef.escribeInventario) {
+        tarjetas.push(impTarjeta(
+          r.cantidadesQueCambian !== undefined ? r.cantidadesQueCambian : r.filasDelColegio,
+          'CANTIDADES A REEMPLAZAR', '#f87171'));
+      }
+      tarjetas.push(impTarjeta(r.prendasPorCrear, 'PRENDAS QUE FALTAN',
+        r.prendasPorCrear ? (crearPrendas ? '#34d399' : '#fbbf24') : '#94a3b8'));
+
+      document.getElementById('imp-resumen').innerHTML = tarjetas.join('');
+
+      // En el Paso 4 se repite QUE se eligio. Es donde esta el boton rojo, y llegar ahi despues de
+      // revisar 195 filas sin recordar que modo se marco arriba es como se confirma de mas.
+      const resModo = document.getElementById('imp-resumen-modo');
+      const mAct = impModoActual();
+      if (resModo) {
+        resModo.innerHTML =
+          '<div style="border:1px solid #334155; border-radius:6px; padding:0.55rem 0.7rem; font-size:0.76rem; color:#cbd5e1; line-height:1.5;">' +
+          '<strong style="color:#38bdf8;">' + esc(mAct ? mAct.etiqueta : impModo) + '</strong>' +
+          (mAct ? ' — ' + esc(mAct.descripcion) : '') +
+          '</div>';
+      }
+
+      // La casilla de crear prendas se apaga cuando el modo ya lo implica: dejarla clickeable
+      // insinuaria que se puede pedir "solo nombres de prendas" sin crear ninguna.
+      const lblCrear = document.getElementById('imp-label-crear');
+      const chkCrear = document.getElementById('imp-crear-prendas');
+      if (lblCrear && chkCrear) {
+        if (ef.creaPrendasSiempre) {
+          chkCrear.checked = true; chkCrear.disabled = true;
+          lblCrear.style.opacity = '0.6';
+          lblCrear.title = 'Este modo crea las prendas que faltan: es todo lo que hace.';
+        } else {
+          chkCrear.disabled = false;
+          lblCrear.style.opacity = '1';
+          lblCrear.title = '';
+        }
+      }
 
       const avisos = (impPlan.avisos || []).map(a =>
         '<div style="font-size:0.74rem; color:#fbbf24; border-left:3px solid #fbbf24; padding:0.35rem 0.6rem; margin-bottom:0.35rem; line-height:1.5;">' +
@@ -3556,8 +3735,27 @@
         return '<tr style="border-bottom:1px solid #1e293b;' + (seEscribe ? '' : ' opacity:0.65;') + '">' +
           '<td style="padding:0.4rem;"><span style="color:' + color + '; font-weight:800; font-size:0.62rem; margin-right:0.4rem;">' + marca + '</span>' +
             String(g.nombrePos).replace(/</g, '&lt;') + '</td>' +
-          '<td style="padding:0.4rem; color:#cbd5e1;">' + (g.productoDescripcion ? String(g.productoDescripcion).replace(/</g, '&lt;') : '<span style="color:#64748b;">ninguna</span>') + '</td>' +
-          '<td style="padding:0.4rem; text-align:right; color:#94a3b8;">' + (g.confianza ? (g.confianza * 100).toFixed(0) + '%' : '') + '</td>' +
+          // LA COLUMNA DICE SI SE IMPORTA, y el parecido va debajo en gris.
+          //
+          // Antes esta celda mostraba `productoDescripcion` a secas bajo el encabezado "Prenda del
+          // sistema", asi que una fila con 8% de confianza se leia como "a esto se va a importar".
+          // Es falso: con la marca REVISAR el grupo se SALTEA y no se escribe nada. Mostrar el
+          // destino de una decision que no se tomo es peor que no mostrar nada, porque invita a
+          // confirmar creyendo que algo va a pasar.
+          '<td style="padding:0.4rem; color:#cbd5e1;">' + (
+            seEscribe
+              ? (g.productoDescripcion
+                  ? String(g.productoDescripcion).replace(/</g, '&lt;')
+                  : (g.estado === 'sin-producto' ? '<span style="color:#fbbf24;">se crea con este nombre</span>' : '<span style="color:#64748b;">ninguna</span>'))
+              : '<div style="color:#f87171; font-weight:700;">NO SE IMPORTA</div>' +
+                (g.productoDescripcion
+                  ? '<div style="color:#64748b; font-size:0.68rem;">lo más parecido: ' +
+                    String(g.productoDescripcion).replace(/</g, '&lt;') + '</div>'
+                  : '<div style="color:#64748b; font-size:0.68rem;">ninguna prenda se parece</div>') +
+                '<div style="color:#94a3b8; font-size:0.68rem; margin-top:0.15rem;">' +
+                  impMotivoSalteo(g) + '</div>'
+          ) + '</td>' +
+          '<td style="padding:0.4rem; text-align:right; color:' + (seEscribe ? '#94a3b8' : '#64748b') + ';">' + (g.confianza ? (g.confianza * 100).toFixed(0) + '%' : '') + '</td>' +
           '<td style="padding:0.4rem; text-align:right; color:#94a3b8;">' + g.resumen.filas + '</td>' +
           '<td style="padding:0.4rem; text-align:right; color:#cbd5e1;">' + rango + '</td>' +
           '<td style="padding:0.4rem; text-align:right; font-weight:' + (grande ? '800' : '400') + '; color:' + (grande ? '#f87171' : '#94a3b8') + ';">' +
@@ -3620,19 +3818,43 @@
       const f = document.getElementById('imp-archivo').files[0];
       if (!f) { alert('Volve a elegir el archivo.'); return; }
 
-      const inventario = document.getElementById('imp-inventario').checked;
-      const crearPrendas = document.getElementById('imp-crear-prendas').checked;
+      const ef = impEfectos();
+      const mAct = impModoActual();
+      const crearPrendas = ef.creaPrendasSiempre ||
+        document.getElementById('imp-crear-prendas').checked;
       const r = impPlan.resumen;
 
-      const detalle =
-        'Colegio: ' + impPlan.colegioNombre + '\n' +
-        'Precios que cambian: ' + r.actualizar + '\n' +
-        'Precios nuevos: ' + r.crear + '\n' +
-        (r.saltosExtremos ? 'CAMBIOS DE 40% O MAS: ' + r.saltosExtremos + '\n' : '') +
-        (crearPrendas && r.prendasPorCrear ? 'Prendas que se van a crear: ' + r.prendasPorCrear + ' (sin costo)\n' : '') +
-        (inventario ? 'SE VA A REEMPLAZAR EL INVENTARIO.\n' : 'El inventario no se toca.\n') +
-        '\nEl precio anterior no queda guardado. La vuelta atras es restaurar la instantanea.';
-      if (!confirm('Confirmar la importacion?\n\n' + detalle)) return;
+      // EL AVISO DE CONFIRMAR SOLO NOMBRA LO QUE VA A PASAR.
+      //
+      // Antes listaba precios que cambian, precios nuevos y saltos siempre, incluso si no se iban a
+      // escribir, y cerraba con "el precio anterior no queda guardado" aunque no se tocara ningun
+      // precio. Un aviso que nombra cambios que no ocurren entrena a no leerlo.
+      const lineas = [
+        'Colegio: ' + impPlan.colegioNombre,
+        'Modo: ' + (mAct ? mAct.etiqueta : impModo),
+        '',
+      ];
+      if (ef.escribePrecios) {
+        lineas.push('Precios que cambian: ' + r.actualizar);
+        lineas.push('Precios nuevos: ' + r.crear);
+        if (r.saltosExtremos) lineas.push('CAMBIOS DE 40% O MAS: ' + r.saltosExtremos);
+      } else {
+        lineas.push('Los precios y los codigos NO se tocan.');
+      }
+      if (ef.escribeInventario) {
+        lineas.push('SE VAN A REEMPLAZAR ' +
+          (r.cantidadesQueCambian !== undefined ? r.cantidadesQueCambian : '') + ' CANTIDADES DE STOCK.');
+      } else {
+        lineas.push('El inventario NO se toca.');
+      }
+      if (crearPrendas && r.prendasPorCrear) {
+        lineas.push('Prendas que se van a crear: ' + r.prendasPorCrear + ' (nacen sin costo)');
+      }
+      if (ef.escribePrecios) {
+        lineas.push('');
+        lineas.push('El precio anterior no queda guardado. La vuelta atras es restaurar la instantanea.');
+      }
+      if (!confirm('Confirmar la importacion?\n\n' + lineas.join('\n'))) return;
 
       const btn = document.getElementById('imp-btn-ejecutar');
       btn.disabled = true; btn.textContent = 'Importando...';
@@ -3642,7 +3864,14 @@
         fd.append('archivo', f);
         fd.append('colegioId', impPlan.colegioId);
         fd.append('correcciones', JSON.stringify(impCorrecciones));
-        fd.append('opciones', JSON.stringify({ huella: impPlan.huella, inventario: inventario, crearPrendas: crearPrendas }));
+        // `modo` es lo que manda. `inventario` se sigue enviando por compatibilidad con la version
+        // anterior del servidor, que solo entendia esa bandera.
+        fd.append('opciones', JSON.stringify({
+          huella: impPlan.huella,
+          modo: impModo,
+          inventario: ef.escribeInventario,
+          crearPrendas: crearPrendas,
+        }));
         const resp = await fetch('/api/importar/ejecutar', { method: 'POST', body: fd });
         const j = await resp.json();
         impRenderReporte(j, resp.status);

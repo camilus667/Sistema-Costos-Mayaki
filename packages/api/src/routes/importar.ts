@@ -36,6 +36,14 @@ import { Hono } from 'hono';
 import { and, eq, isNull, or, desc } from 'drizzle-orm';
 import XLSX from 'xlsx';
 import {
+  resolverModo,
+  efectosDelModo,
+  etiquetaModo,
+  descripcionModo,
+  advertenciaModo,
+  MODOS,
+} from '../services/modoImportacion';
+import {
   colegios,
   productos,
   tallas,
@@ -396,6 +404,20 @@ api.post('/preview', async (c) => {
   // boton de confirmar en vez de dejar que la ejecucion falle al final.
   const instantanea = await instantaneaVigente(db);
 
+  // EL CATALOGO DE MODOS VIAJA CON EL PREVIEW.
+  //
+  // La pantalla podria tener los cuatro modos escritos a mano, y era lo que hacia con el texto fijo
+  // "trae precios y codigos". Pero entonces agregar o cambiar un modo obliga a editar los dos
+  // lados, y el dia que se desincronicen la pantalla va a prometer algo que el servidor no hace.
+  // Los textos salen de `modoImportacion.ts`, que es el mismo archivo que decide que se escribe.
+  const modos = MODOS.map((m) => ({
+    valor: m,
+    etiqueta: etiquetaModo(m),
+    descripcion: descripcionModo(m),
+    advertencia: advertenciaModo(m),
+    efectos: efectosDelModo(m),
+  }));
+
   return c.json({
     success: true,
     escribio: false,
@@ -404,6 +426,7 @@ api.post('/preview', async (c) => {
     umbralSalto: UMBRAL_SALTO_PRECIO,
     confianzaMinima: CONFIANZA_MINIMA,
     instantanea,
+    modos,
   });
 });
 
@@ -496,8 +519,20 @@ api.post('/ejecutar', async (c) => {
     }, 409);
   }
 
-  const escribirInventario = (leido.opciones as any).inventario === true;
-  const crearFaltantes = (leido.opciones as any).crearPrendas === true;
+  // ---------------------------------------------------- 3b. QUE se importa
+  //
+  // El modo manda, y las banderas viejas son el respaldo. Ver `modoImportacion.ts`: dos casillas
+  // independientes no podian expresar "solo inventario", porque el precio no era opcional.
+  const resModo = resolverModo(leido.opciones);
+  if (!resModo.ok) return c.json({ success: false, error: resModo.error, modosValidos: MODOS }, 400);
+  const modo = resModo.modo;
+  const efectos = efectosDelModo(modo);
+
+  const escribirInventario = efectos.escribeInventario;
+  const escribirPrecios = efectos.escribePrecios;
+  // El modo `prendas` implica el alta: es todo lo que ese modo hace, asi que pedirlo y encima tener
+  // que marcar la casilla seria pedir lo mismo dos veces.
+  const crearFaltantes = efectos.creaPrendasSiempre || (leido.opciones as any).crearPrendas === true;
 
   // ---------------------------------------------------- 4. respaldo del archivo
   //
@@ -561,8 +596,14 @@ api.post('/ejecutar', async (c) => {
         });
         continue;
       }
+      // `sin-precio` SOLO bloquea si el modo escribe precios.
+      //
+      // Una fila sin precio en el POS no puede escribir un precio, pero su CANTIDAD sirve igual.
+      // Con la condicion anterior, importar solo inventario salteaba el grupo entero por un dato
+      // que ese modo no usa.
+      const bloqueaSinPrecio = grupo.estado === 'sin-precio' && escribirPrecios;
       if (!grupo.puedeCrearPrenda &&
-          (grupo.estado === 'revisar' || grupo.estado === 'sin-talla' || grupo.estado === 'sin-precio')) {
+          (grupo.estado === 'revisar' || grupo.estado === 'sin-talla' || bloqueaSinPrecio)) {
         reporte.gruposSalteados.push({
           nombrePos: grupo.nombrePos,
           motivo:
@@ -618,7 +659,14 @@ api.post('/ejecutar', async (c) => {
 
         // El codigo del POS y el precio viajan JUNTOS, en la misma fila. Por eso el parseo
         // exige precio en todas: un codigo sin precio no tendria donde vivir.
-        if (f.accionPrecio === 'sin-cambio' && !f.codigoCambia) {
+        // EL PRECIO SOLO SE ESCRIBE SI EL MODO LO PIDE.
+        //
+        // Antes esto no tenia condicion: el precio se escribia siempre, en los cuatro caminos
+        // posibles. Por eso no habia forma de traer solo el inventario ni solo los nombres de las
+        // prendas —cualquiera de los dos reescribia igual los precios del colegio—.
+        if (!escribirPrecios) {
+          // No se cuenta como "sin cambio": no se comparo nada, no se pidio.
+        } else if (f.accionPrecio === 'sin-cambio' && !f.codigoCambia) {
           reporte.preciosSinCambio++;
         } else {
           await db
@@ -688,21 +736,36 @@ api.post('/ejecutar', async (c) => {
   // verificarImportacion.ts, que abre la copia con sql.js despues de importar y cuenta los
   // codigos ahi. Sin ese chequeo no habria sacado esta linea.
 
+  // LOS AVISOS DICEN QUE QUEDO INTACTO, no solo que se escribio.
+  //
+  // Antes habia un unico aviso fijo —"no se toco el inventario"— que asumia que el modo era
+  // precios. Con cuatro modos, cada uno tiene que declarar sus dos mitades: lo que escribio y lo
+  // que dejo como estaba. La segunda mitad es la que despeja el miedo a importar.
+  avisos.push(`Modo de importacion: ${etiquetaModo(modo)}. ${descripcionModo(modo)}`);
+
   if (!escribirInventario) {
+    avisos.push('El inventario NO se toco: las cantidades en stock quedaron como estaban.');
+  }
+  if (!escribirPrecios) {
     avisos.push(
-      'No se toco el inventario. Se importaron precios y codigos del POS solamente. Para traer ' +
-      'tambien las cantidades hay que pedirlo explicitamente.'
+      'Ningun precio ni codigo del POS se escribio: los precios de venta quedaron como estaban.'
     );
   }
-  avisos.push(
-    'El precio anterior NO quedo guardado: esta importacion no escribe historico. El camino de ' +
-    `vuelta es restaurar la instantanea "${inst.nombre}".`
-  );
+  if (escribirPrecios) {
+    avisos.push(
+      'El precio anterior NO quedo guardado: esta importacion no escribe historico. El camino de ' +
+      `vuelta es restaurar la instantanea "${inst.nombre}".`
+    );
+  }
 
   return c.json({
     success: true,
     colegio: plan.colegioNombre,
     archivo: leido.nombreArchivo,
+    // El modo viaja en la respuesta para que el reporte pueda decir que se hizo, y para que quede
+    // en el registro: "se importaron 195 filas" no dice si se pisaron precios o cantidades.
+    modo,
+    modoEtiqueta: etiquetaModo(modo),
     huella: plan.huella,
     instantanea: { id: inst.id, nombre: inst.nombre },
     respaldo,

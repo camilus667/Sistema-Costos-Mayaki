@@ -156,6 +156,14 @@ export interface PlanImportacion {
     saltosExtremos: number;
     prendasPorCrear: number;
     tallaPorDefecto: number;
+    /**
+     * Cuantas cantidades de stock cambiarian si el modo escribe inventario.
+     *
+     * Existe porque las tarjetas del resumen dependen del modo: con "solo inventario", "PRECIOS QUE
+     * CAMBIAN" no va a pasar y "CANTIDADES A REEMPLAZAR" es lo unico que importa mirar. Antes esa
+     * cifra no se calculaba, asi que el modo de inventario no tenia nada que mostrar.
+     */
+    cantidadesQueCambian: number;
   };
   /**
    * Categorias del archivo que NO tienen colegio en el sistema, con su conteo de filas.
@@ -442,6 +450,9 @@ export function planificarCambios(op: OpcionesPlan): PlanImportacion {
       saltosExtremos: saltos,
       prendasPorCrear: grupos.filter((g) => g.puedeCrearPrenda).length,
       tallaPorDefecto: cambios.filter((c) => c.tallaAsignadaPorDefecto).length,
+      // Solo las filas que el ejecutor tocaria: la misma condicion que usa al escribir
+      // —`cantidadCambia`— y solo donde la prenda quedo resuelta.
+      cantidadesQueCambian: cambios.filter((c) => c.cantidadCambia && c.estado === 'ok').length,
     },
     categoriasSinColegio,
     avisos,
