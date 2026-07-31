@@ -459,6 +459,16 @@ export interface FilaResuelta {
   motivo?: string;
   tallaId?: string;
   tallaCodigo?: string;
+  /**
+   * El codigo canonico de la talla que se BUSCO y no se encontro. Solo cuando el estado es
+   * `sin-talla`.
+   *
+   * Va en un campo aparte de `tallaCodigo` a proposito: ese significa "la talla resuelta", y
+   * llenarlo con una talla que no existe haria que cualquier consumidor creyera que la fila esta
+   * resuelta. Este existe para poder DECIR que talla falta —"faltan la 02 y la 04"— en vez de
+   * dejarlo dentro de un texto de motivo que hay que leer fila por fila.
+   */
+  tallaCodigoFaltante?: string;
   /** La fila del POS no traia variante y se le asigno la talla del medio de la curva. */
   tallaAsignadaPorDefecto?: boolean;
   productoId?: string;
@@ -797,6 +807,7 @@ export function resolverFilas(opciones: OpcionesResolucion): {
       resueltas.push({
         ...base,
         estado: 'sin-talla',
+        tallaCodigoFaltante: codigoBuscado,
         motivo: crudo
           ? `La talla "${crudo}" (canonica "${codigoBuscado}") no existe o no esta activa en este colegio.`
           : `La fila no trae variante y la talla ${TALLA_PRODUCTOS_SIN_VARIANTE}, que es la que se usa para los genericos, no esta activa en este colegio.`,

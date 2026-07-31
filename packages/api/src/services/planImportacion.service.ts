@@ -94,6 +94,8 @@ export interface CambioFila {
 
   tallaId: string | null;
   tallaCodigo: string | null;
+  /** El codigo canonico de la talla que falta. Solo cuando el estado es `sin-talla`. */
+  tallaCodigoFaltante?: string | null;
   /** La fila no traia variante y se le asigno la talla del medio de la curva. */
   tallaAsignadaPorDefecto?: boolean;
 
@@ -126,6 +128,21 @@ export interface GrupoPrenda {
   estado: EstadoFila;
   /** Solo cuando el estado es `sin-producto`: se puede crear la prenda al importar. */
   puedeCrearPrenda: boolean;
+  /**
+   * Cuantas filas del grupo tienen talla resuelta, o sea cuantas el ejecutor puede escribir.
+   *
+   * EXISTE POR UNA MEDICION. `estado` es el PEOR de las filas, asi que un grupo con 14 filas y UNA
+   * talla desactivada quedaba en `sin-talla` y se descartaba entero. Desactivando dos tallas en la
+   * base de prueba: 22 grupos en `sin-talla`, 268 filas descartadas, y 225 de esas filas TENIAN
+   * talla. Diecisiete de los 22 emparejaban el nombre al 100%.
+   *
+   * El ejecutor ya saltea fila por fila las que no tienen talla —`if (!f.tallaId) continue`—, asi
+   * que bloquear el grupo no protegia de nada: tiraba las filas buenas para evitar las malas que el
+   * bucle ya evitaba solo.
+   */
+  filasConTalla: number;
+  /** Los codigos de talla que faltan o estan desactivados, para poder nombrarlos. */
+  tallasFaltantes: string[];
   filas: CambioFila[];
   resumen: {
     filas: number;
@@ -323,6 +340,7 @@ export function planificarCambios(op: OpcionesPlan): PlanImportacion {
       candidatos: r.candidatos,
       tallaId: r.tallaId ?? null,
       tallaCodigo: r.tallaCodigo ?? null,
+      tallaCodigoFaltante: r.tallaCodigoFaltante ?? null,
       tallaAsignadaPorDefecto: r.tallaAsignadaPorDefecto,
       accionPrecio,
       precioActual,
@@ -374,6 +392,11 @@ export function planificarCambios(op: OpcionesPlan): PlanImportacion {
         peor.estado === 'sin-producto' ||
         (peor.estado === 'revisar' &&
           filas.reduce((m, f) => Math.max(m, f.confianza), 0) < CONFIANZA_SIN_CANDIDATO),
+      filasConTalla: filas.filter((f) => f.tallaId).length,
+      // Ordenadas y sin repetir: son 14 filas que se quejan de las mismas dos tallas.
+      tallasFaltantes: [...new Set(
+        filas.filter((f) => !f.tallaId && f.tallaCodigoFaltante).map((f) => String(f.tallaCodigoFaltante)),
+      )].sort(),
       filas,
       resumen: {
         filas: filas.length,

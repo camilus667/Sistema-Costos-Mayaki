@@ -3614,7 +3614,15 @@
         return 'Ninguna prenda de este colegio se parece. Marcá "crear la prenda" o elegila a mano.';
       }
       if (g.estado === 'sin-talla') {
-        return 'Alguna talla del grupo no existe o está desactivada para este colegio. Se crea o se activa en Tallas.';
+        // Solo llega aca cuando NINGUNA fila tiene talla: con al menos una, el grupo es parcial y
+        // se importa.
+        return 'Ninguna de las ' + g.resumen.filas + ' tallas de esta prenda está activa en este colegio' +
+          (g.tallasFaltantes && g.tallasFaltantes.length
+            ? (g.tallasFaltantes.length === 1
+                ? ' — falta la talla ' + esc(fmtTalla(g.tallasFaltantes[0]))
+                : ' — faltan las tallas ' + g.tallasFaltantes.map(t => esc(fmtTalla(t))).join(', '))
+            : '') +
+          '. Se crean o se activan en Configuración → Tallas.';
       }
       if (g.estado === 'sin-precio') {
         return 'Alguna fila del archivo no trae precio. Con el modo "solo inventario" esta fila sí entraría.';
@@ -3721,10 +3729,22 @@
 
       const filas = impPlan.grupos.map(g => {
         // El semaforo: verde resuelve solo, amarillo exige mirar, rojo no se va a escribir.
-        const seEscribe = g.estado === 'ok' || (g.estado === 'sin-producto' && crearPrendas);
-        const color = g.estado === 'ok' ? '#34d399' : (g.estado === 'sin-producto' && crearPrendas) ? '#fbbf24' : '#f87171';
-        const marca = g.estado === 'ok' ? 'OK' : g.estado === 'sin-producto' ? (crearPrendas ? 'SE CREA' : 'FALTA') :
-                      g.estado === 'revisar' ? 'REVISAR' : g.estado.toUpperCase();
+        //
+        // UNA TALLA FALTANTE NO ES UN NO. `g.estado` es el PEOR de las filas, asi que un grupo de 14
+        // filas con una talla desactivada quedaba en `sin-talla` y se mostraba como NO SE IMPORTA
+        // aunque 12 filas estuvieran perfectas y el nombre emparejara al 100%. Medido: desactivando
+        // dos tallas, 22 grupos y 268 filas se veian como descartadas cuando 225 eran importables.
+        const parcial = g.filasConTalla !== undefined &&
+                        g.filasConTalla > 0 && g.filasConTalla < g.resumen.filas;
+        const sinNingunaTalla = g.filasConTalla === 0;
+        const seEscribe = g.estado === 'ok' || parcial || (g.estado === 'sin-producto' && crearPrendas);
+        const color = g.estado === 'ok' ? '#34d399'
+          : parcial ? '#fbbf24'
+          : (g.estado === 'sin-producto' && crearPrendas) ? '#fbbf24' : '#f87171';
+        const marca = g.estado === 'ok' ? 'OK'
+          : parcial ? 'PARCIAL'
+          : g.estado === 'sin-producto' ? (crearPrendas ? 'SE CREA' : 'FALTA')
+          : g.estado === 'revisar' ? 'REVISAR' : g.estado.toUpperCase();
         const dm = g.resumen.deltaMaximo;
         const grande = dm !== null && dm >= (impPlan._umbral || 0.40);
         const elegido = impCorrecciones[g.nombrePos];
@@ -3744,9 +3764,23 @@
           // confirmar creyendo que algo va a pasar.
           '<td style="padding:0.4rem; color:#cbd5e1;">' + (
             seEscribe
-              ? (g.productoDescripcion
+              ? ((g.productoDescripcion
                   ? String(g.productoDescripcion).replace(/</g, '&lt;')
                   : (g.estado === 'sin-producto' ? '<span style="color:#fbbf24;">se crea con este nombre</span>' : '<span style="color:#64748b;">ninguna</span>'))
+                 // Un parcial DICE cuantas filas entran y que talla falta. Sin eso, "PARCIAL" en
+                 // verde-amarillo no distingue 13 de 14 de 1 de 14.
+                 + (parcial
+                     ? '<div style="color:#fbbf24; font-size:0.68rem; margin-top:0.15rem;">' +
+                       'entran ' + g.filasConTalla + ' de ' + g.resumen.filas + ' tallas' +
+                       (g.tallasFaltantes && g.tallasFaltantes.length
+                         ? (g.tallasFaltantes.length === 1
+                             ? ' — falta la talla ' + esc(fmtTalla(g.tallasFaltantes[0])) +
+                               ', que no está activa en este colegio'
+                             : ' — faltan las tallas ' + g.tallasFaltantes.map(t => esc(fmtTalla(t))).join(', ') +
+                               ', que no están activas en este colegio')
+                         : '') +
+                       '</div>'
+                     : ''))
               : '<div style="color:#f87171; font-weight:700;">NO SE IMPORTA</div>' +
                 (g.productoDescripcion
                   ? '<div style="color:#64748b; font-size:0.68rem;">lo más parecido: ' +

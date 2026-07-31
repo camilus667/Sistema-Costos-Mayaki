@@ -568,6 +568,17 @@ api.post('/ejecutar', async (c) => {
     inventarioActualizado: 0,
     prendasCreadas: [] as { nombrePos: string; productoId: string; descripcion: string; itemNumero: number }[],
     gruposSalteados: [] as { nombrePos: string; motivo: string; filas: number }[],
+    /**
+     * Los grupos que se importaron A MEDIAS porque a alguna talla le falta estar activa.
+     *
+     * SE REPORTA APARTE de los salteados porque son dos cosas distintas: un grupo salteado no
+     * escribio nada y hay que decidir algo; uno parcial SI escribio, y lo que falta es una talla.
+     * Meterlos en la misma lista haria creer que no se importo, que es el error opuesto al que se
+     * acaba de arreglar.
+     */
+    gruposParciales: [] as {
+      nombrePos: string; escritas: number; total: number; tallasFaltantes: string[];
+    }[],
   };
   const avisos: string[] = [...plan.avisos];
 
@@ -602,15 +613,30 @@ api.post('/ejecutar', async (c) => {
       // Con la condicion anterior, importar solo inventario salteaba el grupo entero por un dato
       // que ese modo no usa.
       const bloqueaSinPrecio = grupo.estado === 'sin-precio' && escribirPrecios;
+
+      // `sin-talla` YA NO BLOQUEA EL GRUPO. Es la correccion de un descarte medido y grande.
+      //
+      // `estado` es el PEOR de las filas, asi que un grupo de 14 filas con UNA talla desactivada
+      // quedaba en `sin-talla` y se descartaba entero. Desactivando dos tallas en la base de
+      // prueba: 22 grupos, 268 filas descartadas, 225 de ellas CON talla resuelta, y 17 de los 22
+      // emparejaban el nombre al 100%.
+      //
+      // No protegia de nada: el bucle de abajo ya saltea fila por fila las que no tienen talla
+      // —`if (!f.tallaId) continue`—. Bloquear el grupo tiraba las filas buenas para evitar las
+      // malas que el bucle evitaba solo. Lo que si hace falta es DECIR que se importo parcial y
+      // que tallas faltan, y eso se reporta mas abajo.
+      const sinNingunaTalla = grupo.filasConTalla === 0;
       if (!grupo.puedeCrearPrenda &&
-          (grupo.estado === 'revisar' || grupo.estado === 'sin-talla' || bloqueaSinPrecio)) {
+          (grupo.estado === 'revisar' || sinNingunaTalla || bloqueaSinPrecio)) {
         reporte.gruposSalteados.push({
           nombrePos: grupo.nombrePos,
           motivo:
             grupo.estado === 'revisar'
               ? `Confianza ${(grupo.confianza * 100).toFixed(0)}%, por debajo del ${(CONFIANZA_MINIMA * 100).toFixed(0)}% exigido. Corregir a mano en la vista previa.`
-              : grupo.estado === 'sin-talla'
-                ? 'Alguna talla del grupo no existe o no esta activa en este colegio.'
+              : sinNingunaTalla
+                ? `NINGUNA de las ${grupo.resumen.filas} filas tiene una talla activa en este ` +
+                  `colegio${grupo.tallasFaltantes.length ? ': falta ' + grupo.tallasFaltantes.join(', ') : ''}. ` +
+                  `Se crean o se activan en Configuracion -> Tallas.`
                 : 'Alguna fila del grupo no trae precio en el POS.',
           filas: grupo.resumen.filas,
         });
@@ -709,6 +735,18 @@ api.post('/ejecutar', async (c) => {
           reporte.inventarioActualizado++;
         }
       }
+
+      // Al terminar el grupo: si quedaron filas afuera por falta de talla, se DICE, con el nombre
+      // de la prenda y las tallas que faltan. Un "se importaron 225 filas" que no menciona las 43
+      // que quedaron afuera es la clase de silencio que este sistema ya pago varias veces.
+      if (grupo.filasConTalla < grupo.resumen.filas) {
+        reporte.gruposParciales.push({
+          nombrePos: grupo.nombrePos,
+          escritas: grupo.filasConTalla,
+          total: grupo.resumen.filas,
+          tallasFaltantes: grupo.tallasFaltantes,
+        });
+      }
     }
 
     raw.run('COMMIT');
@@ -742,6 +780,21 @@ api.post('/ejecutar', async (c) => {
   // precios. Con cuatro modos, cada uno tiene que declarar sus dos mitades: lo que escribio y lo
   // que dejo como estaba. La segunda mitad es la que despeja el miedo a importar.
   avisos.push(`Modo de importacion: ${etiquetaModo(modo)}. ${descripcionModo(modo)}`);
+
+  // LAS TALLAS QUE FALTAN, JUNTAS Y UNA SOLA VEZ. Son las mismas dos o tres repetidas en veinte
+  // prendas: listarlas por prenda obligaria a leer veinte lineas para descubrir que el arreglo es
+  // activar una talla.
+  if (reporte.gruposParciales.length) {
+    const codigos = [...new Set(reporte.gruposParciales.flatMap((g) => g.tallasFaltantes))].sort();
+    const filasAfuera = reporte.gruposParciales.reduce((n, g) => n + (g.total - g.escritas), 0);
+    avisos.push(
+      `${reporte.gruposParciales.length} prenda(s) se importaron A MEDIAS: quedaron ${filasAfuera} ` +
+      `fila(s) afuera porque su talla no existe o esta desactivada en este colegio` +
+      (codigos.length ? ` — falta ${codigos.join(', ')}` : '') +
+      `. Se crean o se activan en Configuracion -> Tallas, y despues se vuelve a importar: las ` +
+      `filas que ya entraron quedan igual.`
+    );
+  }
 
   if (!escribirInventario) {
     avisos.push('El inventario NO se toco: las cantidades en stock quedaron como estaban.');

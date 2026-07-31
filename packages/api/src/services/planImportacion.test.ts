@@ -35,9 +35,13 @@ const fr = (o: Partial<FilaResuelta> & { fila: number; nombre: string; precio: n
   estado: o.estado ?? 'ok',
   productoId: o.productoId ?? 'p1',
   productoDescripcion: o.productoDescripcion ?? 'Pantalon de vestir',
-  tallaId: o.tallaId ?? 't1',
-  tallaCodigo: o.tallaCodigo ?? '10',
+  // `in` y no `??`: con `??`, pasar `tallaId: undefined` para armar una fila SIN talla volvia a
+  // caer en 't1', asi que la fila tenia talla igual y ningun test podia expresar el caso. Lo
+  // descubrieron los tests de grupo parcial, que contaban 3 filas con talla donde habia 2.
+  tallaId: 'tallaId' in o ? o.tallaId : 't1',
+  tallaCodigo: 'tallaCodigo' in o ? o.tallaCodigo : '10',
   tallaAsignadaPorDefecto: o.tallaAsignadaPorDefecto,
+  tallaCodigoFaltante: o.tallaCodigoFaltante,
   confianza: o.confianza ?? 1,
   candidatos: [],
   ...(o.motivo ? { motivo: o.motivo } : {}),
@@ -140,6 +144,51 @@ describe('agrupado por prenda', () => {
       fr({ fila: 3, nombre: 'Pantalón, CC', precio: 200, estado: 'sin-talla', tallaId: undefined, tallaCodigo: undefined }),
     ]);
     expect(p.grupos[0].estado).toBe('sin-talla');
+  });
+
+  it('el grupo cuenta CUANTAS filas tienen talla, no solo que alguna no tiene', () => {
+    // MEDIDO en la base de prueba: desactivando dos tallas, 22 grupos quedaban en `sin-talla` con
+    // 268 filas descartadas, y 225 de esas filas TENIAN talla. Diecisiete de los 22 emparejaban el
+    // nombre al 100%. `estado` solo no alcanza para decidir: hace falta el conteo.
+    const p = base([
+      fr({ fila: 2, nombre: 'Pantalón, CC', precio: 200 }),
+      fr({ fila: 3, nombre: 'Pantalón, CC', precio: 200 }),
+      fr({ fila: 4, nombre: 'Pantalón, CC', precio: 200, estado: 'sin-talla',
+           tallaId: undefined, tallaCodigo: undefined, tallaCodigoFaltante: '2' }),
+    ]);
+    expect(p.grupos[0].resumen.filas).toBe(3);
+    expect(p.grupos[0].filasConTalla).toBe(2);
+  });
+
+  it('nombra las tallas que faltan, sin repetirlas', () => {
+    // Son las mismas dos o tres tallas repetidas en veinte prendas: listar catorce veces la 02
+    // obligaria a leer catorce lineas para descubrir que el arreglo es activar una talla.
+    const p = base([
+      fr({ fila: 2, nombre: 'A, CC', precio: 1, estado: 'sin-talla', tallaId: undefined, tallaCodigoFaltante: '4' }),
+      fr({ fila: 3, nombre: 'A, CC', precio: 1, estado: 'sin-talla', tallaId: undefined, tallaCodigoFaltante: '2' }),
+      fr({ fila: 4, nombre: 'A, CC', precio: 1, estado: 'sin-talla', tallaId: undefined, tallaCodigoFaltante: '2' }),
+      fr({ fila: 5, nombre: 'A, CC', precio: 1 }),
+    ]);
+    expect(p.grupos[0].tallasFaltantes).toEqual(['2', '4']);
+    expect(p.grupos[0].filasConTalla).toBe(1);
+  });
+
+  it('un grupo con TODAS las tallas resueltas no tiene faltantes', () => {
+    const p = base([
+      fr({ fila: 2, nombre: 'A, CC', precio: 1 }),
+      fr({ fila: 3, nombre: 'A, CC', precio: 1 }),
+    ]);
+    expect(p.grupos[0].filasConTalla).toBe(2);
+    expect(p.grupos[0].tallasFaltantes).toEqual([]);
+  });
+
+  it('un grupo sin NINGUNA talla se distingue de uno parcial', () => {
+    // Es la unica diferencia que decide si el grupo se saltea o se importa a medias.
+    const p = base([
+      fr({ fila: 2, nombre: 'A, CC', precio: 1, estado: 'sin-talla', tallaId: undefined, tallaCodigoFaltante: '2' }),
+      fr({ fila: 3, nombre: 'A, CC', precio: 1, estado: 'sin-talla', tallaId: undefined, tallaCodigoFaltante: '4' }),
+    ]);
+    expect(p.grupos[0].filasConTalla).toBe(0);
   });
 
   it('sin-producto gana a revisar, porque pide otra decision', () => {
