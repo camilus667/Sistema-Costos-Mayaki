@@ -28,9 +28,11 @@
  */
 
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
-import { spawn, type ChildProcess } from 'child_process';
+// El levantado del servidor vive en UNA sola casa, porque el arreglo de portabilidad de
+// Windows —no usar npx— tiene que llegarles a los tres arneses. Ver servidorDePrueba.mjs.
+// @ts-ignore  el helper es .mjs a proposito, para que tambien lo pueda usar un arnes .mjs
+import { levantarServidor, copiarBase, selloArchivo } from './servidorDePrueba.mjs';
 
 const opcion = (n: string): string | undefined => {
   const i = process.argv.indexOf('--' + n);
@@ -157,47 +159,15 @@ function resumirMatriz(j: any): any {
   };
 }
 
-async function esperar(intentos = 60): Promise<boolean> {
-  for (let i = 0; i < intentos; i++) {
-    try { if ((await fetch(BASE + '/health')).ok) return true; } catch (e) {}
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-  return false;
-}
-
 async function tomarFoto(): Promise<Record<string, any>> {
-  const rutaReal = path.resolve(process.cwd(), 'sistema_inventario.db');
-  if (!fs.existsSync(rutaReal)) { console.error(`No existe la base en ${rutaReal}.`); process.exit(1); }
 
-  // El puerto tiene que estar libre. Medir la instancia equivocada ya nos costo dos veces.
-  try {
-    if ((await fetch(BASE + '/health')).ok) {
-      console.error(`\nHay algo respondiendo en ${BASE}. Se aborta para no medir otra instancia.`);
-      console.error(`Cerrar ese proceso, o correr con otro puerto:  --puerto 3402`);
-      process.exit(1);
-    }
-  } catch (e) { /* libre, que es lo que se busca */ }
 
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'linea-base-'));
-  const copia = path.join(tmp, 'sistema_inventario.db');
-  fs.copyFileSync(rutaReal, copia);
+  const { tmp, copia } = copiarBase(process.cwd());
 
-  let srv: ChildProcess | null = null;
+  let srv: any = null;
   const foto: Record<string, any> = {};
   try {
-    srv = spawn('npx', ['tsx', 'src/server.ts'], {
-      env: { ...process.env, SISTEMA_DB_PATH: copia, PORT: String(PUERTO) },
-      cwd: process.cwd(), stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let log = '';
-    srv.stdout?.on('data', (d) => { log += String(d); });
-    srv.stderr?.on('data', (d) => { log += String(d); });
-
-    if (!(await esperar())) { console.error('El servidor no levanto:\n' + log.slice(-1500)); process.exit(1); }
-    if (srv.exitCode !== null || log.includes('EADDRINUSE')) {
-      console.error('El servidor propio murio y hay otro contestando:\n' + log.slice(-1200));
-      process.exit(1);
-    }
+    srv = await levantarServidor({ dirApi: process.cwd(), dbPath: copia, puerto: PUERTO });
 
     const cj: any = await (await fetch(BASE + '/api/colegios')).json();
     const ctx: Ctx = { colegios: filasDe(cj).map((c: any) => ({ id: String(c.id), nombre: String(c.nombre) })) };
@@ -213,23 +183,18 @@ async function tomarFoto(): Promise<Record<string, any>> {
       }
     }
 
-    // El arranque NO debe escribir el archivo. Se mide aca porque es parte de la foto.
-    const selloTrasArranque = fs.statSync(copia).size + ':' + huella(fs.readFileSync(copia));
-    foto['_arranque'] = { escribioAlArrancar: log.includes('Base de datos guardada en disco') };
-    foto['_selloDb'] = selloTrasArranque;
-    foto['_abrioExcel'] = log.includes('CAMBRIDGE.xlsx');
+    // El arranque NO debe escribir el archivo ni leer el Excel. Se mide aca porque es parte
+    // de la foto: son dos garantias que un cambio futuro podria romper sin que se note.
+    foto['_arranque'] = { escribioAlArrancar: srv.log.includes('Base de datos guardada en disco') };
+    foto['_selloDb'] = selloArchivo(copia);
+    foto['_abrioExcel'] = srv.log.includes('CAMBRIDGE.xlsx');
   } finally {
-    if (srv) { try { srv.kill('SIGKILL'); } catch (e) {} }
+    if (srv) await srv.matar();
     try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) {}
   }
   return foto;
 }
 
-function huella(b: Buffer): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < b.length; i++) { h ^= b[i]; h = Math.imul(h, 0x01000193) >>> 0; }
-  return h.toString(16);
-}
 
 /** Compara dos fotos y devuelve las diferencias, en texto legible. */
 function diferencias(antes: any, ahora: any): string[] {

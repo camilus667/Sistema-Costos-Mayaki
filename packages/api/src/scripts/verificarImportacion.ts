@@ -28,9 +28,11 @@
  */
 
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
-import { spawn, type ChildProcess } from 'child_process';
+// El levantado del servidor vive en UNA sola casa: el arreglo de portabilidad de Windows
+// —no usar npx, que ahi es npx.cmd— tiene que llegarle a los tres arneses.
+// @ts-ignore  el helper es .mjs a proposito
+import { levantarServidor, copiarBase } from './servidorDePrueba.mjs';
 
 const opcion = (n: string): string | undefined => {
   const i = process.argv.indexOf('--' + n);
@@ -71,16 +73,6 @@ async function postArchivo(
   return { estado: r.status, json };
 }
 
-async function esperarServidor(intentos = 60): Promise<boolean> {
-  for (let i = 0; i < intentos; i++) {
-    try {
-      const r = await fetch(BASE + '/health');
-      if (r.ok) return true;
-    } catch (e) {}
-    await new Promise((res) => setTimeout(res, 1000));
-  }
-  return false;
-}
 
 async function main() {
   if (!ARCHIVO || !fs.existsSync(ARCHIVO)) {
@@ -94,9 +86,7 @@ async function main() {
     process.exit(1);
   }
 
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'verif-import-'));
-  const copia = path.join(tmp, 'sistema_inventario.db');
-  fs.copyFileSync(rutaReal, copia);
+  const { tmp, copia } = copiarBase(process.cwd());
   const selloReal = selloDb(rutaReal);
   const bytes = fs.readFileSync(ARCHIVO);
 
@@ -104,47 +94,9 @@ async function main() {
   console.log(`Copia:      ${copia}`);
   console.log(`Archivo:    ${path.basename(ARCHIVO)}  (${(bytes.length / 1024).toFixed(0)} KB)`);
 
-  // NADIE MAS PUEDE ESTAR EN ESTE PUERTO. Si algo responde, se aborta en vez de seguir.
-  //
-  // Esto no es paranoia: ya paso. Un servidor viejo quedo escuchando el puerto con OTRA
-  // base en memoria, el spawn nuevo fallo con EADDRINUSE, y la espera de arranque igual dio
-  // por bueno el /health del viejo. Todas las mediciones salieron de la instancia
-  // equivocada y apuntaron a un problema que no existia. Un arnes que mide otra cosa es
-  // peor que uno que no corre.
+  let srv: any = null;
   try {
-    const r = await fetch(BASE + '/health');
-    if (r.ok) {
-      console.error(
-        `\nHay algo respondiendo en ${BASE}. Se aborta: si se levantara otra instancia, esta ` +
-        `verificacion podria terminar midiendo la vieja, con otra base en memoria.\n` +
-        `Cerrar ese proceso, o correr con otro puerto:  --puerto 3299`
-      );
-      process.exit(1);
-    }
-  } catch (e) {
-    // Que nadie responda es exactamente lo que se busca.
-  }
-
-  let srv: ChildProcess | null = null;
-  try {
-    srv = spawn('npx', ['tsx', 'src/server.ts'], {
-      env: { ...process.env, SISTEMA_DB_PATH: copia, PORT: String(PUERTO) },
-      cwd: process.cwd(),
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let salidaSrv = '';
-    srv.stdout?.on('data', (d) => { salidaSrv += String(d); });
-    srv.stderr?.on('data', (d) => { salidaSrv += String(d); });
-
-    if (!(await esperarServidor())) {
-      console.error('El servidor no levanto. Ultimas lineas:\n' + salidaSrv.slice(-2000));
-      process.exit(1);
-    }
-    // Y que sea el nuestro: si el spawn murio con EADDRINUSE pero algo contesta, no es.
-    if (srv.exitCode !== null || salidaSrv.includes('EADDRINUSE')) {
-      console.error('El servidor propio murio y hay otro contestando. Ultimas lineas:\n' + salidaSrv.slice(-1500));
-      process.exit(1);
-    }
+    srv = await levantarServidor({ dirApi: process.cwd(), dbPath: copia, puerto: PUERTO });
     console.log(`Servidor en ${BASE}, apuntando a la copia.\n`);
 
     // ---- catalogos de la copia
@@ -307,7 +259,7 @@ async function main() {
       fs.readdirSync(path.dirname(rutaReal)).filter((f) => f.includes('antes-de-importar')).length === 0,
       `en el temporal ${respaldos.length}; junto a la real ${fs.readdirSync(path.dirname(rutaReal)).filter((f) => f.includes('antes-de-importar')).length}`);
   } finally {
-    if (srv) { try { srv.kill('SIGKILL'); } catch (e) {} }
+    if (srv) await srv.matar();
     try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) {}
   }
 
