@@ -3630,6 +3630,36 @@
       return 'Estado ' + g.estado + '.';
     }
 
+    /**
+     * QUE TALLAS EMPAREJARON Y CUAL NO, con nombre y apellido.
+     *
+     * "Entran 12 de 14" contesta CUANTAS y no CUALES, y al conciliar contra el POS la pregunta es
+     * justamente cual talla quedo sin precio. Se listan las dos: las que entran en verde y las que
+     * faltan en amarillo, para no tener que abrir Inventario Real y comparar catorce filas a ojo.
+     *
+     * La lista que entra se recorta a diez con "y N mas": con diecisiete tallas ocupa dos renglones
+     * y tapa lo unico que hay que atender, que son las que faltan.
+     */
+    function impDetalleTallas(g) {
+      const entran = g.tallasEmparejadas || [];
+      const faltan = g.tallasFaltantes || [];
+      const muestra = entran.slice(0, 10).map(t => esc(fmtTalla(t))).join(', ');
+      const resto = entran.length > 10 ? ' y ' + (entran.length - 10) + ' más' : '';
+
+      return '<div style="font-size:0.68rem; margin-top:0.2rem; line-height:1.5;">' +
+        '<div style="color:#34d399;">emparejan ' + entran.length + ' de ' + g.resumen.filas +
+          ' tallas: ' + muestra + resto + '</div>' +
+        (faltan.length
+          ? '<div style="color:#fbbf24;">' +
+            (faltan.length === 1
+              ? 'NO empareja la talla ' + esc(fmtTalla(faltan[0])) + ': no está activa en este colegio'
+              : 'NO emparejan las tallas ' + faltan.map(t => esc(fmtTalla(t))).join(', ') +
+                ': no están activas en este colegio') +
+            '</div>'
+          : '') +
+        '</div>';
+    }
+
     function impRenderPlan() {
       if (!impPlan) return;
       const r = impPlan.resumen;
@@ -3769,18 +3799,7 @@
                   : (g.estado === 'sin-producto' ? '<span style="color:#fbbf24;">se crea con este nombre</span>' : '<span style="color:#64748b;">ninguna</span>'))
                  // Un parcial DICE cuantas filas entran y que talla falta. Sin eso, "PARCIAL" en
                  // verde-amarillo no distingue 13 de 14 de 1 de 14.
-                 + (parcial
-                     ? '<div style="color:#fbbf24; font-size:0.68rem; margin-top:0.15rem;">' +
-                       'entran ' + g.filasConTalla + ' de ' + g.resumen.filas + ' tallas' +
-                       (g.tallasFaltantes && g.tallasFaltantes.length
-                         ? (g.tallasFaltantes.length === 1
-                             ? ' — falta la talla ' + esc(fmtTalla(g.tallasFaltantes[0])) +
-                               ', que no está activa en este colegio'
-                             : ' — faltan las tallas ' + g.tallasFaltantes.map(t => esc(fmtTalla(t))).join(', ') +
-                               ', que no están activas en este colegio')
-                         : '') +
-                       '</div>'
-                     : ''))
+                 + (parcial ? impDetalleTallas(g) : ''))
               : '<div style="color:#f87171; font-weight:700;">NO SE IMPORTA</div>' +
                 (g.productoDescripcion
                   ? '<div style="color:#64748b; font-size:0.68rem;">lo más parecido: ' +

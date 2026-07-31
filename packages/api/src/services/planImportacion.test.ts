@@ -182,6 +182,41 @@ describe('agrupado por prenda', () => {
     expect(p.grupos[0].tallasFaltantes).toEqual([]);
   });
 
+  it('las tallas se listan en ORDEN DE CURVA, no alfabetico ni del archivo', () => {
+    // Alfabeticamente `10` iria antes que `02`, y en el orden del archivo salio `06, 10, 12, 08`,
+    // que se lee como ruido. El orden bueno es el que el usuario define arrastrando en
+    // Configuracion, y llega por `ordenTallas`.
+    const p = planificarCambios({
+      colegioId: 'c1', colegioNombre: 'Col. Cambridge', categoriaEsperada: 'C Cambridge',
+      resueltas: [
+        fr({ fila: 2, nombre: 'A, CC', precio: 1, tallaId: 't10', tallaCodigo: '10' }),
+        fr({ fila: 3, nombre: 'A, CC', precio: 1, tallaId: 't06', tallaCodigo: '06' }),
+        fr({ fila: 4, nombre: 'A, CC', precio: 1, tallaId: 't02', tallaCodigo: '02' }),
+        fr({ fila: 5, nombre: 'A, CC', precio: 1, estado: 'sin-talla', tallaId: undefined,
+             tallaCodigo: undefined, tallaCodigoFaltante: '04' }),
+        fr({ fila: 6, nombre: 'A, CC', precio: 1, estado: 'sin-talla', tallaId: undefined,
+             tallaCodigo: undefined, tallaCodigoFaltante: '03' }),
+      ],
+      actual: vacio(),
+      filasPorCategoria: new Map([['C Cambridge', 5]]),
+      categoriasConColegio: new Set(['C Cambridge']),
+      ordenTallas: ['02', '03', '04', '06', '10'],
+    });
+    expect(p.grupos[0].tallasEmparejadas).toEqual(['02', '06', '10']);
+    expect(p.grupos[0].tallasFaltantes).toEqual(['03', '04']);
+  });
+
+  it('sin ordenTallas se ordena NUMERICAMENTE, no por el orden del archivo', () => {
+    // Sin respaldo, el orden era el de las filas del archivo y daba `10, 02`. Un comparador
+    // numerico da lo que cualquiera espera, y no depende de en que fila venga cada talla.
+    const p = base([
+      fr({ fila: 2, nombre: 'A, CC', precio: 1, tallaId: 't10', tallaCodigo: '10' }),
+      fr({ fila: 3, nombre: 'A, CC', precio: 1, tallaId: 't02', tallaCodigo: '02' }),
+      fr({ fila: 4, nombre: 'A, CC', precio: 1, tallaId: 't06', tallaCodigo: '06' }),
+    ]);
+    expect(p.grupos[0].tallasEmparejadas).toEqual(['02', '06', '10']);
+  });
+
   it('un grupo sin NINGUNA talla se distingue de uno parcial', () => {
     // Es la unica diferencia que decide si el grupo se saltea o se importa a medias.
     const p = base([

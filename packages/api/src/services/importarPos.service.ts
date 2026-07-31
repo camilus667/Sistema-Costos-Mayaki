@@ -253,9 +253,31 @@ export function normalizarDescripcionPos(texto: unknown): string {
   return sinAcentos(s).replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-/** Normaliza una descripcion del sistema con el mismo criterio, para comparar peras con peras. */
+/**
+ * Normaliza una descripcion del sistema con el MISMO criterio que la del POS.
+ *
+ * LAS ABREVIATURAS SE EXPANDEN EN LOS DOS LADOS, y no hacerlo era un bug que rechazaba nombres
+ * IDENTICOS. Esta funcion no aplicaba `ABREVIATURAS` y `normalizarDescripcionPos` si, asi que:
+ *
+ *   POS "Buzo dep, CC"  ->  "buzo deportivo"      (expandido)
+ *   sistema "Buzo dep"  ->  "buzo dep"            (sin expandir)   ->  53%
+ *
+ * Doce casos medidos, todos con el nombre del sistema LETRA POR LETRA igual al del POS:
+ *
+ *   Buzo dep 53%   Chamarra ver 61%   Chamarra inv 57%   Chamarra dep 56%
+ *   Blusa m/l 40%  Blusa m/c 40%      Camisa m/l 41%     Camisa m/c 41%
+ *   Polera m/c 41% Chaleco c/v 64%    Chompa c/v 63%     Pantalon c/elas 47%
+ *
+ * Todos por debajo del 70% exigido, o sea todos rechazados. Y se agravaba solo: el propio
+ * importador crea las prendas que faltan con el nombre del POS —"Buzo dep"—, asi que usar el modo
+ * "solo nombres de prendas" garantizaba que la siguiente importacion no emparejara ninguna.
+ *
+ * Expandir los dos lados es lo que la tabla queria decir desde el principio: que la abreviatura sea
+ * IRRELEVANTE. Con esto `Buzo dep` empareja al 100% tanto con `Buzo dep` como con `Buzo Deportivo`.
+ */
 export function normalizarDescripcionSistema(texto: unknown): string {
-  const s = String(texto ?? '').trim();
+  let s = String(texto ?? '').trim();
+  for (const [re, largo] of ABREVIATURAS) s = s.replace(re, largo);
   return sinAcentos(s).replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
@@ -347,6 +369,51 @@ export function similitud(a: string, b: string): number {
 
 /** Umbral de confianza por debajo del cual la fila exige revision manual. */
 export const CONFIANZA_MINIMA = 0.7;
+
+/**
+ * Cuanto tiene que GANARLE el mejor candidato al segundo para decidir solo, cuando no es exacto.
+ *
+ * POR QUE HACE FALTA. Expandir las abreviaturas en los dos lados —que es lo que arregla que un
+ * nombre identico no emparejara— sube todas las similitudes, y con eso aparecen SIETE pares de
+ * prendas DISTINTAS por encima del 70%:
+ *
+ *   73%  Camisa m/c vs Camisa m/l      73%  Polera m/c vs Polera m/l
+ *   72%  Blusa m/c  vs Blusa m/l       71%  Camisa m/c vs Blusa m/c
+ *   71%  Camisa m/l vs Blusa m/l       71%  Blusa m/c  vs Polera m/c
+ *   71%  Blusa m/l  vs Polera m/l
+ *
+ * Son manga corta contra manga larga, y camisa contra blusa contra polera. Si el colegio tiene
+ * `Camisa m/l` y NO `Camisa m/c`, la fila del POS `Camisa m/c` emparejaria al 73% con la de manga
+ * larga y le importaria los precios encima. Es el peor error posible de esta importacion, y
+ * silencioso.
+ *
+ * LA SEÑAL QUE LO DISTINGUE ES EL MARGEN, medido sobre los nombres reales:
+ *
+ *   el nombre EXISTE      ->  100% exacto, con 27 a 90 puntos de margen
+ *   el nombre NO existe   ->  73% el primero y 71% el segundo: DOS puntos
+ *
+ * Con dos puntos de diferencia el algoritmo no esta reconociendo, esta tirando una moneda entre dos
+ * prendas. Ahi corresponde preguntar, no decidir.
+ *
+ * El 10% esta elegido con esos numeros: por encima de los 2 puntos del caso ambiguo y muy por
+ * debajo de los 35 del unico caso legitimo que no es exacto —`Chamarra inv` contra `Chamarra de
+ * invierno`, 95% con 35 puntos—.
+ */
+export const MARGEN_MINIMO = 0.10;
+
+/**
+ * Una coincidencia EXACTA se acepta siempre, sin mirar el margen.
+ *
+ * Es la regla que el usuario pidio: si el nombre es el mismo, empareja. Y es la que hace que el
+ * margen no moleste nunca en el caso normal: sobre los nombres reales, todos los emparejamientos
+ * buenos dan exactamente 1.
+ *
+ * Se compara con una tolerancia y no con `=== 1` porque la similitud viene de multiplicaciones en
+ * punto flotante: `0.35 + 0.65` puede dar 0.9999999999999999.
+ */
+export function esCoincidenciaExacta(confianza: number): boolean {
+  return confianza >= 0.999;
+}
 
 // ---------------------------------------------------------------------------
 // Parseo
@@ -841,14 +908,30 @@ export function resolverFilas(opciones: OpcionesResolucion): {
       continue;
     }
 
+    // DECIDE SOLA cuando el nombre es EXACTO, o cuando gana con claridad.
+    //
+    // El margen sobre el segundo es lo que separa "reconoci esta prenda" de "estoy eligiendo entre
+    // dos parecidas": ver MARGEN_MINIMO. Sin el, `Camisa m/c` se importaria sobre `Camisa m/l`
+    // cuando la de manga corta no existe.
+    const exacto = esCoincidenciaExacta(mejor.confianza);
+    const segundo = candidatos[1];
+    const margen = segundo ? mejor.confianza - segundo.confianza : 1;
+    const alcanzaSola = exacto || (mejor.confianza >= CONFIANZA_MINIMA && margen >= MARGEN_MINIMO);
+
     resueltas.push({
       ...comun,
-      estado: mejor.confianza >= CONFIANZA_MINIMA ? 'ok' : 'revisar',
+      estado: alcanzaSola ? 'ok' : 'revisar',
       productoId: mejor.id,
       productoDescripcion: mejor.descripcion,
-      motivo: mejor.confianza >= CONFIANZA_MINIMA
+      motivo: alcanzaSola
         ? undefined
-        : `Confianza ${(mejor.confianza * 100).toFixed(0)}%, por debajo del ${(CONFIANZA_MINIMA * 100).toFixed(0)}% exigido. Revisar o crear la prenda.`,
+        : mejor.confianza < CONFIANZA_MINIMA
+          ? `El nombre se parece ${(mejor.confianza * 100).toFixed(0)}% y hace falta ` +
+            `${(CONFIANZA_MINIMA * 100).toFixed(0)}%.`
+          : `Se parece ${(mejor.confianza * 100).toFixed(0)}% a "${mejor.descripcion}" y ` +
+            `${(segundo.confianza * 100).toFixed(0)}% a "${segundo.descripcion}": la diferencia es ` +
+            `demasiado chica para elegir sola. Son prendas distintas y elegir mal importaria los ` +
+            `precios de una sobre la otra.`,
     });
   }
 

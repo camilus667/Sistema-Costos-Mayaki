@@ -9,6 +9,8 @@ import {
   categoriaDeColegio,
   CATEGORIAS_POS,
   CONFIANZA_MINIMA,
+  MARGEN_MINIMO,
+  esCoincidenciaExacta,
   COL,
   type FilaPos,
   sugerenciaDeColegio,
@@ -317,7 +319,10 @@ describe('resolucion contra los catalogos', () => {
     const x = r.resueltas[0];
     expect(x.estado).toBe('revisar');
     expect(x.candidatos.length).toBeGreaterThan(0);
-    expect(x.motivo).toMatch(/Confianza/);
+    // El motivo nombra el porcentaje que se saco y el que hace falta. Se afirma ESO y no la palabra
+    // literal "Confianza": lo que importa es que la fila diga cuanto le falto, no como se redacto.
+    expect(x.motivo).toMatch(/8%/);
+    expect(x.motivo).toMatch(/70%/);
   });
 
   it('un colegio sin prendas lo avisa en vez de dejarlo en silencio', () => {
@@ -543,5 +548,129 @@ describe('descubrirColegiosDelArchivo', () => {
   it('no revienta con lista vacia ni con nulo', () => {
     expect(descubrirColegiosDelArchivo([])).toEqual([]);
     expect(descubrirColegiosDelArchivo(null as any)).toEqual([]);
+  });
+});
+
+describe('la abreviatura se expande EN LOS DOS LADOS', () => {
+  /**
+   * ESTE ES EL BUG QUE RECHAZABA NOMBRES IDENTICOS.
+   *
+   * `normalizarDescripcionPos` expandia las abreviaturas y `normalizarDescripcionSistema` no, asi
+   * que el POS decia `buzo deportivo` y el sistema `buzo dep` para la MISMA cadena de entrada.
+   *
+   * Los doce casos de abajo son los que el usuario reporto, con su valor medido ANTES del arreglo.
+   * Todos por debajo del 70% exigido, o sea todos rechazados, con el nombre letra por letra igual.
+   */
+  const identicos: [string, number][] = [
+    ['Buzo dep', 53], ['Chamarra ver', 61], ['Chamarra inv', 57], ['Chamarra dep', 56],
+    ['Blusa m/l', 40], ['Blusa m/c', 40], ['Camisa m/l', 41], ['Camisa m/c', 41],
+    ['Polera m/c', 41], ['Chaleco c/v', 64], ['Chompa c/v', 63], ['Pantalón c/elas', 47],
+  ];
+
+  it('un nombre IDENTICO da exactamente 1, no 40% ni 64%', () => {
+    for (const [nombre, antes] of identicos) {
+      const c = similitud(
+        normalizarDescripcionPos(nombre + ', CC'),
+        normalizarDescripcionSistema(nombre),
+      );
+      expect(c, `${nombre} daba ${antes}% antes del arreglo`).toBe(1);
+    }
+  });
+
+  it('y el nombre escrito LARGO en el sistema tambien empareja', () => {
+    // Es el otro lado de la moneda: la tabla de abreviaturas existe para que la forma corta y la
+    // larga sean la misma cosa. Antes solo funcionaba en esta direccion.
+    const pares: [string, string][] = [
+      ['Buzo dep, CC', 'Buzo Deportivo'],
+      ['Camisa m/c, CC', 'Camisa manga corta'],
+      ['Pantalón c/elas, CC', 'Pantalón con elástico'],
+      ['Chaleco c/v, CC', 'Chaleco cuello en V'],
+    ];
+    for (const [pos, sis] of pares) {
+      expect(similitud(normalizarDescripcionPos(pos), normalizarDescripcionSistema(sis)))
+        .toBe(1);
+    }
+  });
+
+  it('expandir los dos lados NO borra las diferencias reales', () => {
+    // Si expandir hiciera que todo se parezca a todo, el arreglo seria peor que el bug.
+    const distintos: [string, string][] = [
+      ['Buzo dep, CC', 'Chamarra dep'],
+      ['Chamarra inv, CC', 'Chamarra ver'],
+      ['Lanyard, CC', 'Calza larga'],
+      ['Pantalón Dama, CC', 'Pantalón de Varon'],
+    ];
+    for (const [pos, sis] of distintos) {
+      const c = similitud(normalizarDescripcionPos(pos), normalizarDescripcionSistema(sis));
+      expect(c, `${pos} vs ${sis}`).toBeLessThan(CONFIANZA_MINIMA);
+    }
+  });
+});
+
+describe('el margen sobre el segundo candidato', () => {
+  const colegios = [{ id: 'camb', nombre: 'Col. Cambridge' }];
+  const tallas = [{ id: 't10', codigo: '10' }];
+  const fila = (nombre: string): FilaPos => ({
+    fila: 2, categoria: 'C Cambridge', nombreProducto: nombre,
+    variante: 'Talla 10', codigo: '001-cc', precioPos: 100, cantidad: 1,
+  });
+
+  it('esCoincidenciaExacta tolera el error de punto flotante', () => {
+    // La similitud sale de `x * 0.35 + y * 0.65`, que puede dar 0.9999999999999999.
+    expect(esCoincidenciaExacta(1)).toBe(true);
+    expect(esCoincidenciaExacta(0.9999999999999999)).toBe(true);
+    expect(esCoincidenciaExacta(0.99)).toBe(false);
+    expect(esCoincidenciaExacta(0.73)).toBe(false);
+  });
+
+  it('con el nombre EXACTO empareja sola, aunque haya una parecida al lado', () => {
+    // `Camisa m/l` se parece 73% a `Camisa m/c`. La exacta gana igual: es la regla principal.
+    const r = resolverFilas({
+      filas: [fila('Camisa m/c, CC')],
+      colegioId: 'camb', colegios, tallasActivas: tallas,
+      productos: [
+        { id: 'p1', descripcion: 'Camisa m/c', colegioId: 'camb' },
+        { id: 'p2', descripcion: 'Camisa m/l', colegioId: 'camb' },
+      ],
+    });
+    expect(r.resueltas[0].estado).toBe('ok');
+    expect(r.resueltas[0].productoDescripcion).toBe('Camisa m/c');
+  });
+
+  it('SIN la exacta, dos parecidas a dos puntos NO deciden solas', () => {
+    // MEDIDO: sin `Camisa m/c` en el sistema, el primero es `Camisa m/l` 73% y el segundo
+    // `Blusa m/c` 71%. Con dos puntos de diferencia el algoritmo tira una moneda entre dos prendas
+    // distintas, y elegir mal importa los precios de una sobre la otra.
+    const r = resolverFilas({
+      filas: [fila('Camisa m/c, CC')],
+      colegioId: 'camb', colegios, tallasActivas: tallas,
+      productos: [
+        { id: 'p2', descripcion: 'Camisa m/l', colegioId: 'camb' },
+        { id: 'p3', descripcion: 'Blusa m/c', colegioId: 'camb' },
+      ],
+    });
+    const x = r.resueltas[0];
+    expect(x.estado).toBe('revisar');
+    // Y el motivo nombra A LAS DOS, que es lo que hace posible elegir a mano.
+    expect(x.motivo).toMatch(/Camisa m\/l/);
+    expect(x.motivo).toMatch(/Blusa m\/c/);
+  });
+
+  it('un unico candidato por encima del umbral SI decide solo', () => {
+    // Sin segundo con quien confundirse no hay ambiguedad que resolver.
+    const r = resolverFilas({
+      filas: [fila('Chamarra inv, CC')],
+      colegioId: 'camb', colegios, tallasActivas: tallas,
+      productos: [{ id: 'p1', descripcion: 'Chamarra de invierno', colegioId: 'camb' }],
+    });
+    expect(r.resueltas[0].estado).toBe('ok');
+  });
+
+  it('el margen minimo esta entre el caso ambiguo y el legitimo', () => {
+    // Los dos numeros que lo justifican, medidos: 2 puntos el ambiguo, 35 el legitimo
+    // —`Chamarra inv` contra `Chamarra de invierno`, 95%—. Si alguien mueve el umbral fuera de ese
+    // rango, rompe uno de los dos casos.
+    expect(MARGEN_MINIMO).toBeGreaterThan(0.02);
+    expect(MARGEN_MINIMO).toBeLessThan(0.35);
   });
 });

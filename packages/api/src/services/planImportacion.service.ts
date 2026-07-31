@@ -143,6 +143,14 @@ export interface GrupoPrenda {
   filasConTalla: number;
   /** Los codigos de talla que faltan o estan desactivados, para poder nombrarlos. */
   tallasFaltantes: string[];
+  /**
+   * Los codigos de talla que SI emparejaron.
+   *
+   * Se dicen las dos listas y no solo la que falta: "entran 12 de 14" contesta cuantas, y no
+   * CUALES. Al conciliar contra el POS la pregunta es cual talla quedo sin precio, y responderla
+   * obligaba a abrir Inventario Real y comparar catorce filas a ojo.
+   */
+  tallasEmparejadas: string[];
   filas: CambioFila[];
   resumen: {
     filas: number;
@@ -298,6 +306,15 @@ export interface OpcionesPlan {
    * importacion no encontraba ninguna de sus filas.
    */
   sufijosPorCategoria?: Map<string, string>;
+  /**
+   * Los codigos de talla EN EL ORDEN DEL CATALOGO, para poder listarlas como una curva.
+   *
+   * Sin esto la lista de tallas emparejadas sale en el orden en que el archivo trae las filas, que
+   * dio `06, 10, 12, 08, 14, 16/34...` y se lee como ruido. Y alfabeticamente seria peor: `10`
+   * iria antes que `02`. El orden bueno es el que el usuario define arrastrando en Configuracion,
+   * y es el que ya trae la consulta de tallas activas.
+   */
+  ordenTallas?: string[];
   avisos?: string[];
 }
 
@@ -306,6 +323,27 @@ export interface OpcionesPlan {
  */
 export function planificarCambios(op: OpcionesPlan): PlanImportacion {
   const avisos = [...(op.avisos ?? [])];
+
+  // Rango de cada talla para ordenar las listas. Una talla que no este en el catalogo va al final
+  // en vez de al principio: es el caso de las que faltan, y ponerlas primeras enterraria la curva.
+  const rangoTalla = new Map<string, number>();
+  (op.ordenTallas ?? []).forEach((c, i) => rangoTalla.set(String(c), i));
+  /**
+   * Orden de curva, con respaldo NUMERICO cuando la talla no esta en el catalogo.
+   *
+   * El respaldo importa: sin `ordenTallas` el orden pasaba a ser el del archivo, que dio `04, 02`.
+   * Lo encontro un test que ya existia. Un comparador numerico da `02, 04, 10, 16/34`, que es lo
+   * que cualquiera espera, y no depende de en que fila venga cada talla.
+   */
+  const porCurva = (a: string, b: string) => {
+    const ra = rangoTalla.get(a);
+    const rb = rangoTalla.get(b);
+    if (ra !== undefined && rb !== undefined) return ra - rb;
+    // Una conocida va antes que una desconocida: la curva primero, lo raro al final.
+    if (ra !== undefined) return -1;
+    if (rb !== undefined) return 1;
+    return a.localeCompare(b, undefined, { numeric: true });
+  };
 
   const delColegio = op.resueltas.filter((r) => r.estado !== 'otro-colegio');
 
@@ -394,9 +432,13 @@ export function planificarCambios(op: OpcionesPlan): PlanImportacion {
           filas.reduce((m, f) => Math.max(m, f.confianza), 0) < CONFIANZA_SIN_CANDIDATO),
       filasConTalla: filas.filter((f) => f.tallaId).length,
       // Ordenadas y sin repetir: son 14 filas que se quejan de las mismas dos tallas.
+      // Las dos listas EN ORDEN DE CURVA, no alfabetico ni del archivo. Ver `ordenTallas`.
       tallasFaltantes: [...new Set(
         filas.filter((f) => !f.tallaId && f.tallaCodigoFaltante).map((f) => String(f.tallaCodigoFaltante)),
-      )].sort(),
+      )].sort(porCurva),
+      tallasEmparejadas: [...new Set(
+        filas.filter((f) => f.tallaId && f.tallaCodigo).map((f) => String(f.tallaCodigo)),
+      )].sort(porCurva),
       filas,
       resumen: {
         filas: filas.length,

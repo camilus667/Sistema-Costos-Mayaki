@@ -374,6 +374,13 @@ async function armarPlan(
     // Los sufijos descubiertos, para que la sugerencia de un colegio que falta traiga su
     // abreviatura aunque nadie lo haya tecleado en el codigo.
     sufijosPorCategoria,
+    // TODAS las tallas del catalogo en orden, no solo las activas.
+    //
+    // `filasTalla` ya viene ordenada por `talla.orden`, que es el orden que el usuario define
+    // arrastrando en Configuracion. Se pasan TODAS a proposito: las que faltan son justamente las
+    // INACTIVAS, y con solo las activas quedarian sin rango y se listarian en el orden en que el
+    // archivo las trajo.
+    ordenTallas: filasTalla.map((t: any) => String(t.codigo)),
     avisos,
   });
 
