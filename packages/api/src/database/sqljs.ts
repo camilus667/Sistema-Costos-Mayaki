@@ -377,6 +377,9 @@ export async function getDb(opciones: OpcionesGetDb = {}) {
   // usuario arrastre en Perfil & Colegios. Va como ALTER porque las tablas se crean con
   // IF NOT EXISTS y en una base existente el CREATE no se vuelve a ejecutar.
   try { dbInstance.run('ALTER TABLE "colegio" ADD COLUMN "orden" INTEGER;'); } catch (e) {}
+  // Abreviatura del colegio: es la que forma `CC-01` en la columna Prod y la que empareja el
+  // sufijo del codigo del POS con su colegio al importar. Aditivo e idempotente.
+  try { dbInstance.run('ALTER TABLE "colegio" ADD COLUMN "abreviatura" TEXT;'); } catch (e) {}
 
   // Codigo del POS en precio_venta. Va como ALTER ademas del CREATE por la misma razon
   // que modo_costeo: las tablas se crean con IF NOT EXISTS, asi que en una base que ya

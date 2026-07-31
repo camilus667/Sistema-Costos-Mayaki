@@ -12,6 +12,25 @@ export const colegios = sqliteTable('colegio', {
   telefono: text('telefono'),
   activo: integer('activo', { mode: 'boolean' }).default(true).notNull(),
   /**
+   * ABREVIATURA DEL COLEGIO. Hace tres trabajos con un solo campo:
+   *
+   *   1. MOSTRAR    la referencia de una prenda en la columna `Prod`: `CC-01`.
+   *   2. EMPAREJAR  el sufijo del codigo del POS con su colegio al importar. Los codigos del
+   *                 POS son `<numero>-<abreviatura>`: `001-cc`, `010-EO`, `048-JS`.
+   *   3. CORROBORAR contra la categoria del POS, que dice lo mismo por otra via.
+   *
+   * MEDIDO sobre el export del POS: las dos señales coinciden en las 732 filas de prendas.
+   * `cc` <-> `C Cambridge` (297), `IntlSM` <-> `C Intl. San Marcos` (166), `EO` <-> `C Edad de
+   * Oro` (126), `InfSM` <-> `C Infantil San Marcos` (95), `JS` <-> `C Saint Jude ` (48). Cero
+   * excepciones. Por eso el importador puede CONFIRMAR con dos fuentes en vez de adivinar con
+   * una, y detenerse el dia que no coincidan.
+   *
+   * ES NULLABLE: sin valor se usa una abreviatura derivada del nombre, para que una base ya
+   * cargada siga funcionando sin tocar una fila. El emparejamiento con el POS necesita el
+   * valor explicito, y por eso el importador lo carga solo cuando crea un colegio.
+   */
+  abreviatura: text('abreviatura'),
+  /**
    * En que posicion va este colegio cuando se ven varios juntos. Lo escribe el arrastrar y
    * soltar de Perfil & Colegios.
    *
