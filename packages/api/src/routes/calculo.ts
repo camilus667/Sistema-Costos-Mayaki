@@ -10,6 +10,9 @@ import { productos, tallas, preciosVenta, inventario, colegios } from '../databa
 import {
   posicionesDeColegios, ordenarPrendas, paginar, leerPaginacion, esCriterioValido,
 } from '../services/ordenPrendas';
+// Que le falta a una prenda para que su costo sea real. NO consulta nada: el motor ya reporta
+// origenPeso, telaVinculada y tieneManoObra en el meta de cada fila.
+import { diagnosticarPorPrenda, resumirDiagnosticos } from '../services/diagnosticoCosto';
 import XLSX from 'xlsx';
 import { findExcelPath } from '../scripts/seed';
 import { resolverPrendaPorItem } from '../services/resolucion.service';
@@ -282,6 +285,16 @@ api.get('/matriz-consolidada', async (c) => {
       porProducto.set(f.meta.productoId, arr);
     }
 
+    // DIAGNOSTICO DE COSTO, por prenda. Se calcula de las MISMAS filas que ya se costearon:
+    // el motor reporta si hay peso, tela y mano de obra, asi que no hace falta ninguna
+    // consulta extra. Ver services/diagnosticoCosto.ts para por que dice QUE falta en vez de
+    // un "incompleta" generico.
+    const diagnosticos = diagnosticarPorPrenda(
+      filas,
+      (f: any) => String(f.meta.productoId),
+      (f: any) => f.meta
+    );
+
     // Celda de una combinacion que no se ofrece. Se devuelve en cero, con el
     // inventario si lo hubiera, para conservar el mismo juego de claves que
     // antes: el dashboard recorre todas las tallas de la cabecera.
@@ -313,6 +326,9 @@ api.get('/matriz-consolidada', async (c) => {
         // exacta del 1, 28, 2, 3 que reporto el usuario.
         colegioId: prod.colegioId ?? null,
         orden: prod.orden ?? null,
+        // Que le falta para que su costo sea real. `completa: true` es el caso normal y la
+        // pantalla no dibuja nada; cuando no, trae la etiqueta corta y el motivo largo.
+        diagnostico: diagnosticos.get(String(prod.id)) ?? { completa: true, faltan: [], etiqueta: '', motivo: '' },
         tallas: {},
       };
 
@@ -411,6 +427,10 @@ api.get('/matriz-consolidada', async (c) => {
       // verdad esta viendo en vez de suponerlo.
       orden: criterio,
       agrupadoPorColegio: agruparPorColegio,
+      // Cuantas prendas tienen el costo SUBESTIMADO, para que el encabezado del reporte lo
+      // pueda decir. Un total impreso para un banco que incluye prendas costeadas en cero es
+      // un numero correcto describiendo algo incompleto.
+      diagnosticoCosto: resumirDiagnosticos(diagnosticos.values()),
       paginacion: { total: pag.total, pagina: pag.pagina, porPagina: pag.porPagina, paginas: pag.paginas },
       // Huella para el arnes de paridad: distingue esta version de la heredada.
       implementacion: 'unificada',

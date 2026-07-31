@@ -260,6 +260,10 @@
             <tfoot id="tf-consolidada-foot">
             </tfoot>
           </table>
+        <!-- Aviso de prendas con el costo subestimado. Sin fondo oscuro: borde y color, que es
+             la regla de esta pantalla y de los reportes. -->
+        <div id="mc-aviso-costo" style="display:none; margin-top:0.6rem; font-size:0.76rem; color:#fbbf24; border-left:3px solid #f59e0b; padding:0.4rem 0.65rem; line-height:1.5;"></div>
+
         <!-- Barra de paginacion. Dice el TOTAL y no solo la pagina: sin ese numero, una
              tabla de 50 filas parece el catalogo completo. -->
         <div id="mc-paginacion" style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem; margin-top:0.6rem; font-size:0.74rem; color:#94a3b8; flex-wrap:wrap;">
@@ -2634,6 +2638,27 @@
       tallas.forEach(t => colTotals[t.codigo] = 0);
       let grandTotal = 0;
 
+      // RESUMEN DEL DIAGNOSTICO, arriba de la tabla. Sin este cartel, una prenda con el costo
+      // subestimado se ve solo si el usuario pasa por su fila; con el, sabe que existe antes
+      // de mirar. Y en un total que se entrega a un banco, saber que incluye prendas
+      // costeadas de menos es la diferencia entre un numero y un numero explicado.
+      const rd = rawConsolidadaData.diagnosticoCosto || {};
+      const avisoCosto = document.getElementById('mc-aviso-costo');
+      if (avisoCosto) {
+        if (rd.incompletas > 0) {
+          const partes = [];
+          if (rd.sinTela) partes.push(`${rd.sinTela} sin tela`);
+          if (rd.sinPesos) partes.push(`${rd.sinPesos} sin pesos`);
+          if (rd.sinManoObra) partes.push(`${rd.sinManoObra} sin mano de obra`);
+          avisoCosto.style.display = 'block';
+          avisoCosto.innerHTML =
+            `<strong>${rd.incompletas} de ${rd.total} prenda(s) tienen el costo SUBESTIMADO</strong>` +
+            ` — ${partes.join(', ')}. Estan marcadas en la lista. El total de abajo las incluye con ese costo de menos.`;
+        } else {
+          avisoCosto.style.display = 'none';
+        }
+      }
+
       const tbody = document.getElementById('tb-consolidada-body');
 
       // FILA SEPARADORA POR COLEGIO. Se pone solo cuando hay mas de uno a la vista, y
@@ -2699,11 +2724,23 @@
           subtotalCellHtml = `<td style="text-align:right; border-left:2px solid var(--border); padding-right:0.4rem;">${formattedSubtotal}</td>`;
         }
 
+        // MARCA DE COSTO SUBESTIMADO. Va al lado de la descripcion y dice QUE falta —sin
+        // tela, sin pesos, sin mano de obra— porque son tres causas con tres arreglos
+        // distintos: un "incompleta" generico obliga a entrar a la prenda a averiguar cual.
+        //
+        // Sin fondo oscuro, con borde y color, que es la regla de esta pantalla y de los
+        // reportes: un fondo negro con texto claro desaparece si el driver de impresion
+        // descarta los fondos.
+        const dg = p.diagnostico || {};
+        const marcaCosto = dg.completa === false
+          ? `<span title="${String(dg.motivo || '').replace(/"/g, '&quot;')}" style="margin-left:0.45rem; font-size:0.62rem; font-weight:800; letter-spacing:0.3px; color:#f59e0b; border:1px solid #f59e0b88; border-radius:3px; padding:0.05rem 0.28rem; white-space:nowrap; cursor:help;">${dg.etiqueta}</span>`
+          : '';
+
         // La fila separadora va ADELANTE de la primera prenda de cada colegio.
         return filaSeparadora + `
           <tr>
             <td><span class="col-item">${p.itemNumero}</span></td>
-            <td><strong>${p.descripcion}</strong></td>
+            <td><strong>${p.descripcion}</strong>${marcaCosto}</td>
             ${cellsHtml}
             ${subtotalCellHtml}
           </tr>
@@ -5474,7 +5511,15 @@
           return `
             <tr>
               <td class="rp-c">${esc(row.itemNumero)}</td>
-              <td class="rp-desc">${esc(row.descripcion)}</td>
+              <td class="rp-desc">${esc(row.descripcion)}${
+                // EN LA HOJA TAMBIEN, y con mas razon que en pantalla: un total impreso para
+                // un banco que incluye prendas costeadas de menos es un numero correcto
+                // describiendo algo incompleto. En guindo y con parentesis, sin fondo: un
+                // fondo oscuro desaparece si el driver descarta los fondos, y con el el texto.
+                row.diagnostico && row.diagnostico.completa === false
+                  ? ` <span style="color:#9E0D3D; font-weight:700; font-size:0.85em;">(${esc(row.diagnostico.etiqueta)})</span>`
+                  : ''
+              }</td>
               ${tallas.map(t => `<td class="rp-r">${val(row.tallas[t.codigo])}</td>`).join('')}
               <td class="rp-r rp-total-col">${sumable ? (cfg.entero ? nInt(sub) : nBs(sub)) : '—'}</td>
             </tr>`;
@@ -5485,10 +5530,16 @@
           return `<td class="rp-r">${sumable ? (cfg.entero ? nInt(s) : nBs(s)) : '—'}</td>`;
         }).join('');
 
+        // Si hay prendas con el costo subestimado, el ENCABEZADO lo dice. Un total que las
+        // incluye sin declararlo es la clase de cifra que se firma y despues hay que explicar.
+        const rdPdf = j.diagnosticoCosto || {};
         const kpis = [
           { titulo: 'Concepto', valor: cfg.t },
           { titulo: 'Prendas', valor: nInt(j.data.length) },
           { titulo: 'Tallas', valor: nInt(tallas.length) },
+          ...(rdPdf.incompletas > 0
+            ? [{ titulo: 'Costo incompleto', valor: nInt(rdPdf.incompletas) + ' de ' + nInt(rdPdf.total) }]
+            : []),
           ...(sumable ? [{ titulo: 'Total general', valor: (cfg.entero ? nInt(granTotal) : 'Bs. ' + nBs(granTotal)), destacado: true }] : []),
         ];
 
