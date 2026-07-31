@@ -22,15 +22,20 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { spawn } from 'child_process';
+// Mismo helper que los otros dos arneses: sin npx, para que funcione en Windows.
+import { levantarServidor, copiarBase, opcion } from './servidorDePrueba.mjs';
 // puppeteer-core no es dependencia del proyecto a proposito: este arnes es una herramienta
 // de verificacion, no parte del producto. Se resuelve del entorno y si no esta, se dice.
 let puppeteer;
 try {
   puppeteer = (await import('puppeteer-core')).default;
 } catch (e) {
-  console.error('Falta puppeteer-core. Instalarlo aparte:  npm i -g puppeteer-core');
-  console.error('Y un Chrome, cuya ruta va en la variable CHROME_PATH.');
+  // NO sirve instalarlo global: `import` de ESM no mira NODE_PATH ni los paquetes globales.
+  // Tiene que estar en el node_modules del proyecto.
+  console.error('Falta puppeteer-core. Instalarlo EN EL PROYECTO, no global:');
+  console.error('    pnpm add -D -w puppeteer-core');
+  console.error('Y un Chrome ya instalado, con su ruta en CHROME_PATH. Por ejemplo:');
+  console.error('    $env:CHROME_PATH="C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"');
   process.exit(1);
 }
 
@@ -43,7 +48,7 @@ if (!XLSX_REAL || !fs.existsSync(XLSX_REAL)) {
   console.error('Falta --archivo con la ruta del export del POS (.xlsx).');
   process.exit(1);
 }
-const PUERTO = 3341;
+const PUERTO = Number(opcion('puerto') || 3341);
 const BASE = `http://127.0.0.1:${PUERTO}`;
 
 let pasa = 0, falla = 0;
@@ -54,14 +59,7 @@ const copia = path.join(tmp, 'sistema_inventario.db');
 fs.copyFileSync(path.join(API, 'sistema_inventario.db'), copia);
 const selloReal = fs.statSync(path.join(API, 'sistema_inventario.db')).mtimeMs;
 
-try { if ((await fetch(BASE + '/health')).ok) { console.error('puerto ocupado'); process.exit(1); } } catch (e) {}
-
-const srv = spawn('npx', ['tsx', 'src/server.ts'], {
-  cwd: API, env: { ...process.env, SISTEMA_DB_PATH: copia, PORT: String(PUERTO) }, stdio: ['ignore', 'pipe', 'pipe'],
-});
-let log = ''; srv.stdout.on('data', d => log += d); srv.stderr.on('data', d => log += d);
-for (let i = 0; i < 60; i++) { try { if ((await fetch(BASE + '/health')).ok) break; } catch (e) {} await new Promise(r => setTimeout(r, 1000)); }
-if (log.includes('EADDRINUSE')) { console.error('puerto ocupado'); process.exit(1); }
+const srv = await levantarServidor({ dirApi: API, dbPath: copia, puerto: PUERTO });
 
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox'] });
 const page = await browser.newPage();
@@ -218,7 +216,7 @@ try {
   console.log('\n  (captura en /tmp/ui-manual.png)');
 } finally {
   await browser.close();
-  srv.kill('SIGKILL');
+  await srv.matar();
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 

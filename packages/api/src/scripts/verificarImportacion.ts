@@ -28,9 +28,11 @@
  */
 
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
-import { spawn, type ChildProcess } from 'child_process';
+// El levantado del servidor vive en UNA sola casa: el arreglo de portabilidad de Windows
+// —no usar npx, que ahi es npx.cmd— tiene que llegarle a los tres arneses.
+// @ts-ignore  el helper es .mjs a proposito
+import { levantarServidor, copiarBase } from './servidorDePrueba.mjs';
 
 const opcion = (n: string): string | undefined => {
   const i = process.argv.indexOf('--' + n);
@@ -56,6 +58,29 @@ function selloDb(ruta: string): string {
   return `${b.length}:${h.toString(16)}`;
 }
 
+function exigirArchivo(ruta: string | undefined): string {
+  // DOS CAUSAS DISTINTAS, DOS MENSAJES DISTINTOS. La primera version usaba
+  // `if (!rutaArchivo || !fs.existsSync(ARCHIVO))` con un solo texto que decia "Falta
+  // --archivo", asi que cuando la ruta estaba pero el archivo no, el error mandaba a
+  // revisar el flag —que estaba bien— en vez de la ruta. El usuario perdio dos intentos
+  // buscando el problema donde no estaba.
+  if (!ruta) {
+    console.error('Falta --archivo con la ruta del export del POS (.xlsx). Por ejemplo:');
+    console.error('  pnpm tsx SCRIPT --archivo "C:\\Users\\Win10\\Downloads\\products_v2_export.xlsx"');
+    process.exit(1);
+  }
+  const abs = path.resolve(ruta);
+  if (!fs.existsSync(abs)) {
+    console.error(`El flag --archivo llego bien, pero NO EXISTE ese archivo:`);
+    console.error(`  se busco en: ${abs}`);
+    console.error('');
+    console.error('Revisar la ruta. En PowerShell, para encontrarlo:');
+    console.error('  Get-ChildItem -Path $HOME -Recurse -Filter "*export*.xlsx" -ErrorAction SilentlyContinue | Select-Object FullName');
+    process.exit(1);
+  }
+  return abs;
+}
+
 async function postArchivo(
   ruta: string,
   campos: Record<string, string>,
@@ -71,22 +96,9 @@ async function postArchivo(
   return { estado: r.status, json };
 }
 
-async function esperarServidor(intentos = 60): Promise<boolean> {
-  for (let i = 0; i < intentos; i++) {
-    try {
-      const r = await fetch(BASE + '/health');
-      if (r.ok) return true;
-    } catch (e) {}
-    await new Promise((res) => setTimeout(res, 1000));
-  }
-  return false;
-}
 
 async function main() {
-  if (!ARCHIVO || !fs.existsSync(ARCHIVO)) {
-    console.error('Falta --archivo con la ruta del export del POS (.xlsx).');
-    process.exit(1);
-  }
+  const rutaArchivo = exigirArchivo(ARCHIVO);
 
   const rutaReal = path.resolve(process.cwd(), 'sistema_inventario.db');
   if (!fs.existsSync(rutaReal)) {
@@ -94,57 +106,17 @@ async function main() {
     process.exit(1);
   }
 
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'verif-import-'));
-  const copia = path.join(tmp, 'sistema_inventario.db');
-  fs.copyFileSync(rutaReal, copia);
+  const { tmp, copia } = copiarBase(process.cwd());
   const selloReal = selloDb(rutaReal);
-  const bytes = fs.readFileSync(ARCHIVO);
+  const bytes = fs.readFileSync(rutaArchivo);
 
   console.log(`\nBase real:  ${rutaReal}`);
   console.log(`Copia:      ${copia}`);
-  console.log(`Archivo:    ${path.basename(ARCHIVO)}  (${(bytes.length / 1024).toFixed(0)} KB)`);
+  console.log(`Archivo:    ${path.basename(rutaArchivo)}  (${(bytes.length / 1024).toFixed(0)} KB)`);
 
-  // NADIE MAS PUEDE ESTAR EN ESTE PUERTO. Si algo responde, se aborta en vez de seguir.
-  //
-  // Esto no es paranoia: ya paso. Un servidor viejo quedo escuchando el puerto con OTRA
-  // base en memoria, el spawn nuevo fallo con EADDRINUSE, y la espera de arranque igual dio
-  // por bueno el /health del viejo. Todas las mediciones salieron de la instancia
-  // equivocada y apuntaron a un problema que no existia. Un arnes que mide otra cosa es
-  // peor que uno que no corre.
+  let srv: any = null;
   try {
-    const r = await fetch(BASE + '/health');
-    if (r.ok) {
-      console.error(
-        `\nHay algo respondiendo en ${BASE}. Se aborta: si se levantara otra instancia, esta ` +
-        `verificacion podria terminar midiendo la vieja, con otra base en memoria.\n` +
-        `Cerrar ese proceso, o correr con otro puerto:  --puerto 3299`
-      );
-      process.exit(1);
-    }
-  } catch (e) {
-    // Que nadie responda es exactamente lo que se busca.
-  }
-
-  let srv: ChildProcess | null = null;
-  try {
-    srv = spawn('npx', ['tsx', 'src/server.ts'], {
-      env: { ...process.env, SISTEMA_DB_PATH: copia, PORT: String(PUERTO) },
-      cwd: process.cwd(),
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let salidaSrv = '';
-    srv.stdout?.on('data', (d) => { salidaSrv += String(d); });
-    srv.stderr?.on('data', (d) => { salidaSrv += String(d); });
-
-    if (!(await esperarServidor())) {
-      console.error('El servidor no levanto. Ultimas lineas:\n' + salidaSrv.slice(-2000));
-      process.exit(1);
-    }
-    // Y que sea el nuestro: si el spawn murio con EADDRINUSE pero algo contesta, no es.
-    if (srv.exitCode !== null || salidaSrv.includes('EADDRINUSE')) {
-      console.error('El servidor propio murio y hay otro contestando. Ultimas lineas:\n' + salidaSrv.slice(-1500));
-      process.exit(1);
-    }
+    srv = await levantarServidor({ dirApi: process.cwd(), dbPath: copia, puerto: PUERTO });
     console.log(`Servidor en ${BASE}, apuntando a la copia.\n`);
 
     // ---- catalogos de la copia
@@ -210,7 +182,7 @@ async function main() {
       prev2.json?.instantanea?.vigente === true, JSON.stringify(prev2.json?.instantanea));
 
     // =====================================================================
-    console.log('\n--- 3. LA HUELLA ATAJA UN ARCHIVO DISTINTO ---');
+    console.log('\n--- 3. LA HUELLA ATAJA UN rutaArchivo DISTINTO ---');
     const selloPreEjec = selloDb(copia);
     const huellaMala = await postArchivo('/api/importar/ejecutar',
       { colegioId: String(cambridge.id), opciones: JSON.stringify({ huella: 'deadbeef' }) }, bytes);
@@ -258,7 +230,7 @@ async function main() {
     verificar('ningun codigo del POS quedo en dos filas distintas',
       conCodigo.duplicados.length === 0, `duplicados: ${JSON.stringify(conCodigo.duplicados.slice(0, 5))}`);
 
-    // ---- lo escrito llego AL ARCHIVO, no solo a la memoria
+    // ---- lo escrito llego AL rutaArchivo, no solo a la memoria
     //
     // Todos los chequeos anteriores leen por la API, que responde desde la base EN MEMORIA
     // de sql.js. Que la API diga que el codigo esta no prueba que sobreviva a reiniciar el
@@ -307,7 +279,7 @@ async function main() {
       fs.readdirSync(path.dirname(rutaReal)).filter((f) => f.includes('antes-de-importar')).length === 0,
       `en el temporal ${respaldos.length}; junto a la real ${fs.readdirSync(path.dirname(rutaReal)).filter((f) => f.includes('antes-de-importar')).length}`);
   } finally {
-    if (srv) { try { srv.kill('SIGKILL'); } catch (e) {} }
+    if (srv) await srv.matar();
     try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) {}
   }
 

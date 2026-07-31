@@ -25,6 +25,8 @@ import { and, asc, eq } from 'drizzle-orm';
 import { detalleAccesorio, accesorios, productos, colegios, telas } from '../database/schema';
 import { saveDbToDisk } from '../database/sqljs';
 import { nuevoIdHex } from '../services/resolucion.service';
+// El criterio de orden vive en UNA sola casa: services/ordenPrendas.ts.
+import { ordenarPrendasDesdeBase } from '../services/ordenPrendasDb';
 
 const api = new Hono();
 
@@ -144,6 +146,8 @@ api.get('/:productoId/accesorios/candidatos-copia', async (c) => {
   }
 
   const [todasLasPrendas, colegiosLista, telasLista, lineas] = await Promise.all([
+    // El orden lo define services/ordenPrendas.ts. Se ordena DESPUES del Promise.all, mas
+    // abajo: aca la consulta solo garantiza un resultado estable.
     db.select().from(productos).orderBy(asc(productos.itemNumero)),
     db.select().from(colegios),
     db.select().from(telas),
@@ -156,6 +160,10 @@ api.get('/:productoId/accesorios/candidatos-copia', async (c) => {
       .from(detalleAccesorio)
       .innerJoin(accesorios, eq(detalleAccesorio.accesorioId, accesorios.id)),
   ]);
+
+  // Se ordena una sola vez, con el criterio compartido, y se usa la lista ordenada de aca en
+  // adelante.
+  const prendasOrdenadas = await ordenarPrendasDesdeBase<any>(db, todasLasPrendas as any[]);
 
   // El subtotal se agrega en JS y no en SQL: son un par de cientos de lineas, y una
   // suma con groupBy aca obligaria a confiar en como el driver traduce el agregado.
@@ -176,7 +184,7 @@ api.get('/:productoId/accesorios/candidatos-copia', async (c) => {
   const mismaTela: any[] = [];
   const otras: any[] = [];
 
-  for (const p of todasLasPrendas) {
+  for (const p of prendasOrdenadas) {
     if (p.id === productoId) continue;
 
     const resumen = resumenPorPrenda.get(p.id);

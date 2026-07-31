@@ -39,6 +39,9 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { productos, inventario, preciosVenta, tallas } from '../database/schema';
 import { eq, and, asc } from 'drizzle-orm';
+// El criterio de orden vive en UNA sola casa. En un export importa doble: la hoja SALE del
+// sistema, asi que su orden tiene que coincidir con el de la pantalla.
+import { ordenarPrendasDesdeBase } from '../services/ordenPrendasDb';
 
 const api = new Hono();
 
@@ -77,7 +80,10 @@ async function exportarCostos(db: any, filtros: Filtros) {
   // and() con una sola condicion la devuelve tal cual, asi que no hace falta ramificar.
   if (cond.length > 0) query = query.where(and(...cond));
 
-  return await query.orderBy(asc(productos.itemNumero));
+  // El orden lo define services/ordenPrendas.ts. Este export SALE del sistema —se manda por
+  // mail, se abre en Excel— asi que el orden de la hoja tiene que ser el mismo que ve el
+  // usuario en pantalla, no uno propio.
+  return await ordenarPrendasDesdeBase(db, await query.orderBy(asc(productos.itemNumero)));
 }
 
 // ------------------------------------------------------------ inventario
@@ -109,7 +115,11 @@ async function exportarInventario(db: any, filtros: Filtros) {
 
   if (cond.length > 0) query = query.where(and(...cond));
 
-  return await query.orderBy(asc(productos.itemNumero), asc(tallas.orden));
+  // ACA CADA FILA ES PRENDA + TALLA, y el orden se arma en dos capas. El `orderBy` de SQL
+  // deja las tallas de cada prenda en su curva; el comparador reagrupa por colegio y, como
+  // `Array.prototype.sort` es ESTABLE, dos filas de la misma prenda conservan ese orden de
+  // talla. Ordenar solo por talla en el comparador seria peor: mezclaria las prendas.
+  return await ordenarPrendasDesdeBase(db, await query.orderBy(asc(productos.itemNumero), asc(tallas.orden)));
 }
 
 // ---------------------------------------------------------- rentabilidad
@@ -139,7 +149,11 @@ async function exportarRentabilidad(db: any, filtros: Filtros) {
 
   if (cond.length > 0) query = query.where(and(...cond));
 
-  return await query.orderBy(asc(productos.itemNumero), asc(tallas.orden));
+  // ACA CADA FILA ES PRENDA + TALLA, y el orden se arma en dos capas. El `orderBy` de SQL
+  // deja las tallas de cada prenda en su curva; el comparador reagrupa por colegio y, como
+  // `Array.prototype.sort` es ESTABLE, dos filas de la misma prenda conservan ese orden de
+  // talla. Ordenar solo por talla en el comparador seria peor: mezclaria las prendas.
+  return await ordenarPrendasDesdeBase(db, await query.orderBy(asc(productos.itemNumero), asc(tallas.orden)));
 }
 
 // ============================================================== endpoints

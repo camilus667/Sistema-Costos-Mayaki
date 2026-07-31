@@ -5,6 +5,10 @@ import { eq, and, asc, or, isNull } from 'drizzle-orm';
 import { colegios, productos, telas, tallas, colegioTallas } from '../database/schema';
 import { saveDbToDisk } from '../database/sqljs';
 import { crearPrendaConTallas } from '../services/crearPrenda.service';
+// El criterio de orden vive en UNA sola casa. Antes estaba escrito en diez consultas con
+// tres versiones distintas, y ninguna mencionaba el colegio: por eso el item de un colegio
+// aparecia entre los de otro.
+import { ordenarPrendasDesdeBase } from '../services/ordenPrendasDb';
 
 const api = new Hono();
 
@@ -63,6 +67,93 @@ api.post('/', zValidator('json', crearColegioSchema), async (c) => {
 });
 
 // PUT /api/colegios/:id - Actualizar colegio
+/**
+ * PUT /api/colegios/orden — en que posicion va cada colegio cuando se ven varios juntos.
+ *
+ * Lo escribe el arrastrar y soltar de Perfil & Colegios. El criterio completo vive en
+ * services/ordenPrendas.ts: aca solo se guardan los numeros.
+ *
+ * VA ANTES DE /:id A PROPOSITO, Y ESTO NO ES TEORICO: la escribi despues y lo comprobe.
+ * Hono resuelve en orden de registro, asi que con `PUT /:id` primero la palabra "orden" se
+ * toma como un id de colegio y el pedido termina en el handler de actualizar datos. Medido
+ * antes de mover la ruta:
+ *
+ *   PUT /api/colegios/orden  ->  Internal Server Error
+ *
+ * Y el 500 fue suerte: el validador de esquema rechazo el cuerpo. Con un cuerpo que hubiera
+ * pasado la validacion, el resultado habria sido un 404 —o un 200 que no hizo nada— y el
+ * arrastre se veria guardado sin haberse guardado.
+ *
+ * Cuerpo: { orden: ["idColegio1", "idColegio2", ...] } en el orden deseado.
+ */
+api.put('/orden', async (c) => {
+  const db = (c as any).db;
+
+  let body: any = {};
+  try { body = await c.req.json(); } catch (e) {}
+
+  const ids = Array.isArray(body?.orden) ? body.orden.map((x: any) => String(x)) : null;
+  if (!ids || ids.length === 0) {
+    return c.json({
+      success: false,
+      error: 'Falta el cuerpo { "orden": ["id1", "id2", ...] } con los ids de colegio en el orden deseado.',
+    }, 400);
+  }
+
+  // SIN DUPLICADOS. Dos veces el mismo id significa que la lista que mando la pantalla esta
+  // mal armada, y guardarla dejaria un colegio con dos posiciones y otro sin ninguna. Es mejor
+  // rechazarlo que resolverlo por nuestra cuenta.
+  const repetidos = ids.filter((x: string, i: number) => ids.indexOf(x) !== i);
+  if (repetidos.length) {
+    return c.json({
+      success: false,
+      error: `La lista trae ids repetidos: ${[...new Set(repetidos)].join(', ')}. ` +
+        `Cada colegio puede aparecer una sola vez.`,
+    }, 400);
+  }
+
+  const existentes = await db.select({ id: colegios.id, nombre: colegios.nombre }).from(colegios);
+  const vivos = new Map<string, string>(existentes.map((x: any) => [String(x.id), String(x.nombre)]));
+
+  const desconocidos = ids.filter((x: string) => !vivos.has(x));
+  if (desconocidos.length) {
+    return c.json({
+      success: false,
+      error: `Estos ids no corresponden a ningun colegio: ${desconocidos.join(', ')}. No se guardo nada.`,
+    }, 404);
+  }
+
+  // FALTANTES: se aceptan, y se ponen DESPUES. Pasa de verdad cuando alguien crea un colegio
+  // en otra pestaña mientras esta pantalla ya tenia su lista cargada. Rechazar el guardado
+  // obligaria a recargar y perder el arrastre; ponerlos al final conserva el trabajo y deja el
+  // resultado predecible. Se REPORTAN para que la pantalla pueda decirlo.
+  const faltantes = [...vivos.keys()].filter((x) => !ids.includes(x));
+  const secuencia = [...ids, ...faltantes];
+
+  try {
+    for (let i = 0; i < secuencia.length; i++) {
+      await db.update(colegios).set({ orden: i + 1 }).where(eq(colegios.id, secuencia[i]));
+    }
+  } catch (e: any) {
+    return c.json({ success: false, error: 'No se pudo guardar el orden: ' + (e?.message || String(e)) }, 500);
+  }
+
+  const avisos: string[] = [];
+  if (faltantes.length) {
+    avisos.push(
+      `${faltantes.length} colegio(s) no venian en la lista y se pusieron al final: ` +
+      `${faltantes.map((x) => vivos.get(x)).join(', ')}. Probablemente se crearon despues de ` +
+      `abrir esta pantalla.`
+    );
+  }
+
+  return c.json({
+    success: true,
+    orden: secuencia.map((id, i) => ({ id, nombre: vivos.get(id), orden: i + 1 })),
+    avisos,
+  });
+});
+
 api.put('/:id', zValidator('json', crearColegioSchema.partial()), async (c) => {
   const db = (c as any).db;
   const id = c.req.param('id');
@@ -141,7 +232,10 @@ api.get('/:id/config', async (c) => {
   const [col] = await db.select().from(colegios).where(eq(colegios.id, id)).limit(1);
   if (!col) return c.json({ success: false, error: 'Colegio no encontrado' }, 404);
 
-  const prods = await db.select().from(productos).where(eq(productos.colegioId, id)).orderBy(asc(productos.orden), asc(productos.itemNumero));
+  // Un colegio solo: el agrupado no cambia nada, pero se usa la misma funcion para que el
+  // orden interno —`orden` con `item_numero` de respaldo— sea el mismo en todas las pantallas.
+  const prods = await ordenarPrendasDesdeBase(db,
+    await db.select().from(productos).where(eq(productos.colegioId, id)).orderBy(asc(productos.orden), asc(productos.itemNumero)));
 
   // FASE 5, tercera vez que aparece este patron: `= colegio OR IS NULL`, nunca
   // `= colegio` a secas. Con las telas y tallas compartidas (colegio_id NULL) el

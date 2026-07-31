@@ -1,6 +1,6 @@
 /**
  * Servidor local de desarrollo
- * Usa sql.js para database en memoria alimentado desde CAMBRIDGE.xlsx
+ * Usa sql.js para la base en memoria, cargada desde el archivo del proyecto.
  */
 
 import { Hono } from 'hono';
@@ -133,7 +133,7 @@ app.get('/health', async (c) => {
       status: 'ok',
       timestamp: new Date().toISOString(),
       database: 'sql-js-local',
-      excel: 'CAMBRIDGE.xlsx cargado'
+      origenDatos: 'archivo de base de datos del proyecto'
     });
   } catch (error) {
     return c.json({
@@ -178,7 +178,22 @@ app.use('/api/*', async (c, next) => {
 
   const metodo = c.req.method;
   const esEscritura = metodo !== 'GET' && metodo !== 'HEAD' && metodo !== 'OPTIONS';
-  if (esEscritura && c.res.status < 400) {
+
+  // UNA RUTA PUEDE DECLARAR QUE NO ESCRIBIO, y entonces no se vuelca nada.
+  //
+  // Hace falta porque "es POST" no es lo mismo que "escribio". /api/importar/preview es un
+  // POST —recibe un .xlsx de 157 KB por multipart— y su promesa central es no tocar la
+  // base. El middleware la volcaba igual, y aunque el contenido logico no cambiaba, el
+  // archivo SI: sql.js re-serializa y los bytes salen distintos.
+  //
+  // Lo encontro la verificacion de punta a punta del importador, que compara el archivo byte
+  // a byte antes y despues del preview. Y solo aparecio DESPUES de sacar el sembrado del
+  // arranque: antes el arranque ya reescribia el archivo, asi que el volcado del middleware
+  // producia los mismos bytes y el defecto quedaba tapado. Un cambio destapo al otro.
+  //
+  // Ademas es puro desperdicio: volcar un MB de base tras una operacion de solo lectura.
+  const declaroNoEscribir = (c as any).__noEscribio === true;
+  if (esEscritura && !declaroNoEscribir && c.res.status < 400) {
     saveDbToDisk();
   }
 });
@@ -444,13 +459,16 @@ async function start() {
   const PORT = Number(process.env.PORT) || 3000;
 
   console.log(`🚀 Iniciando servidor local en http://localhost:${PORT}`);
-  console.log('📊 Base de datos: sql.js (en memoria con datos de CAMBRIDGE.xlsx)');
+  console.log('📊 Base de datos: sql.js, cargada desde el archivo del proyecto');
   console.log(`🔗 Dashboard UI: http://localhost:${PORT}/`);
   console.log(`🔗 Health check: http://localhost:${PORT}/health`);
   console.log(`🔗 API base: http://localhost:${PORT}/api/`);
 
   await getDb();
-  console.log('✅ Base de datos inicializada y poblada desde CAMBRIDGE.xlsx');
+  // MEDIDO el 31-jul-2026: con CAMBRIDGE.xlsx ausente por completo, las diez sondas de
+  // lineaBase.ts devuelven exactamente lo mismo. El arranque ya no siembra ni lee el Excel,
+  // asi que decir "poblada desde CAMBRIDGE.xlsx" era afirmar algo falso en cada arranque.
+  console.log('✅ Base de datos lista. No se sembro nada: los datos definitivos estan en la base.');
 
   const { serve } = await import('@hono/node-server');
 

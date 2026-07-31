@@ -100,6 +100,17 @@ export interface MetaCosteo {
   seOfrece: boolean;
   precioVentaBs: number | null;
   precioAdquisicionBs: number | null;
+  /**
+   * Codigo de esta prenda-talla en el sistema POS, si se importo.
+   *
+   * Viaja con el precio porque vive en la misma fila de `precio_venta`, que es la unica tabla
+   * del sistema con granularidad prenda + talla. Y es EXACTAMENTE la granularidad del codigo:
+   * `001-cc` es el pantalon de Cambridge en UNA talla, no la prenda.
+   *
+   * `null` mientras no se haya importado. La consulta que trae los precios ya lo devolvia
+   * —es un select completo— asi que exponerlo no cuesta una consulta mas.
+   */
+  codigoExterno: string | null;
 
   /**
    * Columnas de costo fijo que existen en `producto` y que el modelo vigente NO
@@ -666,6 +677,7 @@ export function ensamblarInputs(
   // ---------- precios ----------
   const filaPV = ctx.precioVentaPorClave.get(k);
   const precioVentaBs = filaPV ? num(filaPV.precioBs) : null;
+  const codigoExterno = filaPV && filaPV.codigoExterno ? String(filaPV.codigoExterno) : null;
   const filaPA = ctx.precioAdquisicionPorClave.get(k);
   const precioAdquisicionBs = filaPA ? num(filaPA.precioBs) : null;
 
@@ -767,6 +779,7 @@ export function ensamblarInputs(
     tarifaPuntoComplejidad: ctx.tarifaPuntoComplejidad,
     seOfrece: precioVentaBs != null && precioVentaBs > 0,
     precioVentaBs,
+    codigoExterno,
     precioAdquisicionBs,
     columnasFijasNoContadas: colFijas,
     faltantes,

@@ -44,7 +44,7 @@ import {
   inventario,
   costoSnapshots,
 } from '../database/schema';
-import { saveDbToDisk, getRawDb, getDbFilePath } from '../database/sqljs';
+import { getRawDb, getDbFilePath } from '../database/sqljs';
 import {
   parsearFilasPos,
   resolverFilas,
@@ -355,6 +355,13 @@ async function armarPlan(
 api.post('/preview', async (c) => {
   const db = (c as any).db;
 
+  // SE DECLARA QUE ESTA RUTA NO ESCRIBE, para que el middleware de server.ts no vuelque la
+  // base al terminar. Es un POST —recibe el archivo por multipart— y el middleware volcaba
+  // por metodo, no por lo que hizo el handler: el contenido logico no cambiaba pero el
+  // archivo si, porque sql.js re-serializa. La verificacion de punta a punta lo atrapo
+  // comparando bytes.
+  (c as any).__noEscribio = true;
+
   const leido = await leerArchivo(c);
   if (!leido.ok) return c.json({ success: false, error: leido.error }, leido.estado as any);
 
@@ -645,7 +652,17 @@ api.post('/ejecutar', async (c) => {
     }, 500);
   }
 
-  saveDbToDisk();
+  // EL VOLCADO A DISCO LO HACE EL MIDDLEWARE de server.ts, no esta ruta.
+  //
+  // La llamada explicita que vivia aca escribia el archivo de un MB una segunda vez: el log
+  // del servidor mostraba "Base de datos guardada en disco" dos veces por importacion. Y era
+  // una desviacion de la decision que este proyecto ya tomo —el middleware es el dueño del
+  // volcado, para que ningun handler pueda olvidarse—; tener las dos cosas no agrega una
+  // garantia, agrega una duda sobre quien manda.
+  //
+  // Que la escritura llega al ARCHIVO y no solo a la memoria lo comprueba
+  // verificarImportacion.ts, que abre la copia con sql.js despues de importar y cuenta los
+  // codigos ahi. Sin ese chequeo no habria sacado esta linea.
 
   if (!escribirInventario) {
     avisos.push(
