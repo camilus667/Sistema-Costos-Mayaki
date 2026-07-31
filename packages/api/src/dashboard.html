@@ -378,6 +378,7 @@
                    placeholder="Buscar código del POS, prenda o talla..."
                    style="background:#1e293b; color:#e2e8f0; border:1px solid #334155; border-radius:4px; font-size:0.78rem; padding:0.3rem 0.55rem; width:17rem;">
             <span id="inv-buscar-conteo" style="font-size:0.72rem; color:#94a3b8; white-space:nowrap;"></span>
+            <button class="btn-pdf" onclick="exportarInventarioExcel()" title="Excel de las 448 combinaciones prenda+talla con su codigo del POS, para conciliar. Trae tambien las que no tienen stock, que en pantalla no se ven.">Excel</button>
             <button class="btn-pdf" onclick="reporteInventario()" title="Exportar el inventario valorizado a PDF (una hoja, vertical)">PDF</button>
           </div>
         </div>
@@ -3106,6 +3107,24 @@
         // Se respeta lo que ya este escrito en el buscador: recargar no puede deshacer un filtro.
         filtrarInventario();
       } catch (e) { console.error(e); }
+    }
+
+    /**
+     * Baja el Excel de conciliacion contra el POS.
+     *
+     * NO exporta lo que se ve. Se va al endpoint, que trae TODAS las combinaciones prenda+talla
+     * —incluidas las sin stock, que la pantalla oculta— porque una prenda sin stock y sin codigo es
+     * precisamente la que hay que encontrar al conciliar. Exportar el filtro del buscador seria
+     * peor: se exportaria una vista, no el inventario.
+     *
+     * Respeta el colegio elegido y el modo fiscal, asi que el precio del Excel es el mismo que el
+     * de la pantalla.
+     */
+    function exportarInventarioExcel() {
+      const url = '/api/inventario/exportar?colegioId=' + colegioFiltroActual + getModalidadFQueryParam();
+      // Navegacion directa, no fetch: el navegador maneja la descarga con el nombre que manda el
+      // servidor en Content-Disposition. Con fetch habria que armar el Blob y el nombre a mano.
+      window.location.href = url;
     }
 
     /** Forma comparable de un texto de busqueda: sin acentos, sin mayusculas, sin bordes. */

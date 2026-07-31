@@ -41,7 +41,11 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { inventarioTransacciones, inventario, productos, tallas, preciosVenta } from '../database/schema';
 import { desc, eq, and, asc, sql } from 'drizzle-orm';
+import XLSX from 'xlsx';
 import { costearLote } from '../services/calculo/costeoInputs.service';
+import { referenciasDesdeBase } from '../services/referenciaPrendaDb';
+import { ordenarPrendasDesdeBase } from '../services/ordenPrendasDb';
+import { colegios } from '../database/schema';
 import { saveDbToDisk } from '../database/sqljs';
 import {
   construirContextoFiscal,
@@ -66,8 +70,17 @@ const transaccionSchema = z.object({
 /** 'all' y la cadena vacia significan "sin filtrar". */
 const alcance = (v?: string) => (v && v !== 'all' ? v : undefined);
 
-// GET /api/inventario/stock - Muestra SOLO los artículos con stock físico > 0
-api.get('/stock', async (c) => {
+/**
+ * LAS FILAS DE INVENTARIO, una por prenda+talla. La comparten la pantalla y el Excel.
+ *
+ * Estaba escrito adentro de `/stock`. Se saco afuera porque el Excel necesita las MISMAS filas
+ * con OTRO recorte: la pantalla muestra solo lo que tiene stock, y el Excel tiene que traer todo.
+ * Copiarlo era garantizar que un dia el costo del Excel y el de la pantalla dejaran de coincidir,
+ * que es exactamente el problema que este archivo ya tuvo con el cache del xlsx.
+ *
+ * `soloConStock` es la unica diferencia entre los dos usos.
+ */
+async function construirFilasInventario(c: any, opciones: { soloConStock: boolean }) {
   const db = (c as any).db;
   const colegioId = alcance(c.req.query('colegioId'));
   const { productoId, tallaId } = c.req.query();
@@ -112,6 +125,9 @@ api.get('/stock', async (c) => {
       colegioId: productos.colegioId,
       itemNumero: productos.itemNumero,
       producto: productos.descripcion,
+      // `orden` es el nombre que pide `PrendaOrdenable`. `ordenProducto` se conserva porque
+      // la respuesta ya lo exponia.
+      orden: productos.orden,
       ordenProducto: productos.orden,
       talla: tallas.codigo,
       tallaNombre: tallas.nombre,
@@ -123,11 +139,21 @@ api.get('/stock', async (c) => {
 
   if (cond.length > 0) query = query.where(and(...cond));
 
-  const filasInv = await query.orderBy(
-    asc(productos.orden),
-    asc(productos.itemNumero),
-    asc(tallas.orden)
-  );
+  // EL ORDEN DE LAS PRENDAS SALE DEL COMPARADOR COMPARTIDO, no de este `orderBy`.
+  //
+  // Con `orden, item_numero` esta pantalla ordenaba MAL, y de la misma forma que ya ordenaba mal
+  // /api/dashboard-resumen: `producto.orden` se numera POR COLEGIO, asi que la unica prenda de
+  // Internacional SM tiene `orden = 1` igual que la primera de Cambridge, empatan, y el desempate
+  // por item la mete entre la 1 y la 2 de Cambridge. Medido en el Excel de conciliacion antes de
+  // arreglarlo: CAM-01, ISM-01, CAM-02, CAM-03...
+  //
+  // El `orderBy` se queda SOLO para la talla: ese sí es el orden bueno —el que define el
+  // arrastrar y soltar de Configuracion— y el comparador de prendas no lo toca. `sort` es estable,
+  // asi que las filas de una misma prenda conservan el orden de talla que trae la consulta.
+  const filasSinOrdenar = await query.orderBy(asc(tallas.orden));
+  const filasInv = await ordenarPrendasDesdeBase(db, filasSinOrdenar as any, 'defecto', {
+    agruparPorColegio: !colegioId,
+  });
 
   // EL CODIGO DEL POS de cada prenda+talla, que es lo que Inventario Real muestra en su primera
   // columna. Es la unica pantalla donde el codigo cabe en una columna sin mentir: aca una fila ES
@@ -148,7 +174,7 @@ api.get('/stock', async (c) => {
   }
 
   const data = filasInv
-    .filter((i: any) => Number(i.cantidad) > 0)
+    .filter((i: any) => (opciones.soloConStock ? Number(i.cantidad) > 0 : true))
     .map((i: any) => {
       const costeo = costeoPorClave.get(`${i.productoId}_${i.tallaId}`);
       const costoUnitario = costeo ? costeo.costoUnitario : 0;
@@ -184,6 +210,13 @@ api.get('/stock', async (c) => {
     });
 
   const sinCosteo = data.filter((d: any) => d.sinCosteo).length;
+  return { db, data, fiscal, avisosFiscales, sinCosteo };
+}
+
+// GET /api/inventario/stock - Muestra SOLO los artículos con stock físico > 0
+api.get('/stock', async (c) => {
+  const { data, fiscal, avisosFiscales, sinCosteo } =
+    await construirFilasInventario(c, { soloConStock: true });
 
   return c.json({
     success: true,
@@ -200,6 +233,101 @@ api.get('/stock', async (c) => {
         ? [`${sinCosteo} fila(s) de inventario sin costeo del motor: revisar que la prenda tenga tela, peso y mano de obra cargados.`]
         : []),
     ],
+  });
+});
+
+/**
+ * GET /api/inventario/exportar - el Excel para CONCILIAR contra el POS.
+ *
+ * POR QUE NO ALCANZA LA PANTALLA. La pantalla muestra solo lo que tiene stock: son 215 de 448
+ * combinaciones prenda+talla en la base de hoy. Las 233 que faltan son justo las mas sospechosas
+ * para una conciliacion —una prenda que en el POS existe y aca no tiene ni stock ni codigo es
+ * invisible en pantalla—. Este export trae LAS 448.
+ *
+ * LA COLUMNA `Estado` ES EL PUNTO. Un volcado de filas no concilia nada: hay que poder ordenar por
+ * "que le falta a esta fila". `Estado` dice SIN CODIGO / SIN PRECIO / SIN COSTEO / OK, asi que
+ * ordenando por esa columna salen agrupadas las filas que hay que atender. Sin ella habria que
+ * mirar 448 filas a ojo para encontrar las que no tienen codigo.
+ *
+ * El codigo del POS va como TEXTO a proposito. `001-cc` no es un numero, y un codigo que fuera
+ * todo digitos —el POS los tiene— Excel lo convertiria a numero y le comeria los ceros de la
+ * izquierda: `007` quedaria `7` y el BUSCARV contra el export del POS no encontraria nada.
+ *
+ * Se escribe con `type: 'array'`: devuelve bytes sin depender de `Buffer`, que en Workers no
+ * existe. Es el mismo criterio con el que la importacion lee el archivo.
+ */
+api.get('/exportar', async (c) => {
+  const { db, data, fiscal } = await construirFilasInventario(c, { soloConStock: false });
+
+  const [refs, cols] = await Promise.all([
+    referenciasDesdeBase(db),
+    db.select({ id: colegios.id, nombre: colegios.nombre }).from(colegios),
+  ]);
+  const nombreColegio = new Map<string, string>(
+    cols.map((x: any) => [String(x.id), String(x.nombre)])
+  );
+
+  const encabezado = [
+    'Cod. POS', 'Prod', 'Colegio', 'Prenda', 'Talla',
+    'Precio Venta (Bs.)', 'Stock', 'Costo Unit. (Bs.)', 'Valor Inv. (Bs.)', 'Estado',
+  ];
+
+  const cuerpo = data.map((f: any) => {
+    // El orden importa: lo que falta primero es lo que hay que resolver primero. Sin codigo no se
+    // puede emparejar con el POS, y sin precio no se puede comparar el precio.
+    const estado = !f.codigoPos ? 'SIN CODIGO'
+      : Number(f.precioVenta) <= 0 ? 'SIN PRECIO'
+      : f.sinCosteo ? 'SIN COSTEO'
+      : 'OK';
+    return [
+      f.codigoPos ?? '',
+      refs.get(String(f.productoId)) ?? '',
+      nombreColegio.get(String(f.colegioId)) ?? '',
+      f.producto,
+      f.talla,
+      f.precioVenta,
+      f.cantidad,
+      f.costoUnitario,
+      f.valorTotalStock,
+      estado,
+    ];
+  });
+
+  const hoja = XLSX.utils.aoa_to_sheet([encabezado, ...cuerpo]);
+
+  // El codigo, forzado a texto celda por celda. `aoa_to_sheet` tipa por el valor de JavaScript,
+  // asi que una cadena de digitos ya entra como texto; esto lo fija tambien para el dia que el
+  // codigo llegue como numero desde el POS.
+  for (let fila = 1; fila <= cuerpo.length; fila++) {
+    const ref = XLSX.utils.encode_cell({ r: fila, c: 0 });
+    const celda = (hoja as any)[ref];
+    if (celda && celda.v !== '') { celda.t = 's'; celda.v = String(celda.v); }
+  }
+  (hoja as any)['!cols'] = [
+    { wch: 12 }, { wch: 9 }, { wch: 20 }, { wch: 34 }, { wch: 7 },
+    { wch: 17 }, { wch: 7 }, { wch: 17 }, { wch: 17 }, { wch: 12 },
+  ];
+  (hoja as any)['!autofilter'] = { ref: XLSX.utils.encode_range(
+    { s: { r: 0, c: 0 }, e: { r: cuerpo.length, c: encabezado.length - 1 } }
+  ) };
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, hoja, 'Inventario');
+  const bytes = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+
+  const hoy = new Date().toISOString().slice(0, 10);
+  const alcanceNombre = alcance(c.req.query('colegioId'))
+    ? (nombreColegio.get(String(alcance(c.req.query('colegioId')))) ?? 'colegio')
+    : 'todos';
+  const archivo = `inventario-${alcanceNombre}-${fiscal.modalidad}-${hoy}.xlsx`
+    .replace(/[^\w.-]+/g, '-');
+
+  return new Response(bytes, {
+    headers: {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${archivo}"`,
+      'Cache-Control': 'no-store',
+    },
   });
 });
 
