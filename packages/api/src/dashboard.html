@@ -129,11 +129,16 @@
                 <th>Valor Inv. Costo (Bs.)</th>
                 <th>Valor Inv. Venta (Bs.)</th>
                 <th>Ganancia Estimada (Bs.)</th>
+                <!-- El MARGEN estaba solo en el PDF, no en la pantalla: nueve columnas en el reporte
+                     contra ocho acá. Se agrega acá en vez de sacarla del reporte porque el dato ya
+                     viene en la respuesta —`margenPromedioPct`, que el selector de Multitalla ya
+                     usa para colorear— y porque es la columna que responde si conviene producir. -->
+                <th>Margen</th>
               </tr>
             </thead>
             <tbody id="tb-resumen-prendas">
               <tr>
-                <td colspan="8" style="text-align:center; padding: 2rem;">Cargando resumen ejecutivo de prendas...</td>
+                <td colspan="9" style="text-align:center; padding: 2rem;">Cargando resumen ejecutivo de prendas...</td>
               </tr>
             </tbody>
           </table>
@@ -1566,6 +1571,7 @@
               <td>${fmtMoney(p.valorCostoTotalBs)}</td>
               <td><strong>${fmtMoney(p.valorVentaTotalBs)}</strong></td>
               <td><strong style="color:var(--success);">${fmtMoney(p.gananciaEstimadaBs)}</strong></td>
+              <td style="color:${getMarginColor(Number(p.margenPromedioPct) || 0)}; font-weight:700;">${(Number(p.margenPromedioPct) || 0).toFixed(1)}%</td>
             </tr>
           `).join('');
 
@@ -1807,11 +1813,12 @@
           ? p.accesoriosIntervinientes.map(a => `
             <tr>
               <td style="padding:0.45rem 0.75rem; color:#cbd5e1;">• ${a.nombre}</td>
+              <td style="text-align:center; color:#64748b; font-size:0.78rem;">${escAttr(a.unidadCompra || '—')}</td>
               <td style="text-align:center; color:#94a3b8; font-size:0.78rem;">${a.cantidad}</td>
               <td style="text-align:right; color:#94a3b8; font-size:0.78rem;">Bs. ${(a.costoUnitarioBs || 0).toFixed(2)}</td>
               <td style="text-align:right; color:#34d399; font-weight:700;">Bs. ${(a.costoTotalBs || 0).toFixed(2)}</td>
             </tr>`).join('')
-          : `<tr><td colspan="4" style="text-align:center; color:#475569; padding:1rem; font-style:italic;">Sin accesorios asignados</td></tr>`;
+          : `<tr><td colspan="5" style="text-align:center; color:#475569; padding:1rem; font-style:italic;">Sin accesorios asignados</td></tr>`;
 
         const tallaLabel = tallaActual
           ? `<span style="background:#1e3a5f; color:#38bdf8; border-radius:6px; padding:0.2rem 0.55rem; font-size:0.78rem; font-weight:700; margin-left:0.5rem;">Talla: ${tallaActual.codigo}</span>`
@@ -1899,6 +1906,10 @@
                 <thead>
                   <tr style="background:#0a1a0f;">
                     <th style="padding:0.5rem 0.75rem; text-align:left; color:#64748b; font-weight:600; font-size:0.7rem; text-transform:uppercase;">Accesorio</th>
+                    <!-- UNIDAD. Estaba solo en el PDF. Sin ella, "0.04" en Cantidad no dice si son
+                         cuatro centesimas de metro o de un paquete de cien, que son costos muy
+                         distintos. Se agrega acá en vez de sacarla del reporte. -->
+                    <th style="padding:0.5rem 0.75rem; text-align:center; color:#64748b; font-weight:600; font-size:0.7rem; text-transform:uppercase;">Unidad</th>
                     <th style="padding:0.5rem 0.75rem; text-align:center; color:#64748b; font-weight:600; font-size:0.7rem; text-transform:uppercase;">Cantidad</th>
                     <th style="padding:0.5rem 0.75rem; text-align:right; color:#64748b; font-weight:600; font-size:0.7rem; text-transform:uppercase;">Costo Unit.</th>
                     <th style="padding:0.5rem 0.75rem; text-align:right; color:#64748b; font-weight:600; font-size:0.7rem; text-transform:uppercase;">Subtotal</th>
@@ -1907,7 +1918,7 @@
                 <tbody>${accRows}</tbody>
                 <tfoot>
                   <tr style="background:#0a1a0f; border-top:1px solid #334155;">
-                    <td colspan="3" style="padding:0.6rem 0.75rem; color:#94a3b8; font-weight:600; font-size:0.8rem;">TOTAL ACCESORIOS</td>
+                    <td colspan="4" style="padding:0.6rem 0.75rem; color:#94a3b8; font-weight:600; font-size:0.8rem;">TOTAL ACCESORIOS</td>
                     <td style="padding:0.6rem 0.75rem; text-align:right; color:#34d399; font-weight:800; font-size:0.9rem;">Bs. ${accCost.toFixed(2)}</td>
                   </tr>
                 </tfoot>
@@ -2808,7 +2819,7 @@
       const tallas = rawConsolidadaData.tallas;
       const prods = rawConsolidadaData.data;
 
-      const showSubtotalColumn = ['inventarioUnidades', 'costoInventario', 'precioInventario'].includes(currentExcelConcept);
+      const showSubtotalColumn = conceptoSumaPorPrenda(currentExcelConcept);
 
       const trHead = document.getElementById('tr-consolidada-head');
       trHead.innerHTML = `
@@ -2893,14 +2904,12 @@
             return `<td style="text-align:center;">${getInputHtml(val, '1', `onchange="guardarInventarioMatriz(${p.itemNumero}, '${t.codigo}', this, '${p.productoId}', '${t.id}')"`)}</td>`;
           } else {
             if (val === null || val === undefined || val === 0) return '<td style="text-align:center; color: var(--text-muted);">-</td>';
-            let formattedVal = '-';
-            if ((currentExcelConcept === 'margenConFactura' || currentExcelConcept === 'margenSinFactura')) {
-              formattedVal = `<strong style="color:${getMarginColor(val)}; font-weight:700;">${val.toFixed(1)}%</strong>`;
-            } else if (currentExcelConcept === 'precioInventario') {
-              formattedVal = val.toLocaleString('es-BO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-            } else {
-              formattedVal = val.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            }
+            // El formato lo decide `fmtCeldaConsolidada`, que es el mismo que usa el PDF. Solo el
+            // color del margen se agrega acá, porque en papel no aporta.
+            const texto = fmtCeldaConsolidada(currentExcelConcept, val);
+            const formattedVal = (currentExcelConcept === 'margenConFactura' || currentExcelConcept === 'margenSinFactura')
+              ? `<strong style="color:${getMarginColor(val)}; font-weight:700;">${texto}</strong>`
+              : texto;
             return `<td style="text-align:center;">${formattedVal}</td>`;
           }
         }).join('');
@@ -6109,8 +6118,22 @@
         .replace(/"/g, '&quot;');
     }
 
-    const nBs = (v) => (Number(v) || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const nInt = (v) => (Number(v) || 0).toLocaleString('es-BO');
+    /**
+     * LOS NUMEROS DEL REPORTE SE ESCRIBEN COMO LOS DE LA PANTALLA.
+     *
+     * Estaban en `es-BO` mientras la pantalla usa `en-US`, asi que el MISMO importe salia
+     * `Bs. 106,88` en el PDF y `Bs. 106.88` en la pantalla, y `2.244,48` contra `2,244.48`. Dos
+     * documentos del mismo sistema escribiendo la misma cifra de dos formas es lo que obliga a
+     * revisar a mano si son el mismo numero.
+     *
+     * QUEDA PENDIENTE UNA DECISION MAS GRANDE, y no se toma sola acá: `es-BO` —`1.234,56`— es el
+     * formato correcto para Bolivia y el que usa una factura. Pasar TODO el sistema a ese formato
+     * son 111 lugares con `toFixed(2)` en la pantalla, o sea un cambio deliberado y verificable
+     * aparte. Alinear el reporte a la pantalla es la mitad que se puede hacer sin riesgo hoy, y deja
+     * los dos documentos diciendo exactamente lo mismo.
+     */
+    const nBs = (v) => (Number(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const nInt = (v) => (Number(v) || 0).toLocaleString('en-US');
 
     /** Contexto que encabeza TODO reporte: sin esto una hoja suelta no dice de que es. */
     function contextoReporte(extra) {
@@ -6186,13 +6209,95 @@
      * instantanea de la pagina, y en Chrome eso produce PDFs en blanco de forma
      * intermitente. Queda oculto por CSS y se reemplaza en la proxima emision.
      */
-    function emitirReporte(orientacion, html) {
+    /**
+     * LA ORIENTACION SE MIDE, no se adivina.
+     *
+     * Con `'auto'` se maqueta el MISMO html en las dos hojas y se elige la que necesita menos
+     * reduccion. Es la unica forma de que la hoja siga al contenido: la orientacion buena de una
+     * matriz depende de cuantas tallas tenga el colegio, y eso cambia sin que nadie toque el codigo.
+     *
+     * MEDIDO con dos colegios y 16 tallas: Consolidada 0,62 en vertical contra 0,90 en horizontal;
+     * Multitalla 0,78 contra 1,00; Costos de Produccion 0,83 contra 1,00; Resumen General 0,93
+     * contra 0,79 —o sea que este ultimo SI es vertical—. Elegir a mano acertaba hoy y no hay nada
+     * que lo mantenga acertando cuando el colegio pase a 20 tallas.
+     *
+     * El empate se resuelve a favor de VERTICAL: es la hoja en que se imprime y se archiva por
+     * defecto, asi que solo se pasa a horizontal cuando gana de verdad. El margen de 0,03 evita que
+     * dos corridas con una fila de diferencia salgan en hojas distintas.
+     *
+     * SE MIDE EN EL MISMO CONTENEDOR QUE SE IMPRIME, y no en uno auxiliar. La primera version usaba
+     * un div aparte fuera de la pantalla, y daba OTRO resultado: en la Matriz Consolidada media 0,58
+     * en horizontal contra 0,96 medido en el contenedor real, o sea que elegia vertical una hoja que
+     * entra mucho mejor en horizontal. `cabeAncho` compara contra `clientWidth`, que depende del
+     * bloque que contiene: medir en un contenedor con otras condiciones mide otra cosa.
+     */
+    function elegirOrientacion(hoja, contenido, multipagina) {
+      const medir = multipagina ? ajustarAlAncho : ajustarAUnaPagina;
+      const v = medir(hoja, contenido, 'vertical');
+      const h = medir(hoja, contenido, 'horizontal');
+      return h > v + 0.03 ? 'horizontal' : 'vertical';
+    }
+
+    /**
+     * Ajusta solo el ANCHO y deja que el alto fluya a las paginas que haga falta.
+     *
+     * POR QUE EXISTE. `ajustarAUnaPagina` es lo correcto para un resumen ejecutivo, pero un LISTADO
+     * no es un resumen. Medido: el reporte de Inventario Real con 215 filas entraba en una hoja a
+     * escala 0,42, o sea tipografia de 3,11 pt y filas de 2,17 mm. El minimo legible impreso son
+     * unos 6 pt: esa hoja no se puede leer, y con las 766 filas de los cinco colegios seria peor.
+     *
+     * El propio criterio de este modulo dice que una hoja ilegible no cumple el pedido, solo lo
+     * aparenta. Un listado de inventario de tres hojas es lo normal; una hoja con letra de 3 pt no.
+     *
+     * Se ajusta el ancho igual, y por la misma razon de siempre: si una columna se sale por la
+     * derecha, se imprime cortada.
+     */
+    function ajustarAlAncho(hoja, contenido, orientacion) {
+      const util = _utilPx(orientacion);
+      const anchoCaja = util.ancho - 2;
+
+      const entra = (k) => {
+        contenido.style.width = (anchoCaja / k) + 'px';
+        contenido.style.transform = 'scale(' + k + ')';
+        return contenido.scrollWidth <= contenido.clientWidth;
+      };
+
+      let k = 1;
+      if (!entra(1)) {
+        let lo = ESCALA_MINIMA, hi = 1;
+        for (let i = 0; i < 12; i++) {
+          const mid = (lo + hi) / 2;
+          if (entra(mid)) lo = mid; else hi = mid;
+        }
+        k = lo;
+        entra(k);
+      }
+      hoja.dataset.escala = k.toFixed(3);
+      // El alto se fija al del contenido YA escalado, sin recortarlo: es lo que permite que el
+      // navegador reparta las filas entre paginas en vez de esconder las que sobran.
+      hoja.style.width = util.ancho + 'px';
+      hoja.style.height = (contenido.scrollHeight * k) + 'px';
+      return k;
+    }
+
+    function emitirReporte(orientacion, html, opciones) {
+      const multipagina = !!(opciones && opciones.multipagina);
       let raiz = document.getElementById('rp-root');
       if (!raiz) {
         raiz = document.createElement('div');
         raiz.id = 'rp-root';
         document.body.appendChild(raiz);
       }
+
+      // EL CONTENIDO SE MONTA ANTES DE ELEGIR LA HOJA, porque la eleccion se hace midiendo sobre
+      // este mismo nodo. Ver `elegirOrientacion`.
+      raiz.innerHTML = `<div class="rp-hoja"><div class="rp-fit">${html}</div></div>`;
+      const hoja = raiz.querySelector('.rp-hoja');
+      const fit = raiz.querySelector('.rp-fit');
+
+      // `'auto'` mide y decide. Los reportes de forma fija —una prenda, una talla— siguen pidiendo
+      // la suya explicita, porque su ancho no depende de los datos.
+      if (orientacion === 'auto') orientacion = elegirOrientacion(hoja, fit, multipagina);
 
       let regla = document.getElementById('rp-page-rule');
       if (!regla) {
@@ -6203,12 +6308,13 @@
       const h = HOJA[orientacion];
       regla.textContent = `@page { size: A4 ${orientacion === 'horizontal' ? 'landscape' : 'portrait'}; margin: ${h.margenMm}mm; }`;
 
-      raiz.innerHTML = `<div class="rp-hoja"><div class="rp-fit">${html}</div></div>`;
-      const hoja = raiz.querySelector('.rp-hoja');
-      const fit = raiz.querySelector('.rp-fit');
-
       document.body.classList.add('rp-imprimiendo');
-      const k = ajustarAUnaPagina(hoja, fit, orientacion);
+      raiz.classList.toggle('rp-multipagina', multipagina);
+      // La ultima medicion manda: `elegirOrientacion` dejo el nodo maquetado en la hoja que gano,
+      // pero se vuelve a ajustar para que no dependa del orden en que probo las dos.
+      const k = multipagina
+        ? ajustarAlAncho(hoja, fit, orientacion)
+        : ajustarAUnaPagina(hoja, fit, orientacion);
 
       const limpiar = () => document.body.classList.remove('rp-imprimiendo');
       window.addEventListener('afterprint', limpiar, { once: true });
@@ -6225,7 +6331,7 @@
       alert('No hay datos para exportar en ' + que + '.\n\nRevisá el ámbito seleccionado en el encabezado.');
     }
 
-    /* ---------------- REPORTE 1 · RESUMEN GENERAL (vertical) ---------------- */
+    /* ---------------- REPORTE 1 · RESUMEN GENERAL ---------------- */
     async function reporteResumenGeneral() {
       try {
         const res = await fetch('/api/dashboard-resumen?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam());
@@ -6245,34 +6351,49 @@
 
         const filas = d.prendas.map(p => `
           <tr${p.sinCosteo ? ' class="rp-alerta"' : ''}>
-            <td class="rp-c">${esc(p.itemNumero)}</td>
+            <!-- LA REFERENCIA, no el numero de item global. La pantalla dice CAM-01 y el reporte
+                 decia 1: un reporte que no concuerda con la pantalla de la que salio no se puede
+                 defender delante de nadie. Y el numero global es justo el que hizo que Internacional
+                 SM apareciera como 28 entre las prendas de Cambridge.
+                 NADA DE BACKTICKS ACA: esto vive dentro de un template literal. -->
+            <td class="rp-c">${esc(p.prod || p.itemNumero)}</td>
             <td>${esc(p.descripcion)}</td>
-            <td class="rp-r">${nInt(p.stockTotal)}</td>
-            <td class="rp-r">${nBs(p.costoMin)} – ${nBs(p.costoMax)}</td>
-            <td class="rp-r">${nBs(p.precioMin)} – ${nBs(p.precioMax)}</td>
-            <td class="rp-r">${nBs(p.valorCostoTotalBs)}</td>
-            <td class="rp-r">${nBs(p.valorVentaTotalBs)}</td>
-            <td class="rp-r rp-pos">${nBs(p.gananciaEstimadaBs)}</td>
+            <!-- MISMO PREFIJO Y MISMO GUION QUE LA PANTALLA. El encabezado ya dice (Bs.), asi que
+                 repetirlo en la celda es redundante en los dos lados; lo que no se puede es que en
+                 uno este y en el otro no, porque entonces las dos hojas no se pueden comparar de un
+                 vistazo. Igual el guion: la pantalla usa el corto. -->
+            <td class="rp-r">${nInt(p.stockTotal)} Unid.</td>
+            <td class="rp-r">Bs. ${nBs(p.costoMin)} - ${nBs(p.costoMax)}</td>
+            <td class="rp-r">Bs. ${nBs(p.precioMin)} - ${nBs(p.precioMax)}</td>
+            <td class="rp-r">Bs. ${nBs(p.valorCostoTotalBs)}</td>
+            <td class="rp-r">Bs. ${nBs(p.valorVentaTotalBs)}</td>
+            <td class="rp-r rp-pos">Bs. ${nBs(p.gananciaEstimadaBs)}</td>
             <td class="rp-r">${(Number(p.margenPromedioPct) || 0).toFixed(1)}%</td>
           </tr>`).join('');
 
         const html = `
           ${encabezadoReporte('Resumen Ejecutivo de Costeo y Valorización', `${esc(ctx.ambito)} · Gestión ${esc(d.anio || '')}`, ctx, kpis)}
           <table class="rp-tabla">
+            <!-- LOS MISMOS ROTULOS QUE LA PANTALLA, palabra por palabra.
+                 Seis de los ocho decian otra cosa, y dos de ellos MENTIAN sobre el dato:
+                 la celda trae un rango —63,16 a 126,01— y el encabezado decia
+                 "Costo unit.", que se lee como un valor unico. Un reporte que renombra las
+                 columnas de la pantalla obliga a adivinar si es el mismo numero, y frente a
+                 un banco esa duda vale mas que el ahorro de tres caracteres. -->
             <thead><tr>
-              <th class="rp-c">Prod</th><th>Prenda</th><th class="rp-r">Stock</th>
-              <th class="rp-r">Costo unit. (Bs.)</th><th class="rp-r">Precio venta (Bs.)</th>
-              <th class="rp-r">Inversión (Bs.)</th><th class="rp-r">Venta proy. (Bs.)</th>
-              <th class="rp-r">Ganancia (Bs.)</th><th class="rp-r">Margen</th>
+              <th class="rp-c">Prod</th><th>Prenda</th><th class="rp-r">Stock Total (Unid.)</th>
+              <th class="rp-r">Rango Costo Prod. (Bs.)</th><th class="rp-r">Rango Precio Venta (Bs.)</th>
+              <th class="rp-r">Valor Inv. Costo (Bs.)</th><th class="rp-r">Valor Inv. Venta (Bs.)</th>
+              <th class="rp-r">Ganancia Estimada (Bs.)</th><th class="rp-r">Margen</th>
             </tr></thead>
             <tbody>${filas}</tbody>
             <tfoot><tr>
               <td colspan="2">TOTAL · ${nInt(d.productosCount)} prendas</td>
-              <td class="rp-r">${nInt(d.totalStockUnidades)}</td>
+              <td class="rp-r">${nInt(d.totalStockUnidades)} Unid.</td>
               <td colspan="2"></td>
-              <td class="rp-r">${nBs(d.totalValorCostoBs)}</td>
-              <td class="rp-r">${nBs(d.totalValorVentaBs)}</td>
-              <td class="rp-r rp-pos">${nBs(d.gananciaTotalBs)}</td>
+              <td class="rp-r">Bs. ${nBs(d.totalValorCostoBs)}</td>
+              <td class="rp-r">Bs. ${nBs(d.totalValorVentaBs)}</td>
+              <td class="rp-r rp-pos">Bs. ${nBs(d.gananciaTotalBs)}</td>
               <td class="rp-r">${(Number(d.margenPromedioGlobalPct) || 0).toFixed(1)}%</td>
             </tr></tfoot>
           </table>
@@ -6281,11 +6402,13 @@
             ? `Precios netos de un descuento comercial del ${(Number(d.descuentoSinFacturaPct) || 10).toFixed(0)}%.`
             : 'Precios de lista.')}`;
 
-        emitirReporte('vertical', html);
+        // `auto`: nueve columnas y tantas filas como prendas tenga el colegio. Medido con dos
+        // colegios da vertical, y si crece la va a seguir eligiendo por si misma.
+        emitirReporte('auto', html);
       } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
     }
 
-    /* ---------------- REPORTE 2 · COSTEO MULTITALLA (horizontal) ---------------- */
+    /* ---------------- REPORTE 2 · COSTEO MULTITALLA ---------------- */
     async function reporteMultitalla() {
       try {
         const sel = document.getElementById('select-matriz-producto');
@@ -6313,7 +6436,8 @@
           { titulo: 'Margen promedio', valor: margenProm.toFixed(1) + '%', destacado: true },
         ];
 
-        const cols = t.map(x => `<th class="rp-r">${esc(x.tallaCodigo)}</th>`).join('');
+        // Dos digitos, igual que en la pantalla: 02 y no 2. El reporte decia 2 y la pantalla 02.
+        const cols = t.map(x => `<th class="rp-r">${esc(fmtTalla(x.tallaCodigo))}</th>`).join('');
         const fila = (etiqueta, get, clase) => `
           <tr class="${clase || ''}">
             <td class="rp-concepto">${esc(etiqueta)}</td>
@@ -6327,32 +6451,37 @@
         const html = `
           ${encabezadoReporte(
             'Costeo Multitalla · ' + j.producto.descripcion,
-            'Ítem #' + j.producto.itemNumero + ' · ' + (j.producto.modoCosteo === 'adquirido' ? 'Prenda adquirida / semiterminada' : 'Confección propia'),
+            (j.producto.prod || ('Ítem #' + j.producto.itemNumero)) + ' · ' + (j.producto.modoCosteo === 'adquirido' ? 'Prenda adquirida / semiterminada' : 'Confección propia'),
             ctx, kpis)}
           <table class="rp-tabla rp-matriz">
             <thead><tr><th class="rp-concepto">Concepto / Talla</th>${cols}</tr></thead>
             <tbody>
-              ${seccion('Estructura del costo unitario de producción (neto, sin IVA)')}
+              <!-- LA FILA Cod. POS, que la pantalla muestra primera y el reporte no traia. Es el
+                   dato con el que se vuelve al punto de venta, y era exactamente el tipo de dato de
+                   pantalla que no se estaba exportando. -->
+              ${fila('Cod. POS', x => x.codigoPos ? esc(x.codigoPos) : '—', 'rp-tenue')}
+              ${seccion('Estructura del Costo Unitario de Producción (Neto)')}
               ${fila('Peso con merma (g)', x => x.pesoConMerma ? (Number(x.pesoConMerma)).toFixed(1) : '—')}
               ${fila('Costo de tela', x => num(x.costoTela))}
-              ${fila('Costo de accesorios', x => num(x.costoAccesorios))}
-              ${fila('Mano de obra directa', x => num(x.costoManoObra))}
-              ${fila('Costos indirectos prorrateados', x => num(x.costoIndirecto))}
-              ${fila('Costo unitario neto', x => num(x.costoUnitarioNeto), 'rp-total')}
-              ${seccion(conF ? 'Precio al público (precio de lista)' : 'Precio al público (lista − ' + descPct.toFixed(0) + '% descuento comercial)')}
-              ${fila('Precio de venta (Bs.)', x => num(x.precioVenta), 'rp-precio')}
-              ${conF ? '' : fila('Precio de lista (referencia)', x => num(x.precioLista), 'rp-tenue')}
-              ${seccion('Resultado por unidad')}
-              ${fila('Ingreso neto efectivo', x => num(x.ingresoNetoEfectivo))}
-              ${conF ? fila('Utilidad por unidad (Bs.)', x => num(x.utilidadConFactura)) : fila('Utilidad por unidad (Bs.)', x => num(x.utilidadSinFactura))}
-              ${conF ? fila('Margen de ganancia', x => pct(x.margenConFactura), 'rp-total') : fila('Margen de ganancia', x => pct(x.margenSinFactura), 'rp-total')}
+              ${fila('Costo accesorios', x => num(x.costoAccesorios))}
+              ${fila('Mano de Obra Directa', x => num(x.costoManoObra))}
+              ${fila('Costos Indirectos Prorrateados', x => num(x.costoIndirecto))}
+              ${fila('Costo Unitario Neto', x => num(x.costoUnitarioNeto), 'rp-total')}
+              ${seccion(conF ? 'Precio al Público (precio de lista)' : 'Precio al Público (lista − ' + descPct.toFixed(0) + '% descuento comercial)')}
+              ${fila('Precio de Venta al Público (Bs.)', x => num(x.precioVenta), 'rp-precio')}
+              ${conF ? '' : fila('Precio de Lista (referencia)', x => num(x.precioLista), 'rp-tenue')}
+              ${seccion('Resultado Comercial Efectivo')}
+              ${fila('Ingreso Neto Efectivo', x => num(x.ingresoNetoEfectivo))}
+              ${conF ? fila('Utilidad Neta (Bs.)', x => num(x.utilidadConFactura)) : fila('Utilidad Neta (Bs.)', x => num(x.utilidadSinFactura))}
+              ${conF ? fila('Margen de Ganancia (%)', x => pct(x.margenConFactura), 'rp-total') : fila('Margen de Ganancia (%)', x => pct(x.margenSinFactura), 'rp-total')}
               ${seccion('Existencias')}
               ${fila('Se ofrece en esta talla', x => x.seOfrece ? 'Sí' : '—', 'rp-tenue')}
             </tbody>
           </table>
           ${pieReporte((conF ? '' : `Precios netos de un descuento comercial del ${descPct.toFixed(0)}%. `) + 'Las tallas sin precio vigente no se ofrecen y se muestran sin costo prorrateado.')}`;
 
-        emitirReporte('horizontal', html);
+        // `auto`: el ancho es una columna por talla, o sea que lo decide el colegio.
+        emitirReporte('auto', html);
       } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
     }
 
@@ -6387,9 +6516,9 @@
           <tr>
             <td>${esc(a.nombre)}</td>
             <td class="rp-c">${esc(a.unidadCompra || '—')}</td>
-            <td class="rp-r">${nBs(a.costoUnitarioBs)}</td>
-            <td class="rp-r">${(Number(a.cantidad) || 0).toFixed(2)}</td>
-            <td class="rp-r">${nBs(a.costoTotalBs)}</td>
+            <td class="rp-r">${a.cantidad}</td>
+            <td class="rp-r">Bs. ${nBs(a.costoUnitarioBs)}</td>
+            <td class="rp-r">Bs. ${nBs(a.costoTotalBs)}</td>
           </tr>`).join('')
           : '<tr><td colspan="5" class="rp-c rp-tenue">Sin insumos cargados en la receta.</td></tr>';
 
@@ -6411,7 +6540,7 @@
 
         const html = `
           ${encabezadoReporte('Costeo Individual · ' + p.descripcion,
-            'Ítem #' + p.itemNumero + ' · Talla ' + tallaTxt + (conF ? '' : ' · precios netos de descuento comercial'), ctx, kpis)}
+            (p.prod || ('Ítem #' + p.itemNumero)) + ' · Talla ' + fmtTalla(tallaTxt) + (conF ? '' : ' · precios netos de descuento comercial'), ctx, kpis)}
           <div class="rp-dos">
             <section>
               <h2 class="rp-h2">Composición del costo unitario</h2>
@@ -6443,7 +6572,12 @@
             <section>
               <h2 class="rp-h2">Insumos intervinientes</h2>
               <table class="rp-tabla">
-                <thead><tr><th>Insumo</th><th class="rp-c">Unidad</th><th class="rp-r">Costo un.</th><th class="rp-r">Cant.</th><th class="rp-r">Total</th></tr></thead>
+                <!-- Los mismos rotulos y el mismo ORDEN que la pantalla. Decia
+                     Insumo / Unidad / Costo un. / Cant. / Total contra
+                     Accesorio / Unidad / Cantidad / Costo Unit. / Subtotal: cinco nombres distintos
+                     y dos columnas cruzadas de lugar, que es peor que un nombre distinto porque se
+                     lee la cantidad creyendo que es el costo. -->
+                <thead><tr><th>Accesorio</th><th class="rp-c">Unidad</th><th class="rp-r">Cantidad</th><th class="rp-r">Costo Unit.</th><th class="rp-r">Subtotal</th></tr></thead>
                 <tbody>${filasAcc}</tbody>
                 <tfoot><tr><td colspan="4">Subtotal insumos</td><td class="rp-r">${nBs(p.subtotalAccesoriosBs)}</td></tr></tfoot>
               </table>
@@ -6457,7 +6591,7 @@
       } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
     }
 
-    /* ---------------- REPORTE 4 · INVENTARIO REAL (vertical) ---------------- */
+    /* ---------------- REPORTE 4 · INVENTARIO REAL ---------------- */
     /**
      * CONSOLIDADO POR PRENDA, y no fila por fila.
      *
@@ -6474,8 +6608,27 @@
     async function reporteInventario() {
       try {
         const j = await (await fetch('/api/inventario/stock?colegioId=' + colegioFiltroActual + getModalidadFQueryParam())).json();
-        const filas = j.data || [];
-        if (!filas.length) return _sinDatos('Inventario Real');
+        const todas = j.data || [];
+        if (!todas.length) return _sinDatos('Inventario Real');
+
+        // SE EXPORTA LO QUE SE VE, INCLUIDO EL FILTRO DEL BUSCADOR.
+        //
+        // Si hay algo escrito en el buscador, la pantalla muestra un subconjunto, y un PDF que
+        // ignore el filtro no es "el reporte de esta pantalla": es otro documento con el mismo
+        // titulo. El encabezado DICE que esta filtrado y por que texto, para que nadie lea 12
+        // filas creyendo que es todo el inventario.
+        const q = (document.getElementById('inv-buscar') || {}).value || '';
+        const filtrado = q.trim() !== '';
+        const filas = filtrado
+          ? todas.filter(i => {
+              const t = normalizarBusqueda(q);
+              const cod = normalizarBusqueda(i.codigoPos || '');
+              return cod.includes(t) || cod.split('-')[0] === t
+                || normalizarBusqueda(i.producto || '').includes(t)
+                || normalizarBusqueda('talla ' + (i.talla || '')).includes(t);
+            })
+          : todas;
+        if (!filas.length) return _sinDatos('Inventario Real (con el filtro puesto)');
 
         const ctx = contextoReporte();
 
@@ -6519,56 +6672,57 @@
             destacado: true },
         ];
 
-        const cuerpo = grupos.map(g => {
-          // MARGEN SOBRE LA VENTA, no sobre el costo. Dividir por el costo da un
-          // markup: para el Short daba 209,7%, un numero que en una hoja que va a un
-          // banco se lee como un error de calculo. Y ademas contradecia al resto del
-          // sistema, donde `margen` es utilidad sobre el ingreso cobrado — la misma
-          // definicion que usa costoTotal.service.ts. Dos definiciones del mismo
-          // nombre en dos pantallas es como se pierde la confianza en un reporte.
-          const margen = g.precio > 0 ? ((g.precio - g.costo) / g.precio) * 100 : 0;
-          return `
-            <tr${g.sinCosteo ? ' class="rp-alerta"' : ''}>
-              <td class="rp-c">${esc(g.item || '—')}</td>
-              <td>${esc(g.nombre)}</td>
-              <td class="rp-c">${g.tallas}</td>
-              <td class="rp-r">${nInt(g.unidades)}</td>
-              <td class="rp-r">${rango(g.cMin, g.cMax)}</td>
-              <td class="rp-r">${rango(g.pMin, g.pMax)}</td>
-              <td class="rp-r">${nBs(g.costo)}</td>
-              <td class="rp-r">${nBs(g.precio)}</td>
-              <td class="rp-r rp-pos">${margen.toFixed(1)}%</td>
-            </tr>`;
-        }).join('');
+        // UNA FILA POR PRENDA MAS TALLA, LAS MISMAS SIETE COLUMNAS DE LA PANTALLA.
+        //
+        // Antes este reporte agrupaba por prenda, y medido contra el Resumen General resultaba ser
+        // CASI LA MISMA TABLA: rangos de costo y precio, valor de inventario y margen, prenda por
+        // prenda. O sea que habia dos reportes contando lo mismo y NINGUNO mostraba lo que muestra
+        // Inventario Real, que es la unica pantalla donde vive el codigo del POS.
+        //
+        // El codigo es el dato con el que se vuelve al punto de venta a conciliar, y sin el la hoja
+        // no sirve para eso. Con muchas filas el reporte usa varias paginas: un listado de
+        // inventario de varias hojas es normal, y preferible a una hoja que no dice lo que hace
+        // falta.
+        const cuerpo = filas.map(i => `
+            <tr${i.sinCosteo ? ' class="rp-alerta"' : ''}>
+              <td class="rp-c">${esc(i.codigoPos || '—')}</td>
+              <td>${esc(i.producto || '-')}</td>
+              <td class="rp-c">Talla ${esc(fmtTalla(i.talla))}</td>
+              <td class="rp-r">${nInt(i.cantidad)} Unid.</td>
+              <td class="rp-r">Bs. ${nBs(i.costoUnitario)}</td>
+              <td class="rp-r">Bs. ${nBs(i.precioVenta)}</td>
+              <td class="rp-r">Bs. ${nBs(i.valorTotalStock)}</td>
+            </tr>`).join('');
 
         const html = `
           ${encabezadoReporte(
-            'Inventario Real · Costo y Precio de Existencias',
-            'Valorización consolidada por prenda · solo referencias con stock físico mayor a cero'
+            'Stock e Inventario por Colegio',
+            'Solo artículos con disponible mayor a cero'
+              + (filtrado ? ` · FILTRADO por "${esc(q.trim())}": ${nInt(filas.length)} de ${nInt(todas.length)} filas` : '')
               + (modalidadFActual ? '' : ` · precios netos de descuento comercial del ${(Number(j.descuentoSinFacturaPct) || 10).toFixed(0)}%`),
             ctx, kpis)}
+          <!-- LAS MISMAS SIETE COLUMNAS DE LA PANTALLA, con los mismos rotulos. La primera es el
+               CODIGO DEL POS y no la referencia: acá una fila es una prenda con su talla, que es
+               exactamente lo que el código identifica. -->
           <table class="rp-tabla rp-densa">
             <thead><tr>
-              <th class="rp-c">Prod</th><th>Prenda</th><th class="rp-c">Tallas</th>
-              <th class="rp-r">Stock (u)</th><th class="rp-r">Costo unit. (Bs.)</th>
-              <th class="rp-r">Precio venta (Bs.)</th>
-              <th class="rp-r">Costo inventario</th><th class="rp-r">Precio inventario</th>
-              <th class="rp-r">Margen s/ venta</th>
+              <th class="rp-c">Código</th><th>Prenda</th><th class="rp-c">Talla</th>
+              <th class="rp-r">Stock Físico</th><th class="rp-r">Costo Unit. (Bs.)</th>
+              <th class="rp-r">Precio Venta (Bs.)</th><th class="rp-r">Valor Inv. (Bs.)</th>
             </tr></thead>
             <tbody>${cuerpo}</tbody>
             <tfoot><tr>
-              <td colspan="2">TOTAL · ${nInt(grupos.length)} prendas</td>
-              <td class="rp-c">${nInt(filas.length)}</td>
-              <td class="rp-r">${nInt(totUnid)}</td>
+              <td colspan="3">TOTAL · ${nInt(filas.length)} filas · ${nInt(grupos.length)} prendas</td>
+              <td class="rp-r">${nInt(totUnid)} Unid.</td>
               <td colspan="2"></td>
-              <td class="rp-r">${nBs(totCosto)}</td>
-              <td class="rp-r">${nBs(totPrecio)}</td>
-              <td class="rp-r rp-pos">${totPrecio > 0 ? (((totPrecio - totCosto) / totPrecio) * 100).toFixed(1) : '0.0'}%</td>
+              <td class="rp-r">Bs. ${nBs(totCosto)}</td>
             </tr></tfoot>
           </table>
-          ${pieReporte('El inventario se valoriza al costo neto de fabricación vigente, no al costo histórico de adquisición. El detalle por talla está en el reporte de Matriz Consolidada.')}`;
+          ${pieReporte('El inventario se valoriza al costo neto de fabricación vigente, no al costo histórico de adquisición. La vista por prenda —con rangos de costo y precio— está en el Resumen General.')}`;
 
-        emitirReporte('vertical', html);
+        // MULTIPAGINA: es un LISTADO, no un resumen. Con 215 filas la version de una hoja daba
+        // escala 0,42, o sea 3,11 pt de tipografia y filas de 2,17 mm: ilegible impreso.
+        emitirReporte('auto', html, { multipagina: true });
       } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
     }
 
@@ -6671,9 +6825,6 @@
 
         const maxCols = Math.max(...partes.map((p) => p.cols));
         const totalFilas = partes.reduce((s, p) => s + p.filas, 0);
-        // Mas de ocho columnas no entran comodas en vertical. La matriz de pesos por
-        // talla tiene diecisiete.
-        const orientacion = maxCols > 8 ? 'horizontal' : 'vertical';
 
         const ctx = contextoReporte();
         const nombreHoja = HOJAS_PRODUCCION[currentInputConcept] || currentInputConcept;
@@ -6693,17 +6844,61 @@
           ${partes.map((p) => p.html).join('')}
           ${pieReporte('Datos de entrada del motor de costeo.')}`;
 
-        emitirReporte(orientacion, html);
+        // `auto` en vez del recuento de columnas.
+        //
+        // La regla anterior era "mas de ocho columnas, horizontal". Acertaba, pero contaba columnas
+        // en vez de medir: ocho columnas de texto largo pueden no entrar y doce de dos digitos si.
+        // Medido en esta hoja: 10 columnas, 0,83 en vertical contra 1,00 en horizontal. La medicion
+        // llega a la misma conclusion y encima sigue valiendo cuando cambien los datos.
+        emitirReporte('auto', html);
       } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
     }
 
-    /* ---------------- REPORTE 5 · MATRICES CONSOLIDADAS (horizontal) ---------------- */
+    /* ---------------- REPORTE 5 · MATRICES CONSOLIDADAS ---------------- */
     /**
      * Cubre los DIEZ conceptos de la pestaña con un solo reporte, incluidos Costo
      * Inventario y Precio Inventario: es la misma grilla con otra celda, asi que
      * cinco reportes casi identicos serian cinco lugares donde corregir el mismo
      * encabezado.
      */
+    /**
+     * QUE CONCEPTOS SE PUEDEN SUMAR A LO LARGO DE LAS TALLAS. Una sola casa.
+     *
+     * La pantalla usaba esta lista de tres y el reporte usaba `!cfg.pct`, o sea ocho. Con eso el PDF
+     * imprimia un "Subtotal" para el Costo Unitario Neto: la suma del costo de la talla 02 mas el de
+     * la 04 mas el de la 50, un numero que no significa nada y que la pantalla escondia a proposito.
+     *
+     * Solo suman los conceptos PONDERADOS POR EXISTENCIAS —unidades, costo y precio del
+     * inventario—, porque ahi cada celda ya es una cantidad total y no un valor por unidad.
+     *
+     * Estaba escrita dos veces con dos reglas distintas, que es como la pantalla y su propio reporte
+     * terminan contando cosas diferentes.
+     */
+    const CONCEPTOS_SUMABLES = ['inventarioUnidades', 'costoInventario', 'precioInventario'];
+    function conceptoSumaPorPrenda(concepto) {
+      return CONCEPTOS_SUMABLES.includes(concepto);
+    }
+
+    /**
+     * COMO SE ESCRIBE UNA CELDA DE LA MATRIZ CONSOLIDADA. Una sola casa para la pantalla y su PDF.
+     *
+     * La pantalla usaba `es-BO` —48,11— y el reporte `es-BO` con otra cantidad de decimales, y
+     * despues `en-US` —48.11—. El mismo costo escrito de dos formas en dos hojas del mismo sistema.
+     *
+     * `precioInventario` va con UN decimal y el resto con dos: no es un descuido, es lo que la
+     * pantalla hace, y el reporte tiene que hacer lo mismo o los dos documentos no se pueden
+     * comparar celda por celda.
+     */
+    function fmtCeldaConsolidada(concepto, val) {
+      if (val === null || val === undefined || val === 0) return '-';
+      if (concepto === 'margenConFactura' || concepto === 'margenSinFactura') {
+        return Number(val).toFixed(1) + '%';
+      }
+      if (concepto === 'inventarioUnidades') return Number(val).toLocaleString('es-BO');
+      const dec = concepto === 'precioInventario' ? 1 : 2;
+      return Number(val).toLocaleString('es-BO', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    }
+
     const CONCEPTOS_RP = {
       costoBruto:         { t: 'Costo Directo Total',            money: true },
       precioVenta:        { t: 'Precio de Venta al Público',     money: true },
@@ -6743,27 +6938,41 @@
         const tallas = j.tallas || [];
         const ctx = contextoReporte();
 
-        const val = (celda) => {
-          const v = Number(celda ? celda[currentExcelConcept] : 0) || 0;
-          if (!v) return '—';
-          if (cfg.entero) return nInt(v);
-          if (cfg.pct) return v.toFixed(1) + '%';
-          return nBs(v);
-        };
+        // EL MISMO FORMATEADOR QUE LA PANTALLA. Ver `fmtCeldaConsolidada`: la pantalla escribia
+        // 48,11 y el reporte 48.11 para el mismo costo.
+        const val = (celda) => fmtCeldaConsolidada(currentExcelConcept, Number(celda ? celda[currentExcelConcept] : 0) || 0);
         const bruto = (celda) => Number(celda ? celda[currentExcelConcept] : 0) || 0;
 
-        // El subtotal solo tiene sentido en los conceptos que SUMAN. Promediar un
-        // margen por talla y llamarlo "subtotal" seria inventar un numero, que es
-        // exactamente lo que este proyecto saco del dashboard con la Tasa Promedio.
-        const sumable = !cfg.pct;
+        // LA MISMA REGLA QUE LA PANTALLA. Ver `conceptoSumaPorPrenda`: era `!cfg.pct`, que dejaba
+        // sumar el Costo Unitario Neto a lo largo de las tallas —sumar el costo de la talla 02 con el
+        // de la 50— y la pantalla esa columna la escondia.
+        const sumable = conceptoSumaPorPrenda(currentExcelConcept);
 
         let granTotal = 0;
+        // LAS FILAS SEPARADORAS DE COLEGIO, que la pantalla muestra y el reporte no traia.
+        //
+        // Sin ellas, en TODA LA EMPRESA la hoja es una lista de prendas sin decir de quien es cada
+        // una. La referencia lo insinua —CAM contra ISM— pero eso obliga a conocer las abreviaturas,
+        // y quien lee el PDF no las conoce.
+        const anchoRp = 2 + tallas.length + 1;
+        // La MISMA condicion que la pantalla: solo cuando hay mas de un colegio en la hoja. Con un
+        // colegio solo, una banda repitiendo su nombre en cada pagina es ruido.
+        const colegiosEnHoja = [...new Set(j.data.map(x => String(x.colegioId ?? '')))].filter(Boolean);
+        const mostrarSepRp = colegiosEnHoja.length > 1;
+        let colegioPrevio = null;
         const cuerpo = j.data.map(row => {
+          let separadora = '';
+          const cid = String(row.colegioId ?? '');
+          if (mostrarSepRp && cid !== colegioPrevio) {
+            colegioPrevio = cid;
+            const cuantas = j.data.filter(x => String(x.colegioId ?? '') === cid).length;
+            separadora = `<tr class="rp-seccion"><td colspan="${anchoRp}">${esc(row.colegioNombre || 'Sin colegio')} · ${cuantas} prenda(s)</td></tr>`;
+          }
           const sub = tallas.reduce((s, t) => s + bruto(row.tallas[t.codigo]), 0);
           granTotal += sub;
-          return `
+          return separadora + `
             <tr>
-              <td class="rp-c">${esc(row.itemNumero)}</td>
+              <td class="rp-c">${esc(row.prod || row.itemNumero)}</td>
               <td class="rp-desc">${esc(row.descripcion)}${
                 // EN LA HOJA TAMBIEN, y con mas razon que en pantalla: un total impreso para
                 // un banco que incluye prendas costeadas de menos es un numero correcto
@@ -6774,13 +6983,13 @@
                   : ''
               }</td>
               ${tallas.map(t => `<td class="rp-r">${val(row.tallas[t.codigo])}</td>`).join('')}
-              <td class="rp-r rp-total-col">${sumable ? (cfg.entero ? nInt(sub) : nBs(sub)) : '—'}</td>
+              <td class="rp-r rp-total-col">${sumable ? fmtCeldaConsolidada(currentExcelConcept, sub) : ''}</td>
             </tr>`;
         }).join('');
 
         const totalesTalla = tallas.map(t => {
           const s = j.data.reduce((a, row) => a + bruto(row.tallas[t.codigo]), 0);
-          return `<td class="rp-r">${sumable ? (cfg.entero ? nInt(s) : nBs(s)) : '—'}</td>`;
+          return `<td class="rp-r">${sumable ? fmtCeldaConsolidada(currentExcelConcept, s) : '—'}</td>`;
         }).join('');
 
         // Si hay prendas con el costo subestimado, el ENCABEZADO lo dice. Un total que las
@@ -6802,18 +7011,20 @@
             <thead><tr>
               <th class="rp-c">Prod</th><th class="rp-desc">Prenda</th>
               ${tallas.map(t => `<th class="rp-r">${esc(fmtTalla(t.codigo))}</th>`).join('')}
-              <th class="rp-r rp-total-col">Subtotal</th>
+              <th class="rp-r rp-total-col">${sumable ? (currentExcelConcept === 'inventarioUnidades' ? 'SUBTOTAL' : 'SUBTOTAL Bs') : ''}</th>
             </tr></thead>
             <tbody>${cuerpo}</tbody>
             <tfoot><tr>
               <td colspan="2">TOTAL POR TALLA</td>
               ${totalesTalla}
-              <td class="rp-r rp-total-col">${sumable ? (cfg.entero ? nInt(granTotal) : nBs(granTotal)) : '—'}</td>
+              <td class="rp-r rp-total-col">${sumable ? fmtCeldaConsolidada(currentExcelConcept, granTotal) : ''}</td>
             </tr></tfoot>
           </table>
           ${pieReporte(sumable ? '' : 'Los márgenes son porcentajes por celda: no se suman ni se promedian en los subtotales.')}`;
 
-        emitirReporte('horizontal', html);
+        // `auto`: una columna por talla mas el subtotal. Con 16 tallas da horizontal; con tres
+        // colegios chicos podria entrar en vertical, y conviene que lo mida.
+        emitirReporte('auto', html);
       } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
     }
 

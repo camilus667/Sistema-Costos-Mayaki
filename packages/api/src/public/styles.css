@@ -1126,6 +1126,16 @@ footer {
         position: static !important; left: auto !important; top: auto !important;
       }
 
+      /* MODO MULTIPAGINA. Un listado se reparte entre hojas en vez de aplastarse en una.
+         `overflow: visible` es lo que lo permite: `.rp-hoja` recorta por defecto, que es
+         correcto para una hoja unica y esconde las filas que sobran en un listado.
+         El encabezado se repite en cada pagina con `table-header-group`, y las filas no se
+         parten al medio. */
+      #rp-root.rp-multipagina .rp-hoja { overflow: visible !important; height: auto !important; }
+      #rp-root.rp-multipagina thead { display: table-header-group; }
+      #rp-root.rp-multipagina tr { break-inside: avoid; page-break-inside: avoid; }
+      #rp-root.rp-multipagina tfoot { display: table-row-group; }
+
       /* Sin esto Chrome descarta los fondos de las bandas de sección y de la fila
          de totales, que son lo que hace legible una tabla de 19 columnas. */
       #rp-root, #rp-root * {
