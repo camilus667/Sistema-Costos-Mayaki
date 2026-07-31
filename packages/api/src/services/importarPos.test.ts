@@ -14,6 +14,7 @@ import {
   sugerenciaDeColegio,
   normalizarAbreviatura,
   tallaDeVariante,
+  descubrirColegiosDelArchivo,
 } from './importarPos.service';
 
 /**
@@ -446,5 +447,101 @@ describe('tallaDeVariante', () => {
     expect(tallaDeVariante('')).toBe('');
     expect(tallaDeVariante(null)).toBe('');
     expect(tallaDeVariante(undefined)).toBe('');
+  });
+});
+
+describe('descubrirColegiosDelArchivo', () => {
+  // Este es el arreglo del problema real: `CATEGORIAS_POS` es un mapa fijo con cinco categorias
+  // tecleadas a mano, asi que un export con MAS colegios los descartaba en silencio. Ahora los
+  // colegios salen del archivo.
+  const fila = (categoria: string, codigo: string) => ({ categoria, codigo } as any);
+
+  it('reproduce las cinco parejas del export real, con 100% de cobertura', () => {
+    // MEDIDO sobre el export: 297 cc, 166 IntlSM, 126 EO, 95 InfSM, 48 JS.
+    const filas = [
+      ...Array(297).fill(0).map((_, i) => fila('C Cambridge', `${i}-cc`)),
+      ...Array(166).fill(0).map((_, i) => fila('C Intl. San Marcos', `${i}-IntlSM`)),
+      ...Array(48).fill(0).map((_, i) => fila('C Saint Jude', `${i}-JS`)),
+    ];
+    const d = descubrirColegiosDelArchivo(filas);
+    expect(d.map((x) => [x.categoria, x.sufijo, x.filas])).toEqual([
+      ['C Cambridge', 'cc', 297],
+      ['C Intl. San Marcos', 'IntlSM', 166],
+      ['C Saint Jude', 'JS', 48],
+    ]);
+    expect(d.every((x) => x.cobertura === 1 && x.esColegio)).toBe(true);
+  });
+
+  it('DESCUBRE un colegio que no esta en el mapa fijo: es el bug que arregla', () => {
+    // Con el mapa fijo, esta categoria no existia y sus filas se descartaban.
+    const d = descubrirColegiosDelArchivo([
+      fila('C Colegio Nuevo', '001-CN'),
+      fila('C Colegio Nuevo', '002-CN'),
+    ]);
+    expect(d).toHaveLength(1);
+    expect(d[0].sufijo).toBe('CN');
+    expect(d[0].esColegio).toBe(true);
+  });
+
+  it('General y Empresas quedan fuera SIN estar en ninguna lista', () => {
+    // Se descartan porque sus codigos no llevan sufijo, no porque alguien escribio sus nombres.
+    // Eso es lo que hace que la regla sirva para un archivo con cualquier cantidad de colegios.
+    const d = descubrirColegiosDelArchivo([
+      fila('General', '001'), fila('General', '002'),
+      fila('Empresas', '003'),
+      fila('C Cambridge', '004-cc'),
+    ]);
+    const porCat = new Map(d.map((x) => [x.categoria, x]));
+    expect(porCat.get('General')!.esColegio).toBe(false);
+    expect(porCat.get('Empresas')!.esColegio).toBe(false);
+    expect(porCat.get('C Cambridge')!.esColegio).toBe(true);
+  });
+
+  it('un sufijo raro dentro de una categoria sana se REPORTA, no se ignora', () => {
+    // Caso real: `General` tiene 19 filas sin sufijo y una con `vUuYlnh`. Un codigo asi es un error
+    // de carga del POS, y verlo importa mas que descartarlo.
+    const d = descubrirColegiosDelArchivo([
+      ...Array(19).fill(0).map((_, i) => fila('General', `${i}`)),
+      fila('General', '021-vUuYlnh'),
+    ]);
+    expect(d[0].esColegio).toBe(false);
+    expect(d[0].minoritarios).toEqual([{ sufijo: 'vUuYlnh', filas: 1 }]);
+  });
+
+  it('el sufijo DOMINANTE gana, no el primero que aparece', () => {
+    // Si el primero ganara, una fila mal cargada al principio decidiria el colegio de las 300
+    // siguientes.
+    const d = descubrirColegiosDelArchivo([
+      fila('C Cambridge', '001-XX'),
+      ...Array(50).fill(0).map((_, i) => fila('C Cambridge', `${i}-cc`)),
+    ]);
+    expect(d[0].sufijo).toBe('cc');
+    expect(d[0].minoritarios).toEqual([{ sufijo: 'XX', filas: 1 }]);
+  });
+
+  it('ordena por cantidad de filas: el colegio que mas aporta primero', () => {
+    const d = descubrirColegiosDelArchivo([
+      fila('Chico', '1-A'),
+      fila('Grande', '2-B'), fila('Grande', '3-B'), fila('Grande', '4-B'),
+    ]);
+    expect(d.map((x) => x.categoria)).toEqual(['Grande', 'Chico']);
+  });
+
+  it('la cobertura dice cuanta confianza hay en el sufijo', () => {
+    const d = descubrirColegiosDelArchivo([
+      fila('X', '1-A'), fila('X', '2-A'), fila('X', '3-A'), fila('X', '4-B'),
+    ]);
+    expect(d[0].cobertura).toBeCloseTo(0.75, 6);
+  });
+
+  it('salta filas sin categoria en vez de agruparlas juntas', () => {
+    // Agruparlas bajo la clave vacia inventaria un colegio que no existe.
+    const d = descubrirColegiosDelArchivo([fila('', '1-A'), fila('  ', '2-A'), fila('X', '3-A')]);
+    expect(d.map((x) => x.categoria)).toEqual(['X']);
+  });
+
+  it('no revienta con lista vacia ni con nulo', () => {
+    expect(descubrirColegiosDelArchivo([])).toEqual([]);
+    expect(descubrirColegiosDelArchivo(null as any)).toEqual([]);
   });
 });

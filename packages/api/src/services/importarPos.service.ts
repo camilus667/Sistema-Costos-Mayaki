@@ -62,7 +62,82 @@ const ENCABEZADOS_ESPERADOS: Record<number, string> = {
  *   General    la fila PADRE del producto en el POS. No tiene variante ni colegio.
  *   Empresas   categoria que no corresponde a ningun colegio.
  */
+/**
+ * UBICA LAS COLUMNAS POR SU NOMBRE, no por su posicion.
+ *
+ * ESTE ERA EL BUG. Los indices `COL` estan fijos —C, E, H, K, T, AG— porque asi salia el export que
+ * se uso para construir el importador. La version anterior COMPARABA los encabezados y, cuando no
+ * coincidian, empujaba un aviso... y despues leia por el indice fijo igual. Con un export que trae
+ * otra cantidad de columnas —mas sucursales, otro orden— eso significa importar el contenido de la
+ * columna equivocada: el precio sale de donde esta el stock, la categoria de donde esta una imagen.
+ * Desde la pantalla se ve como "no pudo leer el archivo".
+ *
+ * Buscar por nombre resuelve el caso general: el export puede tener las columnas donde quiera.
+ *
+ * SI FALTA UN NOMBRE ES UN ERROR DURO, no un aviso. Leer por un indice adivinado es peor que no
+ * leer: deja precios plausibles en las prendas equivocadas, y eso no se nota hasta que alguien
+ * compara contra el POS.
+ *
+ * La comparacion normaliza espacios, mayusculas y acentos, porque `Categorías` y `CATEGORIAS` son
+ * la misma columna y un acento de diferencia no es un cambio de formato.
+ */
+export interface UbicacionColumnas {
+  ok: boolean;
+  indices: Record<keyof typeof COL, number>;
+  faltantes: string[];
+  duplicadas: Array<{ nombre: string; posiciones: number[] }>;
+  /** Los encabezados que SI trae el archivo, para poder decirlo en el error. */
+  encabezados: string[];
+}
+
+/** Forma comparable de un encabezado: sin acentos, sin mayusculas, sin espacios de sobra. */
+function normalizarEncabezado(x: unknown): string {
+  return String(x ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function ubicarColumnas(cabecera: any[]): UbicacionColumnas {
+  const encabezados = (cabecera || []).map((x) => String(x ?? '').trim());
+  const normalizados = encabezados.map(normalizarEncabezado);
+
+  const indices = {} as Record<keyof typeof COL, number>;
+  const faltantes: string[] = [];
+  const duplicadas: Array<{ nombre: string; posiciones: number[] }> = [];
+
+  for (const [rol, idxFijo] of Object.entries(COL) as Array<[keyof typeof COL, number]>) {
+    const nombre = ENCABEZADOS_ESPERADOS[idxFijo];
+    const buscado = normalizarEncabezado(nombre);
+    const posiciones = normalizados
+      .map((n, i) => (n === buscado ? i : -1))
+      .filter((i) => i !== -1);
+
+    if (posiciones.length === 0) { faltantes.push(nombre); continue; }
+    if (posiciones.length > 1) {
+      // Elegir una seria adivinar, y adivinar aca mete precios en la prenda equivocada.
+      duplicadas.push({ nombre, posiciones: posiciones.map((p) => p + 1) });
+      continue;
+    }
+    indices[rol] = posiciones[0];
+  }
+
+  return {
+    ok: faltantes.length === 0 && duplicadas.length === 0,
+    indices,
+    faltantes,
+    duplicadas,
+    encabezados,
+  };
+}
+
 export const CATEGORIAS_IGNORADAS = ['General', 'Empresas'] as const;
+
+// El sufijo de un codigo del POS (`001-cc` -> `cc`). Vive con la referencia porque es el mismo
+// token que forma `CC-01`: un solo lugar donde se decide que es un sufijo.
+import { abreviaturaDeCodigoPos } from './referenciaPrenda';
 
 /**
  * Mapa fijo de categoria del POS a colegio del sistema.
@@ -306,20 +381,26 @@ export function parsearFilasPos(matriz: any[][]): ResultadoParseo {
     return { filas: [], descartadasPorCategoria: 0, detalleDescartes: {}, avisos: ['El archivo no tiene filas de datos.'] };
   }
 
-  // VERIFICA LOS ENCABEZADOS en vez de leer a ciegas. Si el POS cambia el orden de
-  // columnas, esto lo dice antes de importar precios en la columna equivocada, que es
-  // el peor error silencioso posible de este formato.
-  const cab = matriz[0] || [];
-  for (const [idx, esperado] of Object.entries(ENCABEZADOS_ESPERADOS)) {
-    const real = String(cab[Number(idx)] ?? '').trim();
-    if (real !== esperado) {
-      avisos.push(
-        `La columna ${Number(idx) + 1} dice "${real}" y se esperaba "${esperado}". ` +
-        `El formato del export pudo cambiar: revisar antes de importar.`
-      );
+  // LAS COLUMNAS SE UBICAN POR NOMBRE. La version anterior comparaba contra los indices fijos,
+  // avisaba si no coincidian, y despues leia por el indice fijo igual —o sea, importaba el
+  // contenido de la columna equivocada mientras mostraba un aviso—.
+  const ubic = ubicarColumnas(matriz[0] || []);
+  if (!ubic.ok) {
+    const partes: string[] = [];
+    if (ubic.faltantes.length) {
+      partes.push(`Faltan columnas que el importador necesita: ${ubic.faltantes.join(', ')}.`);
     }
+    for (const d of ubic.duplicadas) {
+      partes.push(`La columna "${d.nombre}" aparece ${d.posiciones.length} veces ` +
+                  `(posiciones ${d.posiciones.join(', ')}): no se puede saber cual usar.`);
+    }
+    partes.push(`El archivo trae: ${ubic.encabezados.filter(Boolean).join(' | ')}`);
+    // Se ABORTA en vez de leer por un indice adivinado: un precio en la prenda equivocada no se
+    // nota hasta que alguien compara contra el POS.
+    return { filas: [], descartadasPorCategoria: 0, detalleDescartes: {}, avisos: partes };
   }
 
+  const IDX = ubic.indices;
   const txt = (r: any[], i: number) => String(r[i] ?? '').trim();
   const filas: FilaPos[] = [];
   const detalleDescartes: Record<string, number> = {};
@@ -327,7 +408,7 @@ export function parsearFilasPos(matriz: any[][]): ResultadoParseo {
 
   for (let i = 1; i < matriz.length; i++) {
     const r = matriz[i] || [];
-    const categoria = txt(r, COL.CATEGORIA);
+    const categoria = txt(r, IDX.CATEGORIA);
 
     if (!categoria || (CATEGORIAS_IGNORADAS as readonly string[]).includes(categoria)) {
       descartadas++;
@@ -339,11 +420,11 @@ export function parsearFilasPos(matriz: any[][]): ResultadoParseo {
     filas.push({
       fila: i + 1,
       categoria,
-      nombreProducto: txt(r, COL.NOMBRE_PRODUCTO),
-      variante: txt(r, COL.VARIANTE),
-      codigo: txt(r, COL.CODIGO),
-      precioPos: aNumero(r[COL.PRECIO_POS]),
-      cantidad: aNumero(r[COL.CANTIDAD]),
+      nombreProducto: txt(r, IDX.NOMBRE_PRODUCTO),
+      variante: txt(r, IDX.VARIANTE),
+      codigo: txt(r, IDX.CODIGO),
+      precioPos: aNumero(r[IDX.PRECIO_POS]),
+      cantidad: aNumero(r[IDX.CANTIDAD]),
     });
   }
 
@@ -420,10 +501,21 @@ export interface ResumenResolucion {
  */
 export function categoriaDeColegio(
   colegioId: string,
-  colegios: CatalogoColegio[]
+  colegios: CatalogoColegio[],
+  descubiertos?: ColegioDescubierto[],
 ): string | null {
   const col = colegios.find((c) => String(c.id) === String(colegioId));
   if (!col) return null;
+
+  // LO DESCUBIERTO EN EL ARCHIVO MANDA sobre el mapa fijo. Es lo que permite importar un colegio
+  // que nadie tecleo en `CATEGORIAS_POS`: si su abreviatura coincide con un sufijo del archivo, ese
+  // es su colegio, sin que su nombre ni su categoria tengan que estar escritos en el codigo.
+  const abrevCol = normalizarAbreviatura(col.abreviatura);
+  if (abrevCol && descubiertos?.length) {
+    const hit = descubiertos.find(
+      (d) => d.esColegio && normalizarAbreviatura(d.sufijo) === abrevCol);
+    if (hit) return hit.categoria;
+  }
 
   // PRIMERO LA ABREVIATURA, que es exacta. El sufijo del codigo del POS es `-cc`, `-EO`, `-JS`,
   // `-InfSM`, `-IntlSM`, y la abreviatura del colegio guarda ese mismo token. Emparejar por ahi no
@@ -487,11 +579,99 @@ export function normalizarAbreviatura(x: unknown): string {
  * La abreviatura sale del sufijo que el POS ya usa en sus codigos, asi que el colegio nace
  * emparejando: sin eso habria que adivinarla y la primera importacion no encontraria sus filas.
  */
-export function sugerenciaDeColegio(categoria: string): {
-  nombreSugerido: string;
-  abreviaturaSugerida: string;
-} {
+/**
+ * DESCUBRE LOS COLEGIOS QUE TRAE EL ARCHIVO, en vez de tenerlos escritos en el codigo.
+ *
+ * POR QUE EXISTE. `CATEGORIAS_POS` es un mapa fijo con cinco categorias tecleadas a mano. Con un
+ * export que trae mas colegios, los nuevos simplemente NO EXISTEN para el importador: su categoria
+ * no esta en el mapa, `categoriaDeColegio` devuelve null, y sus filas se descartan. El importador
+ * no era inteligente: sabia exactamente de cinco colegios y de ninguno mas.
+ *
+ * Todo lo que hace falta ya viene en el archivo. La columna `Categorias` da el nombre y el sufijo
+ * del `Cod. Producto` da la abreviatura, que es la misma que empareja con el colegio del sistema.
+ *
+ * COMO SE DECIDE SI UNA CATEGORIA ES UN COLEGIO
+ *
+ * Por su sufijo DOMINANTE. Si la mayoria de sus codigos llevan un sufijo, es un colegio; si la
+ * mayoria no lleva ninguno, no lo es.
+ *
+ * MEDIDO sobre el export de cinco colegios, y reproduce el mapa fijo exactamente:
+ *
+ *   C Cambridge             297 filas   sufijo `cc`       100% de cobertura
+ *   C Intl. San Marcos      166         `IntlSM`          100%
+ *   C Edad de Oro           126         `EO`              100%
+ *   C Infantil San Marcos    95         `InfSM`           100%
+ *   C Saint Jude             48         `JS`              100%
+ *   General                  20         sin sufijo         95%   (1 minoritario: `vUuYlnh`)
+ *   Empresas                 14         sin sufijo        100%
+ *
+ * Las dos ultimas quedan fuera SIN estar en ninguna lista: se descartan porque sus codigos no
+ * llevan sufijo, no porque alguien escribio sus nombres. Eso es lo que hace que un archivo con
+ * quince colegios funcione igual que uno con cinco.
+ *
+ * Los sufijos MINORITARIOS se reportan en vez de ignorarse: un solo codigo con un sufijo raro
+ * dentro de una categoria sana es un error de carga en el POS, y hay que verlo.
+ */
+export interface ColegioDescubierto {
+  categoria: string;
+  filas: number;
+  /** El sufijo que llevan la mayoria de los codigos. Vacio si la mayoria no lleva ninguno. */
+  sufijo: string;
+  /** Cuantas filas lleva ese sufijo, y que porcentaje del total de la categoria es. */
+  filasConSufijo: number;
+  cobertura: number;
+  /** Sufijos que aparecen en pocas filas. Casi siempre son errores de carga del POS. */
+  minoritarios: Array<{ sufijo: string; filas: number }>;
+  /** true cuando el sufijo dominante es real: entonces la categoria es un colegio. */
+  esColegio: boolean;
+}
+
+export function descubrirColegiosDelArchivo(filas: FilaPos[]): ColegioDescubierto[] {
+  const porCategoria = new Map<string, Map<string, number>>();
+
+  for (const f of filas || []) {
+    const cat = String(f?.categoria ?? '').trim();
+    if (!cat) continue;
+    // La cadena vacia representa "sin sufijo", que es una respuesta y no un dato faltante.
+    const suf = abreviaturaDeCodigoPos(f?.codigo ?? '') ?? '';
+    if (!porCategoria.has(cat)) porCategoria.set(cat, new Map());
+    const m = porCategoria.get(cat)!;
+    m.set(suf, (m.get(suf) ?? 0) + 1);
+  }
+
+  const salida: ColegioDescubierto[] = [];
+  for (const [categoria, conteo] of porCategoria) {
+    const total = [...conteo.values()].reduce((a, b) => a + b, 0);
+    const orden = [...conteo.entries()].sort((a, b) => b[1] - a[1]);
+    const [sufijo, filasConSufijo] = orden[0];
+    salida.push({
+      categoria,
+      filas: total,
+      sufijo,
+      filasConSufijo,
+      cobertura: total > 0 ? filasConSufijo / total : 0,
+      minoritarios: orden.slice(1)
+        .filter(([s]) => s !== '')
+        .map(([s, n]) => ({ sufijo: s, filas: n })),
+      esColegio: sufijo !== '',
+    });
+  }
+  return salida.sort((a, b) => b.filas - a.filas);
+}
+
+export function sugerenciaDeColegio(
+  categoria: string,
+  sufijoDescubierto?: string | null,
+): { nombreSugerido: string; abreviaturaSugerida: string } {
   const cat = String(categoria ?? '').trim();
+
+  // PRIMERO EL SUFIJO DESCUBIERTO EN EL ARCHIVO. Es lo que hace que un colegio que nadie tecleo en
+  // `CATEGORIAS_POS` tambien traiga su abreviatura: sin esto, un export con mas colegios proponia
+  // crearlos con la abreviatura vacia y su primera importacion no encontraba ninguna de sus filas.
+  const descubierto = normalizarAbreviatura(sufijoDescubierto);
+  if (descubierto) return { nombreSugerido: cat, abreviaturaSugerida: descubierto };
+
+  // El mapa fijo queda como respaldo, para cuando la sugerencia se pide sin haber leido el archivo.
   const cfg = CATEGORIAS_POS[cat];
   return {
     // El nombre del POS ya viene con el prefijo `C `, que es como estan nombrados los colegios.
@@ -530,7 +710,9 @@ export function resolverFilas(opciones: OpcionesResolucion): {
   const { filas, colegioId, colegios, tallasActivas, productos } = opciones;
   const avisos: string[] = [];
 
-  const categoriaEsperada = categoriaDeColegio(colegioId, colegios);
+  // Los colegios se DESCUBREN del archivo que se esta importando, no de una lista en el codigo.
+  const descubiertos = descubrirColegiosDelArchivo(filas);
+  const categoriaEsperada = categoriaDeColegio(colegioId, colegios, descubiertos);
   if (!categoriaEsperada) {
     const col = colegios.find((c) => String(c.id) === String(colegioId));
     avisos.push(

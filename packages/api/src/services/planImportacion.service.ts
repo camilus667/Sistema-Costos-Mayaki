@@ -265,6 +265,14 @@ export interface OpcionesPlan {
   filasPorCategoria: Map<string, number>;
   /** Las categorias que SI tienen colegio en el sistema. */
   categoriasConColegio: Set<string>;
+  /**
+   * El sufijo del codigo del POS que se descubrio para cada categoria del archivo.
+   *
+   * Es lo que permite proponer la abreviatura de un colegio que NO esta en `CATEGORIAS_POS`. Sin
+   * esto, un export con colegios nuevos los ofrecia crear con la abreviatura vacia, y su primera
+   * importacion no encontraba ninguna de sus filas.
+   */
+  sufijosPorCategoria?: Map<string, string>;
   avisos?: string[];
 }
 
@@ -390,7 +398,10 @@ export function planificarCambios(op: OpcionesPlan): PlanImportacion {
   }[] = [];
   for (const [cat, n] of op.filasPorCategoria) {
     if (!op.categoriasConColegio.has(cat)) {
-      categoriasSinColegio.push({ categoria: cat, filas: n, ...sugerenciaDeColegio(cat) });
+      categoriasSinColegio.push({
+        categoria: cat, filas: n,
+        ...sugerenciaDeColegio(cat, op.sufijosPorCategoria?.get(cat)),
+      });
     }
   }
   categoriasSinColegio.sort((a, b) => b.filas - a.filas);

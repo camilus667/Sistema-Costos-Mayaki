@@ -52,6 +52,7 @@ import {
   categoriaDeColegio,
   CONFIANZA_MINIMA,
   type FilaResuelta,
+  descubrirColegiosDelArchivo,
 } from '../services/importarPos.service';
 import {
   planificarCambios,
@@ -336,9 +337,21 @@ async function armarPlan(
   const filasPorCategoria = new Map<string, number>();
   for (const f of parseo.filas) filasPorCategoria.set(f.categoria, (filasPorCategoria.get(f.categoria) ?? 0) + 1);
 
+  // LOS COLEGIOS SE DESCUBREN DEL ARCHIVO. `CATEGORIAS_POS` tiene cinco categorias tecleadas a
+  // mano, asi que un export con mas colegios los descartaba en silencio.
+  const descubiertos = descubrirColegiosDelArchivo(parseo.filas);
+  const sufijosPorCategoria = new Map<string, string>();
+  for (const d of descubiertos) if (d.esColegio) sufijosPorCategoria.set(d.categoria, d.sufijo);
+
+  // El catalogo lleva la ABREVIATURA. El `map` anterior la descartaba, asi que la resolucion por
+  // abreviatura no podia dispararse nunca desde esta ruta y siempre caia al nombre.
+  const catalogoCols = todosLosColegios.map((x: any) => ({
+    id: String(x.id), nombre: String(x.nombre), abreviatura: x.abreviatura ?? null,
+  }));
+
   const categoriasConColegio = new Set<string>();
   for (const col of todosLosColegios) {
-    const cat = categoriaDeColegio(String(col.id), todosLosColegios.map((x: any) => ({ id: String(x.id), nombre: String(x.nombre) })));
+    const cat = categoriaDeColegio(String(col.id), catalogoCols, descubiertos);
     if (cat) categoriasConColegio.add(cat);
   }
 
@@ -350,6 +363,9 @@ async function armarPlan(
     actual,
     filasPorCategoria,
     categoriasConColegio,
+    // Los sufijos descubiertos, para que la sugerencia de un colegio que falta traiga su
+    // abreviatura aunque nadie lo haya tecleado en el codigo.
+    sufijosPorCategoria,
     avisos,
   });
 
