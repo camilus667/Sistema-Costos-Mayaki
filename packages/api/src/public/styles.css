@@ -590,18 +590,24 @@ td, th {
   text-align: left !important;
 }
 
-/* Columnas 3 a 18: Tallas (68px cada una) */
-.table-consolidada-fixed th:nth-child(n+3):nth-child(-n+18),
-.table-consolidada-fixed td:nth-child(n+3):nth-child(-n+18) {
+/* Columnas de TALLA: de la tercera en adelante.
+   ANTES DECIA `nth-child(n+3):nth-child(-n+18)` —o sea 16 tallas exactas— y la 19 era el subtotal.
+   Con 17 tallas eso se rompia de una manera dificil de adivinar: la talla numero 17 caia en la
+   columna 19 y heredaba el estilo del SUBTOTAL (88 px, alineada a la derecha), y el subtotal se iba
+   a la 20, que no tenia ninguna regla. Se veia como "la talla nueva no tiene el mismo estilo".
+   Contar columnas en el CSS es depender de que nadie agregue una talla. */
+.table-consolidada-fixed th:nth-child(n+3),
+.table-consolidada-fixed td:nth-child(n+3) {
   width: 68px !important;
   min-width: 68px !important;
   max-width: 68px !important;
   text-align: center !important;
 }
 
-/* Columna 19: SUBTOTAL Bs (88px) */
-.table-consolidada-fixed th:nth-child(19),
-.table-consolidada-fixed td:nth-child(19) {
+/* SUBTOTAL: se apunta por CLASE, no por posicion, justamente para que agregar o quitar una talla
+   no cambie a que columna le toca este estilo. La clase la pone el HTML que lo dibuja. */
+.table-consolidada-fixed th.col-subtotal,
+.table-consolidada-fixed td.col-subtotal {
   width: 88px !important;
   min-width: 88px !important;
   max-width: 88px !important;

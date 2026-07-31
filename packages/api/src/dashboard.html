@@ -252,7 +252,7 @@
                 <th style="width:78px;">Prod</th>
                 <th>Prenda</th>
                 <th colspan="16" style="text-align:center;">Cargando tallas...</th>
-                <th style="text-align:right;">SUBTOTAL PRENDA</th>
+                <th class="col-subtotal" style="text-align:right;">SUBTOTAL PRENDA</th>
               </tr>
             </thead>
             <tbody id="tb-consolidada-body">
@@ -2753,8 +2753,8 @@
         <th>Prenda</th>
         ${tallas.map(t => `<th style="text-align:center; padding:0.4rem 0.15rem;">${fmtTalla(t.codigo)}</th>`).join('')}
         ${showSubtotalColumn
-          ? `<th style="text-align:right; color:var(--warning); border-left:2px solid var(--border); padding-right:0.4rem;">${currentExcelConcept === 'inventarioUnidades' ? 'SUBTOTAL' : 'SUBTOTAL Bs'}</th>`
-          : '<th style="border-left:2px solid transparent;"></th>'}
+          ? `<th class="col-subtotal" style="text-align:right; color:var(--warning); border-left:2px solid var(--border); padding-right:0.4rem;">${currentExcelConcept === 'inventarioUnidades' ? 'SUBTOTAL' : 'SUBTOTAL Bs'}</th>`
+          : '<th class="col-subtotal" style="border-left:2px solid transparent;"></th>'}
       `;
 
       const colTotals = {};
@@ -2844,7 +2844,7 @@
 
         grandTotal += rowSubtotal;
 
-        let subtotalCellHtml = '<td style="border-left:2px solid transparent;"></td>';
+        let subtotalCellHtml = '<td class="col-subtotal" style="border-left:2px solid transparent;"></td>';
         if (showSubtotalColumn) {
           let formattedSubtotal = '-';
           if (currentExcelConcept === 'inventarioUnidades') {
@@ -2854,7 +2854,7 @@
           } else if (currentExcelConcept === 'costoInventario') {
             formattedSubtotal = rowSubtotal > 0 ? `<strong style="color:var(--warning); font-size:0.78rem;">${rowSubtotal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>` : '-';
           }
-          subtotalCellHtml = `<td style="text-align:right; border-left:2px solid var(--border); padding-right:0.4rem;">${formattedSubtotal}</td>`;
+          subtotalCellHtml = `<td class="col-subtotal" style="text-align:right; border-left:2px solid var(--border); padding-right:0.4rem;">${formattedSubtotal}</td>`;
         }
 
         // MARCA DE COSTO SUBESTIMADO. Va al lado de la descripcion y dice QUE falta —sin
@@ -2902,7 +2902,7 @@
           return `<th style="text-align:center; color:#f8fafc; font-weight:700; padding: 0.4rem 0.15rem;">${fTot}</th>`;
         }).join('');
 
-        let subtotalFootHtml = '<td style="border-left:2px solid transparent;"></td>';
+        let subtotalFootHtml = '<td class="col-subtotal" style="border-left:2px solid transparent;"></td>';
         if (showSubtotalColumn) {
           let formattedGrandTotal = '-';
           if (currentExcelConcept === 'inventarioUnidades') {
@@ -2912,7 +2912,7 @@
           } else if (currentExcelConcept === 'costoInventario') {
             formattedGrandTotal = grandTotal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
           }
-          subtotalFootHtml = `<td style="text-align:right; border-left:2px solid var(--border); padding-right:0.4rem; color:var(--success); font-size:0.82rem; font-weight:800;">${formattedGrandTotal}</td>`;
+          subtotalFootHtml = `<td class="col-subtotal" style="text-align:right; border-left:2px solid var(--border); padding-right:0.4rem; color:var(--success); font-size:0.82rem; font-weight:800;">${formattedGrandTotal}</td>`;
         }
 
         if (esVistaTexto) { tfootElem.innerHTML = ''; } else tfootElem.innerHTML = `
@@ -3832,7 +3832,11 @@
       // colegio muestra los checks. Sin este enganche el modo quedaba pegado al que estaba cuando
       // se cargo el catalogo, y se veian los checks en un ambito donde no hay colegio al que
       // pertenecerian —guardarlos pegaba contra `all`, que devuelve 404—.
-      if (typeof renderAdminTallas === 'function') renderAdminTallas();
+      //
+      // Y con un colegio elegido se PIDE su activacion antes de dibujar: sin eso los checkboxes
+      // salen del flag global de la talla y muestran todo tildado aunque el colegio tenga tallas
+      // apagadas.
+      if (typeof cargarActivacionTallasColegio === 'function') cargarActivacionTallasColegio();
       const badge = document.getElementById('modal-colegio-name-badge');
       if (!badge) return;
 
@@ -4923,7 +4927,7 @@
                  style="background:#7f1d1d; padding:0.2rem 0.5rem; font-size:0.72rem;"
                  data-talla="${escAttr(t.id)}" data-codigo="${escAttr(fmtTalla(t.codigo))}"
                  onclick="eliminarTallaCatalogo(this)">✕</button>`
-            : `<input type="checkbox" id="atalla-act-${t.id}" ${t.activo ? 'checked' : ''} style="width:18px; height:18px;">`}
+            : `<input type="checkbox" id="atalla-act-${t.id}" ${activacionTallasColegio.get(String(t.id)) !== false ? 'checked' : ''} style="width:18px; height:18px;">`}
         </div>
       `).join('');
 
@@ -4932,6 +4936,37 @@
       const btnGuardar = document.getElementById('btn-guardar-tallas');
       if (alta) alta.style.display = enEmpresa ? '' : 'none';
       if (btnGuardar) btnGuardar.style.display = enEmpresa ? 'none' : '';
+    }
+
+    /**
+     * Pide la activacion de tallas del colegio elegido y redibuja.
+     *
+     * Con el ambito en la empresa no hay a quien preguntarle, asi que se limpia el mapa y se dibuja
+     * el modo catalogo.
+     */
+    async function cargarActivacionTallasColegio() {
+      const enEmpresa = !colegioFiltroActual || colegioFiltroActual === 'all';
+      if (enEmpresa) {
+        activacionTallasColegio = new Map();
+        renderAdminTallas();
+        return;
+      }
+      try {
+        const res = await fetch('/api/colegios/' + colegioFiltroActual + '/tallas-config');
+        const json = await res.json();
+        if (json.success) {
+          activacionTallasColegio = new Map((json.data || []).map(t => [String(t.id), t.activo !== false]));
+        } else {
+          // Si no se pudo leer, se deja el mapa vacio: el render trata "sin dato" como activa, que
+          // es la misma regla del servidor. Mostrar todo apagado por un error de red seria peor.
+          activacionTallasColegio = new Map();
+          console.error('No se pudo leer la configuracion de tallas del colegio:', json.error);
+        }
+      } catch (e) {
+        activacionTallasColegio = new Map();
+        console.error('Error de red al leer la configuracion de tallas:', e);
+      }
+      renderAdminTallas();
     }
 
     /**
@@ -4945,6 +4980,17 @@
      * Solo en el ambito de EMPRESA: la curva es del catalogo, no de un colegio. Lo que cada colegio
      * decide es cuales ofrece, no en que orden van.
      */
+    /**
+     * La activacion de tallas DEL COLEGIO elegido, por id de talla.
+     *
+     * NO se puede usar el `activo` de `catalogoEmpresa.tallas`: ese viene de `/api/tallas` y es el
+     * flag GLOBAL de la talla, no lo que ofrece este colegio. Usarlo era el bug: el guardado
+     * escribia bien en `colegio_talla`, pero al redibujar los checkboxes volvian del flag global y
+     * salian todos tildados. Parecia que no guardaba, y apretar Guardar otra vez reactivaba lo que
+     * se acababa de apagar.
+     */
+    let activacionTallasColegio = new Map();
+
     let ordenTallasBorrador = [];
     let ordenTallaArrastrada = null;
 
@@ -5146,11 +5192,15 @@
                 (json.error || ('el servidor respondió ' + res.status)));
           return;
         }
-        alert('✅ Configuración de tallas guardada.');
+        // Se vuelve a leer la activacion DEL COLEGIO, no el catalogo global: es lo que acaba de
+        // cambiar, y leer el catalogo era justamente lo que hacia parecer que no se habia guardado.
+        await cargarActivacionTallasColegio();
         await cargarResumen();
         await cargarMatrizConsolidada();
         cargarInputConcept(currentInputConcept);
         generarMatrizPrenda();
+        const est = document.getElementById('orden-tallas-estado');
+        if (est) { est.textContent = 'Configuración guardada.'; est.style.color = '#34d399'; }
       } catch (e) { alert('Error de red al guardar tallas: ' + e); }
     }
 

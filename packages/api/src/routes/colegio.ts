@@ -399,6 +399,52 @@ api.post('/:id/prendas', async (c) => {
   });
 });
 
+/**
+ * GET /api/colegios/:id/tallas-config — que tallas ofrece ESTE colegio.
+ *
+ * POR QUE FALTABA Y QUE ROMPIA. Habia PUT pero no GET, asi que la pantalla no tenia de donde leer
+ * la activacion por colegio y dibujaba los checkboxes con el `activo` GLOBAL de `/api/tallas`.
+ *
+ * El efecto era desconcertante: se destildaba una talla, se guardaba —y el guardado FUNCIONABA,
+ * medido: escribia sus 16 filas en `colegio_talla`—, pero al redibujar los checkboxes volvian a
+ * salir todos tildados, porque venian del flag global. Parecia que no guardaba. Y peor: si se
+ * apretaba Guardar otra vez, esa lista toda tildada volvia a ACTIVAR lo que se acababa de apagar,
+ * que es por lo que las tallas desactivadas seguian apareciendo en las matrices.
+ *
+ * Devuelve una fila por talla del catalogo con su estado para este colegio, aplicando la regla de
+ * `colegio_talla`: SIN FILA = ACTIVA. Asi la pantalla no tiene que conocer esa regla.
+ */
+api.get('/:id/tallas-config', async (c) => {
+  const db = (c as any).db;
+  const id = c.req.param('id');
+
+  const [colegio] = await db.select().from(colegios).where(eq(colegios.id, id)).limit(1);
+  if (!colegio) {
+    return c.json({ success: false, error: 'Colegio no encontrado' }, 404);
+  }
+
+  const catalogo = await db.select().from(tallas).orderBy(asc(tallas.orden));
+  const config = await db.select().from(colegioTallas).where(eq(colegioTallas.colegioId, id));
+  const porTalla = new Map<string, boolean>(
+    config.map((f: any) => [String(f.tallaId), f.activo !== false && f.activo !== 0])
+  );
+
+  return c.json({
+    success: true,
+    colegio: colegio.nombre,
+    data: catalogo.map((t: any) => ({
+      id: String(t.id),
+      codigo: t.codigo,
+      nombre: t.nombre,
+      orden: t.orden,
+      // SIN FILA = ACTIVA. Es la misma regla que aplica el motor de costeo y el importador.
+      activo: porTalla.has(String(t.id)) ? porTalla.get(String(t.id)) : true,
+      // Para poder distinguir "nunca se configuro" de "se dejo activa a proposito".
+      configurada: porTalla.has(String(t.id)),
+    })),
+  });
+});
+
 // PUT /api/colegios/:id/tallas-config - Activar/desactivar tallas DE ESTE colegio
 //
 // ESTE ENDPOINT RECIBIA EL COLEGIO EN LA RUTA Y NO LO USABA:
