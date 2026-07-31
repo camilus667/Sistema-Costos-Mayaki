@@ -824,8 +824,33 @@
                 Apagar una talla aquí no la apaga en los demás colegios.
               </div>
             </div>
+            <!-- ALTA, solo con el ambito en TODA LA EMPRESA: el catalogo es de la empresa, no de un
+                 colegio. La posicion esta a la vista porque define el orden de las columnas de todas
+                 las matrices, y una talla agregada al final queda despues de 50/4XL. -->
+            <div id="bloque-alta-talla"
+                 style="display:none; background:#0f172a; border:1px solid #1e293b; border-radius:8px; padding:0.6rem 0.75rem; margin-bottom:0.75rem;">
+              <div style="display:flex; align-items:flex-end; gap:0.6rem; flex-wrap:wrap;">
+                <div>
+                  <label style="font-size:0.7rem; color:#94a3b8; display:block;">Código de la talla</label>
+                  <input type="text" id="nueva-talla-codigo" class="cell-editable-sm" maxlength="20"
+                         placeholder="Ej. 03 o 52/5XL" style="width:11rem;">
+                </div>
+                <div>
+                  <label style="font-size:0.7rem; color:#94a3b8; display:block;">Posición en la curva</label>
+                  <input type="number" id="nueva-talla-orden" class="cell-editable-sm" min="1"
+                         placeholder="al final" style="width:8rem;">
+                </div>
+                <button class="btn" style="background:#059669; font-size:0.78rem; padding:0.45rem 0.95rem;"
+                        onclick="agregarTallaCatalogo()">➕ Agregar talla</button>
+                <div id="alta-talla-estado" style="font-size:0.72rem; align-self:center;"></div>
+              </div>
+              <div style="font-size:0.68rem; color:#64748b; margin-top:0.4rem;">
+                Elegí un colegio arriba para tildar cuáles de estas tallas ofrece.
+              </div>
+            </div>
+
             <div style="display:flex; justify-content:flex-end; margin-bottom:0.75rem;">
-              <button class="btn"
+              <button class="btn" id="btn-guardar-tallas"
                 style="background:#38bdf8; color:#0f172a; font-weight:800; font-size:0.78rem; padding:0.45rem 0.95rem;"
                 onclick="guardarTallasAdmin()">💾 Guardar</button>
             </div>
@@ -3725,7 +3750,12 @@
       // `nombreAmbito()`, que deriva de la variable de estado y no del DOM: es la
       // misma fuente de verdad que usan los reportes.
       const rotuloTallas = document.getElementById('tallas-ambito-nombre');
-      if (rotuloTallas) rotuloTallas.textContent = nombreAmbito();
+      if (rotuloTallas) {
+        const enEmpresaT = !colegioFiltroActual || colegioFiltroActual === 'all';
+        // En empresa lo que se administra es el CATALOGO, no lo que ofrece un colegio. Decir
+        // "tallas que ofrece TODA LA EMPRESA" seria mentir sobre lo que hacen los botones.
+        rotuloTallas.textContent = enEmpresaT ? 'el catálogo de la empresa' : nombreAmbito();
+      }
 
       // Lo de la empresa, siempre. No necesita colegio y no debe esperarlo.
       await cargarCatalogoEmpresa();
@@ -3787,6 +3817,12 @@
       // en cada cambio de ambito y de sub-pestaña. Enganchar aca evita tener que acordarse de
       // llamarla en los tres lugares que cambian el colegio.
       actualizarVisibilidadDatosColegio();
+
+      // La lista de tallas tambien depende del ambito: con la empresa muestra alta y baja, con un
+      // colegio muestra los checks. Sin este enganche el modo quedaba pegado al que estaba cuando
+      // se cargo el catalogo, y se veian los checks en un ambito donde no hay colegio al que
+      // pertenecerian —guardarlos pegaba contra `all`, que devuelve 404—.
+      if (typeof renderAdminTallas === 'function') renderAdminTallas();
       const badge = document.getElementById('modal-colegio-name-badge');
       if (!badge) return;
 
@@ -4835,19 +4871,142 @@
       } catch (e) { alert('Error al crear tela: ' + e); }
     }
 
+    /**
+     * La lista de tallas tiene DOS MODOS, segun el ambito elegido arriba.
+     *
+     *   TODA LA EMPRESA   se administra el catalogo: se agrega y se elimina.
+     *   UN COLEGIO        se tilda cuales de ese catalogo ofrece ese colegio.
+     *
+     * Estan separados a proposito. Un check junto a un boton de eliminar invita a confundir
+     * "este colegio no la usa" con "esta talla no existe", y son cosas muy distintas: lo primero es
+     * configuracion y lo segundo borra una fila del catalogo de la empresa entera.
+     *
+     * Por eso en el ambito de empresa NO se muestran los checks: no hay un colegio al que
+     * pertenecerian, y la version anterior los mostraba igual y guardaba contra `all`, que devuelve
+     * 404.
+     */
     function renderAdminTallas() {
       const container = document.getElementById('container-admin-tallas');
       if (!container) return;
-      // Las tallas son vocabulario de la empresa: las 16 tienen colegio_id NULL.
-      container.innerHTML = (catalogoEmpresa.tallas || []).map(t => `
-        <div style="background:#1e293b; padding:0.75rem; border-radius:8px; border:1px solid #334155; display:flex; align-items:center; justify-content:space-between;">
-          <div>
+
+      const enEmpresa = !colegioFiltroActual || colegioFiltroActual === 'all';
+      const lista = catalogoEmpresa.tallas || [];
+
+      // Las tallas son vocabulario de la empresa: las del catalogo tienen colegio_id NULL.
+      container.innerHTML = lista.map(t => `
+        <div style="background:#1e293b; padding:0.75rem; border-radius:8px; border:1px solid #334155; display:flex; align-items:center; justify-content:space-between; gap:0.5rem;">
+          <div style="min-width:0;">
             <strong style="color:#f8fafc; display:block; font-size:0.9rem;">${fmtTalla(t.codigo)}</strong>
-            <span style="font-size:0.7rem; color:#94a3b8;">${t.nombre}</span>
+            <span style="font-size:0.7rem; color:#94a3b8;">${esc(t.nombre)}</span>
           </div>
-          <input type="checkbox" id="atalla-act-${t.id}" ${t.activo ? 'checked' : ''} style="width:18px; height:18px;">
+          ${enEmpresa
+            ? `<button class="btn" title="Eliminar del catálogo de la empresa"
+                 style="background:#7f1d1d; padding:0.2rem 0.5rem; font-size:0.72rem;"
+                 data-id="${escAttr(t.id)}" data-codigo="${escAttr(fmtTalla(t.codigo))}"
+                 onclick="eliminarTallaCatalogo(this)">✕</button>`
+            : `<input type="checkbox" id="atalla-act-${t.id}" ${t.activo ? 'checked' : ''} style="width:18px; height:18px;">`}
         </div>
       `).join('');
+
+      // El alta y el guardado son excluyentes: cada modo muestra el suyo.
+      const alta = document.getElementById('bloque-alta-talla');
+      const btnGuardar = document.getElementById('btn-guardar-tallas');
+      if (alta) alta.style.display = enEmpresa ? '' : 'none';
+      if (btnGuardar) btnGuardar.style.display = enEmpresa ? 'none' : '';
+    }
+
+    /**
+     * Agrega una talla al catalogo de la empresa.
+     *
+     * El ORDEN no es cosmetico: define la secuencia de columnas de todas las matrices. Una talla
+     * agregada al final aparece despues de 50/4XL, que para leer una curva de tallas es inservible.
+     * Por eso el campo de posicion esta a la vista y no escondido en un valor por defecto.
+     */
+    async function agregarTallaCatalogo() {
+      const elCod = document.getElementById('nueva-talla-codigo');
+      const elPos = document.getElementById('nueva-talla-orden');
+      const estado = document.getElementById('alta-talla-estado');
+      const decir = (t, c) => { if (estado) { estado.textContent = t; estado.style.color = c; } };
+
+      const codigo = (elCod?.value || '').trim();
+      if (!codigo) { decir('Escribí el código de la talla, por ejemplo 03 o 52/5XL.', '#f87171'); return; }
+
+      const posicion = parseInt(elPos?.value || '', 10);
+      const orden = Number.isFinite(posicion) && posicion > 0
+        ? posicion
+        : (catalogoEmpresa.tallas || []).length + 1;
+
+      decir('Agregando...', '#94a3b8');
+      try {
+        const res = await fetch('/api/tallas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ codigo, nombre: 'Talla ' + codigo, orden }),
+        });
+        const json = await res.json();
+        // UN FALLO SE DICE. El servidor rechaza un codigo repetido con un 409 y su motivo.
+        if (!json.success) {
+          decir(json.error || ('el servidor respondió ' + res.status), '#f87171');
+          return;
+        }
+        if (elCod) elCod.value = '';
+        if (elPos) elPos.value = '';
+        decir(json.message || 'Talla agregada.', '#34d399');
+        await recargarTallasYPantallas();
+      } catch (e) {
+        decir('Error de red: ' + e, '#f87171');
+      }
+    }
+
+    /**
+     * Elimina una talla del catalogo de la empresa.
+     *
+     * El servidor se NIEGA si la talla tiene datos, y devuelve que la retiene y cuanto. Eso no es
+     * una traba: sin esa guarda, borrar una talla dejaba cientos de filas de peso, mano de obra,
+     * precios e inventario apuntando a algo que ya no existe, invisibles en toda pantalla porque
+     * todas filtran por talla.
+     */
+    async function eliminarTallaCatalogo(boton) {
+      const id = boton.dataset.id;
+      const codigo = boton.dataset.codigo || '';
+      if (!confirm(`¿Eliminar la talla ${codigo} del catálogo de la empresa?\n\n` +
+                   `Si tiene datos cargados el sistema no la va a eliminar y te va a decir qué la retiene.\n\n` +
+                   `Para que un colegio deje de ofrecerla no hace falta eliminarla: se destilda eligiendo ese colegio.`)) return;
+
+      const textoOriginal = boton.textContent;
+      boton.disabled = true;
+      boton.textContent = '...';
+      try {
+        const res = await fetch('/api/tallas/' + encodeURIComponent(id), { method: 'DELETE' });
+        const json = await res.json();
+        if (!json.success) {
+          alert('No se eliminó la talla ' + codigo + ':\n\n' +
+                (json.error || ('el servidor respondió ' + res.status)));
+          boton.disabled = false;
+          boton.textContent = textoOriginal;
+          return;
+        }
+        await recargarTallasYPantallas();
+      } catch (e) {
+        alert('Error de red al eliminar: ' + e);
+        boton.disabled = false;
+        boton.textContent = textoOriginal;
+      }
+    }
+
+    /**
+     * Vuelve a leer el catalogo y redibuja lo que depende de las tallas.
+     *
+     * Agregar o quitar una talla cambia las COLUMNAS de las matrices, no solo esta lista. Sin esto
+     * la pantalla queda mostrando una curva de tallas que ya no es la que hay.
+     */
+    async function recargarTallasYPantallas() {
+      await cargarConfigSistemaAdmin();
+      renderAdminTallas();
+      if (typeof cargarResumen === 'function') await cargarResumen();
+      if (typeof cargarMatrizConsolidada === 'function') await cargarMatrizConsolidada();
+      if (typeof cargarInputConcept === 'function') cargarInputConcept(currentInputConcept);
+      if (typeof generarMatrizPrenda === 'function') generarMatrizPrenda();
     }
 
     async function guardarTallasAdmin() {

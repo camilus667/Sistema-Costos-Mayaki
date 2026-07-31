@@ -137,9 +137,17 @@ export const CATEGORIAS_IGNORADAS = ['General', 'Empresas'] as const;
 
 // El sufijo de un codigo del POS (`001-cc` -> `cc`). Vive con la referencia porque es el mismo
 // token que forma `CC-01`: un solo lugar donde se decide que es un sufijo.
-import { abreviaturaDeCodigoPos } from './referenciaPrenda';
+import { abreviaturaDeCodigoPos, normalizarNombreColegio } from './referenciaPrenda';
 
 /**
+ * MAPA HEREDADO de categoria del POS a colegio del sistema. YA NO ES LA FUENTE DE VERDAD.
+ *
+ * Los colegios se descubren del archivo (ver `descubrirColegiosDelArchivo`). Este mapa quedo como
+ * ultimo respaldo para cuando no hay archivo con el que comparar, y sus claves estan
+ * DESACTUALIZADAS a proposito: el export decia `C Cambridge` cuando se escribio y hoy dice
+ * `Cambridge`. No se actualizan porque actualizarlas seria repetir el error —tener los nombres del
+ * POS escritos en el codigo es lo que hizo que un export con otros nombres no se pudiera leer—.
+ *
  * Mapa fijo de categoria del POS a colegio del sistema.
  *
  * La comparacion del nombre es por CONTENIDO (`incluye`), no exacta, porque el POS
@@ -528,11 +536,30 @@ export function categoriaDeColegio(
     }
   }
 
-  // DESPUES EL NOMBRE, para los colegios que todavia no tienen abreviatura cargada. Se conserva
-  // para que una base sin abreviaturas siga importando igual que antes.
-  const nombre = sinAcentos(col.nombre);
+  // DESPUES EL NOMBRE, CONTRA LAS CATEGORIAS DEL ARCHIVO. Para los colegios que todavia no tienen
+  // abreviatura cargada.
+  //
+  // Se compara contra lo DESCUBIERTO y no contra las claves de `CATEGORIAS_POS`, y la diferencia no
+  // es teorica: ese mapa tiene `C Cambridge` y el export ahora dice `Cambridge`. Con las claves
+  // fijas, el respaldo devolvia una categoria que no existe en el archivo y ninguna fila
+  // emparejaba —silenciosamente, porque la funcion devolvia algo en vez de null—.
+  //
+  // MEDIDO contra los nombres actuales: el nombre resuelve `Cambridge`, `Edad de Oro` y
+  // `Saint Jude`, y NO resuelve `Intl S Marcos` ni `Inf S Marcos`, porque el POS abrevia `San` como
+  // `S` y el sistema escribe el nombre entero. Por eso la abreviatura es la clave de verdad y el
+  // nombre es una cortesia: sirve mientras no se cargue la abreviatura, y no para siempre.
+  const nombre = normalizarNombreColegio(col.nombre);
+  if (nombre && descubiertos?.length) {
+    const hit = descubiertos.find(
+      (d) => d.esColegio && normalizarNombreColegio(d.categoria) === nombre);
+    if (hit) return hit.categoria;
+  }
+
+  // Y AL FINAL EL MAPA HEREDADO, solo para cuando no hay archivo con el que comparar —por ejemplo
+  // al pedir una sugerencia antes de leerlo—. No es la fuente de verdad de nada.
+  const crudo = sinAcentos(col.nombre);
   for (const [categoria, cfg] of Object.entries(CATEGORIAS_POS)) {
-    if (cfg.agujas.some((a) => nombre.includes(sinAcentos(a)))) return categoria;
+    if (cfg.agujas.some((a) => crudo.includes(sinAcentos(a)))) return categoria;
   }
   return null;
 }
