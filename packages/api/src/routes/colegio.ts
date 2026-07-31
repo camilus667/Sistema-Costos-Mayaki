@@ -5,6 +5,10 @@ import { eq, and, asc, or, isNull } from 'drizzle-orm';
 import { colegios, productos, telas, tallas, colegioTallas } from '../database/schema';
 import { saveDbToDisk } from '../database/sqljs';
 import { crearPrendaConTallas } from '../services/crearPrenda.service';
+// El criterio de orden vive en UNA sola casa. Antes estaba escrito en diez consultas con
+// tres versiones distintas, y ninguna mencionaba el colegio: por eso el item de un colegio
+// aparecia entre los de otro.
+import { ordenarPrendasDesdeBase } from '../services/ordenPrendasDb';
 
 const api = new Hono();
 
@@ -141,7 +145,10 @@ api.get('/:id/config', async (c) => {
   const [col] = await db.select().from(colegios).where(eq(colegios.id, id)).limit(1);
   if (!col) return c.json({ success: false, error: 'Colegio no encontrado' }, 404);
 
-  const prods = await db.select().from(productos).where(eq(productos.colegioId, id)).orderBy(asc(productos.orden), asc(productos.itemNumero));
+  // Un colegio solo: el agrupado no cambia nada, pero se usa la misma funcion para que el
+  // orden interno —`orden` con `item_numero` de respaldo— sea el mismo en todas las pantallas.
+  const prods = await ordenarPrendasDesdeBase(db,
+    await db.select().from(productos).where(eq(productos.colegioId, id)).orderBy(asc(productos.orden), asc(productos.itemNumero)));
 
   // FASE 5, tercera vez que aparece este patron: `= colegio OR IS NULL`, nunca
   // `= colegio` a secas. Con las telas y tallas compartidas (colegio_id NULL) el

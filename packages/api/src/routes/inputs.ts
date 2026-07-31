@@ -14,6 +14,9 @@ import {
   etiquetaModalidad,
 } from '../services/modalidadFiscal';
 import { bandaManoObra, esDeBanda } from '../services/tallas';
+// El criterio de orden vive en UNA sola casa: services/ordenPrendas.ts. Los cinco sitios de
+// este archivo lo escribian a mano, dos de una forma y tres de otra.
+import { ordenarPrendasDesdeBase } from '../services/ordenPrendasDb';
 
 /** Redondeo de presentacion. El motor ya redondea sus propias salidas. */
 const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
@@ -319,7 +322,7 @@ api.get('/peso-mat-prima', async (c) => {
 
   let prodQuery = db.select().from(productos);
   if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
-  const allProds = await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero));
+  const allProds = await ordenarPrendasDesdeBase(db, await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero)));
   const allTallas = await db.select().from(tallas).orderBy(asc(tallas.orden));
 
   let pesos: any[] = [];
@@ -427,7 +430,7 @@ api.get('/precios-adquisicion', async (c) => {
   if (colegioId && colegioId !== 'all') {
     prodQuery = db.select().from(productos).where(and(eq(productos.modoCosteo, 'adquirido'), eq(productos.colegioId, colegioId)));
   }
-  const allProds = await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero));
+  const allProds = await ordenarPrendasDesdeBase(db, await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero)));
   let tallasQuery = db.select().from(tallas);
   if (colegioId && colegioId !== 'all') {
     tallasQuery = db.select().from(tallas).where(or(eq(tallas.colegioId, colegioId), isNull(tallas.colegioId)));
@@ -511,7 +514,7 @@ api.get('/accesorios-matriz', async (c) => {
 
   let prodQuery = db.select().from(productos);
   if (filtrar) prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
-  const allProds = await prodQuery.orderBy(asc(productos.itemNumero));
+  const allProds = await ordenarPrendasDesdeBase(db, await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero)));
 
   // Las COLUMNAS salen del catalogo de accesorios, no de los encabezados del Excel.
   //
@@ -749,7 +752,7 @@ api.get('/mano-de-obra', async (c) => {
 
   let prodQuery = db.select().from(productos);
   if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
-  const allProds = await prodQuery.orderBy(asc(productos.itemNumero));
+  const allProds = await ordenarPrendasDesdeBase(db, await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero)));
   const allTallas = await db.select().from(tallas).orderBy(asc(tallas.orden));
 
   let moList: any[] = [];
@@ -816,7 +819,7 @@ api.get('/fijos-x-prenda', async (c) => {
 
   let prodQuery = db.select().from(productos);
   if (colegioId && colegioId !== 'all') prodQuery = prodQuery.where(eq(productos.colegioId, colegioId));
-  const allProds = await prodQuery.orderBy(asc(productos.itemNumero));
+  const allProds = await ordenarPrendasDesdeBase(db, await prodQuery.orderBy(asc(productos.orden), asc(productos.itemNumero)));
 
   const sysConfig = await getSystemConfig(db);
 

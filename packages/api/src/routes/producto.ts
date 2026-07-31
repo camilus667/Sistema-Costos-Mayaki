@@ -46,6 +46,10 @@ import {
 } from '../database/schema';
 import { crearPrendaConTallas } from '../services/crearPrenda.service';
 import { saveDbToDisk } from '../database/sqljs';
+// El criterio de orden vive en UNA sola casa. Antes estaba escrito en diez consultas con
+// tres versiones distintas, y ninguna mencionaba el colegio: por eso el item de un colegio
+// aparecia entre los de otro.
+import { ordenarPrendasDesdeBase } from '../services/ordenPrendasDb';
 
 const api = new Hono();
 
@@ -132,8 +136,13 @@ api.get('/', async (c) => {
   const acotado = !!colegioId && colegioId !== 'all';
 
   const base = db.select().from(productos);
-  const lista = await (acotado ? base.where(eq(productos.colegioId, colegioId!)) : base)
+  const sinOrdenar = await (acotado ? base.where(eq(productos.colegioId, colegioId!)) : base)
     .orderBy(asc(productos.itemNumero));
+  // El orden lo define services/ordenPrendas.ts, la unica casa del criterio. El `orderBy` de
+  // la consulta se queda para que el resultado sea ESTABLE antes de ordenar —dos filas
+  // empatadas no pueden venir en distinto orden entre dos llamadas— pero el criterio real,
+  // el que agrupa por colegio, se aplica despues.
+  const lista = await ordenarPrendasDesdeBase(db, sinOrdenar);
 
   return c.json({
     success: true,

@@ -183,6 +183,19 @@ async function tomarFoto(): Promise<Record<string, any>> {
       }
     }
 
+    // EL ORDEN TIENE QUE SER EL MISMO EN TODOS LOS ENDPOINTS. Es la invariante que este
+    // trabajo vino a instalar, y la que su ausencia hizo visible: antes /api/productos
+    // devolvia 1,2,3,...,28 y la matriz devolvia 1,28,2,3,..., porque cada consulta escribia
+    // su propio criterio. Comparar las dos secuencias es la forma de que una regresion no
+    // pueda volver a separarlas en silencio.
+    const secProd = (foto['productos (todos)'] as any)?.items;
+    const secMatriz = (foto['matrices empresa'] as any)?.items;
+    foto['_ordenConsistente'] = Array.isArray(secProd) && Array.isArray(secMatriz)
+      ? (JSON.stringify(secProd) === JSON.stringify(secMatriz)
+          ? 'si: productos y matrices coinciden'
+          : `NO: productos ${JSON.stringify(secProd).slice(0, 60)} vs matrices ${JSON.stringify(secMatriz).slice(0, 60)}`)
+      : 'no se pudo comparar';
+
     // El arranque NO debe escribir el archivo ni leer el Excel. Se mide aca porque es parte
     // de la foto: son dos garantias que un cambio futuro podria romper sin que se note.
     foto['_arranque'] = { escribioAlArrancar: srv.log.includes('Base de datos guardada en disco') };
@@ -243,6 +256,7 @@ async function main() {
     console.log(`  sondas: ${Object.keys(foto).filter((k) => !k.startsWith('_')).length}`);
     console.log(`  el arranque escribe el archivo de la base: ${foto['_arranque']?.escribioAlArrancar ? 'SI  <-- no deberia' : 'no'}`);
     console.log(`  el arranque abre CAMBRIDGE.xlsx          : ${foto['_abrioExcel'] ? 'SI  <-- no deberia' : 'no'}`);
+    console.log(`  el orden es consistente entre endpoints  : ${foto['_ordenConsistente']}`);
     for (const [k, v] of Object.entries(foto)) {
       if (k.startsWith('_')) continue;
       console.log(`  ${k.padEnd(22)} ${JSON.stringify(v).slice(0, 120)}`);
