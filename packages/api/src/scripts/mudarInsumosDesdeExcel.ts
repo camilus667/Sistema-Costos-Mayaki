@@ -146,19 +146,32 @@ async function main() {
   const enBase = await db.select().from(accesorios);
   log(`Insumos en la base: ${enBase.length}\n`);
 
-  const porCodigo = new Map<number, any>();
+  // UN CODIGO PUEDE ESTAR EN MAS DE UN INSUMO, y hay que contemplarlo.
+  //
+  // MEDIDO en la base: el codigo 16 lo comparten `Bordado escudo` (Cambridge, 13 usos en recetas) y
+  // `Bordado escudo Internacional` (Internacional SM, 1 uso). Son dos insumos distintos de dos
+  // colegios distintos con el mismo numero, que es legitimo: el codigo es del catalogo de cada
+  // colegio, no global.
+  //
+  // La version anterior usaba `Map<numero, insumo>` y el `set` sobreescribia: de los dos, uno
+  // quedaba sin mudar y el script no lo decia. Con 39 insumos y 38 codigos distintos, decia "38 se
+  // actualizarian" y el que faltaba era invisible.
+  const porCodigo = new Map<number, any[]>();
   for (const a of enBase) {
     const c = parseInt(String(a.codigo ?? ''), 10);
-    if (!isNaN(c)) porCodigo.set(c, a);
+    if (isNaN(c)) continue;
+    if (!porCodigo.has(c)) porCodigo.set(c, []);
+    porCodigo.get(c)!.push(a);
   }
+  const codigosCompartidos = [...porCodigo.entries()].filter(([, v]) => v.length > 1);
 
   const cambios: Array<{ fila: FilaPlanilla; acc: any; uds: number }> = [];
   const sinPareja: FilaPlanilla[] = [];
   const discrepancias: Array<{ desc: string; declara: number; cobra: number }> = [];
 
   for (const f of planilla) {
-    const acc = porCodigo.get(f.codigo);
-    if (!acc) { sinPareja.push(f); continue; }
+    const coincidencias = porCodigo.get(f.codigo);
+    if (!coincidencias || coincidencias.length === 0) { sinPareja.push(f); continue; }
 
     // Se deriva del costo de uso, que es lo que el sistema venia cobrando.
     const uds = derivarUnidadesPorPrenda(f.costoUso, f.costoUnitario, f.udsDeclaradas);
@@ -166,7 +179,10 @@ async function main() {
     if (f.udsDeclaradas !== null && Math.abs(f.udsDeclaradas - uds) > 0.0005) {
       discrepancias.push({ desc: f.descripcion, declara: f.udsDeclaradas, cobra: uds });
     }
-    cambios.push({ fila: f, acc, uds });
+    // Una fila de la planilla se aplica a TODOS los insumos que comparten ese codigo. Es un
+    // supuesto y por eso se reporta abajo: la planilla tiene una sola fila por codigo, asi que no
+    // hay con que distinguir a cual de los dos se referia.
+    for (const acc of coincidencias) cambios.push({ fila: f, acc, uds });
   }
 
   log('CODIGO  INSUMO                          UNITARIO   USO      -> UDS/PRENDA  OJALES  UDS/METRO  CM2');
@@ -193,13 +209,23 @@ async function main() {
     }
   }
 
+  if (codigosCompartidos.length) {
+    log(`\n⚠  ${codigosCompartidos.length} codigo(s) los comparten mas de un insumo.`);
+    log('   La planilla tiene una sola fila por codigo, asi que a los dos se les aplica lo mismo.');
+    log('   Revisar si corresponde, o darles codigos distintos:\n');
+    for (const [cod, lista] of codigosCompartidos) {
+      log(`     codigo ${cod}: ${lista.map((a: any) => a.descripcion).join('  |  ')}`);
+    }
+  }
+
   if (sinPareja.length) {
     log(`\n⚠  ${sinPareja.length} filas de la planilla sin insumo en la base (no se mudan):`);
     for (const f of sinPareja) log(`     codigo ${f.codigo}  ${f.descripcion}`);
   }
 
-  const enBaseSinPlanilla = [...porCodigo.keys()]
-    .filter((c) => !planilla.some((f) => f.codigo === c));
+  const enBaseSinPlanilla = [...porCodigo.entries()]
+    .filter(([c]) => !planilla.some((f) => f.codigo === c))
+    .flatMap(([, lista]) => lista);
   if (enBaseSinPlanilla.length) {
     log(`\n   ${enBaseSinPlanilla.length} insumos de la base no estan en la planilla; quedan con`);
     log('   unidadesPorPrenda vacio, que el sistema lee como 1.');
