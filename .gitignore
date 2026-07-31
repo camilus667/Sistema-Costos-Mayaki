@@ -10,7 +10,8 @@ coverage
 turbo
 *.zip
 *.sqlite
-!packages/api/sistema_inventario.db
+# Ninguna base de datos va al repo. Cada máquina mantiene la suya localmente.
+*.db
 
 # Artefactos generados. No van al repo.
 paridad.csv
