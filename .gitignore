@@ -54,3 +54,22 @@ sistema_inventario.db.antes-*
 pos.xlsx
 *export*.xlsx
 products_v2_export*.xlsx
+
+# ============================================================================
+# EXPORTS DEL POS — DATOS DE NEGOCIO, NO VAN AL REPO
+#
+# Traen precios, inventario y codigos de producto de todos los colegios.
+#
+# ESTA REGLA ERA DEMASIADO ANGOSTA Y COSTO UN ARCHIVO. Decia `pos.xlsx` literal,
+# porque era el nombre del archivo que existia cuando se escribio. El dia que
+# aparecio `pos2.xlsx`, un `git add .` lo llevo al repo (commit fa579ca) sin que
+# nada lo frenara.
+#
+# Ahora se ignora la FAMILIA, no un nombre. Y cualquier .xlsx de la raiz, que es
+# donde caen los exports: si alguna vez hace falta versionar uno, se agrega con
+# `git add -f` a proposito, que es lo correcto para una excepcion.
+# ============================================================================
+pos*.xlsx
+POS*.xlsx
+/*.xlsx
+!CAMBRIDGE.xlsx
