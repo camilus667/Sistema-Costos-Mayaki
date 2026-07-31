@@ -36,28 +36,44 @@ const RUTA_DB = opcion('db')
   ? path.resolve(opcion('db')!)
   : path.resolve(process.cwd(), 'sistema_inventario.db');
 
+function exigirArchivo(ruta: string | undefined): string {
+  // DOS CAUSAS DISTINTAS, DOS MENSAJES DISTINTOS. La primera version usaba
+  // `if (!rutaArchivo || !fs.existsSync(ARCHIVO))` con un solo texto que decia "Falta
+  // --archivo", asi que cuando la ruta estaba pero el archivo no, el error mandaba a
+  // revisar el flag —que estaba bien— en vez de la ruta. El usuario perdio dos intentos
+  // buscando el problema donde no estaba.
+  if (!ruta) {
+    console.error('Falta --archivo con la ruta del export del POS (.xlsx). Por ejemplo:');
+    console.error('  pnpm tsx SCRIPT --archivo "C:\\Users\\Win10\\Downloads\\products_v2_export.xlsx"');
+    process.exit(1);
+  }
+  const abs = path.resolve(ruta);
+  if (!fs.existsSync(abs)) {
+    console.error(`El flag --archivo llego bien, pero NO EXISTE ese archivo:`);
+    console.error(`  se busco en: ${abs}`);
+    console.error('');
+    console.error('Revisar la ruta. En PowerShell, para encontrarlo:');
+    console.error('  Get-ChildItem -Path $HOME -Recurse -Filter "*export*.xlsx" -ErrorAction SilentlyContinue | Select-Object FullName');
+    process.exit(1);
+  }
+  return abs;
+}
+
 async function medir() {
-  if (!ARCHIVO) {
-    console.error('Falta --archivo con la ruta del export del POS (.xlsx).');
-    process.exit(1);
-  }
-  if (!fs.existsSync(ARCHIVO)) {
-    console.error(`No existe el archivo ${ARCHIVO}`);
-    process.exit(1);
-  }
+  const rutaArchivo = exigirArchivo(ARCHIVO);
   if (!fs.existsSync(RUTA_DB)) {
     console.error(`No existe la base en ${RUTA_DB}`);
     process.exit(1);
   }
 
-  const wb = XLSX.readFile(ARCHIVO);
+  const wb = XLSX.readFile(rutaArchivo);
   const hoja = wb.SheetNames[0];
   const matriz = XLSX.utils.sheet_to_json<any[]>(wb.Sheets[hoja], {
     header: 1, raw: false, defval: '',
   });
 
   const p = parsearFilasPos(matriz);
-  console.log(`\nArchivo: ${path.basename(ARCHIVO)}   hoja "${hoja}"`);
+  console.log(`\nArchivo: ${path.basename(rutaArchivo)}   hoja "${hoja}"`);
   console.log(`  filas de datos      ${matriz.length - 1}`);
   console.log(`  descartadas         ${p.descartadasPorCategoria}   ${JSON.stringify(p.detalleDescartes)}`);
   console.log(`  relevantes          ${p.filas.length}`);

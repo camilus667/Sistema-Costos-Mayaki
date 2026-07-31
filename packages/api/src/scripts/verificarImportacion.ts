@@ -58,6 +58,29 @@ function selloDb(ruta: string): string {
   return `${b.length}:${h.toString(16)}`;
 }
 
+function exigirArchivo(ruta: string | undefined): string {
+  // DOS CAUSAS DISTINTAS, DOS MENSAJES DISTINTOS. La primera version usaba
+  // `if (!rutaArchivo || !fs.existsSync(ARCHIVO))` con un solo texto que decia "Falta
+  // --archivo", asi que cuando la ruta estaba pero el archivo no, el error mandaba a
+  // revisar el flag —que estaba bien— en vez de la ruta. El usuario perdio dos intentos
+  // buscando el problema donde no estaba.
+  if (!ruta) {
+    console.error('Falta --archivo con la ruta del export del POS (.xlsx). Por ejemplo:');
+    console.error('  pnpm tsx SCRIPT --archivo "C:\\Users\\Win10\\Downloads\\products_v2_export.xlsx"');
+    process.exit(1);
+  }
+  const abs = path.resolve(ruta);
+  if (!fs.existsSync(abs)) {
+    console.error(`El flag --archivo llego bien, pero NO EXISTE ese archivo:`);
+    console.error(`  se busco en: ${abs}`);
+    console.error('');
+    console.error('Revisar la ruta. En PowerShell, para encontrarlo:');
+    console.error('  Get-ChildItem -Path $HOME -Recurse -Filter "*export*.xlsx" -ErrorAction SilentlyContinue | Select-Object FullName');
+    process.exit(1);
+  }
+  return abs;
+}
+
 async function postArchivo(
   ruta: string,
   campos: Record<string, string>,
@@ -75,10 +98,7 @@ async function postArchivo(
 
 
 async function main() {
-  if (!ARCHIVO || !fs.existsSync(ARCHIVO)) {
-    console.error('Falta --archivo con la ruta del export del POS (.xlsx).');
-    process.exit(1);
-  }
+  const rutaArchivo = exigirArchivo(ARCHIVO);
 
   const rutaReal = path.resolve(process.cwd(), 'sistema_inventario.db');
   if (!fs.existsSync(rutaReal)) {
@@ -88,11 +108,11 @@ async function main() {
 
   const { tmp, copia } = copiarBase(process.cwd());
   const selloReal = selloDb(rutaReal);
-  const bytes = fs.readFileSync(ARCHIVO);
+  const bytes = fs.readFileSync(rutaArchivo);
 
   console.log(`\nBase real:  ${rutaReal}`);
   console.log(`Copia:      ${copia}`);
-  console.log(`Archivo:    ${path.basename(ARCHIVO)}  (${(bytes.length / 1024).toFixed(0)} KB)`);
+  console.log(`Archivo:    ${path.basename(rutaArchivo)}  (${(bytes.length / 1024).toFixed(0)} KB)`);
 
   let srv: any = null;
   try {
@@ -162,7 +182,7 @@ async function main() {
       prev2.json?.instantanea?.vigente === true, JSON.stringify(prev2.json?.instantanea));
 
     // =====================================================================
-    console.log('\n--- 3. LA HUELLA ATAJA UN ARCHIVO DISTINTO ---');
+    console.log('\n--- 3. LA HUELLA ATAJA UN rutaArchivo DISTINTO ---');
     const selloPreEjec = selloDb(copia);
     const huellaMala = await postArchivo('/api/importar/ejecutar',
       { colegioId: String(cambridge.id), opciones: JSON.stringify({ huella: 'deadbeef' }) }, bytes);
@@ -210,14 +230,14 @@ async function main() {
     verificar('ningun codigo del POS quedo en dos filas distintas',
       conCodigo.duplicados.length === 0, `duplicados: ${JSON.stringify(conCodigo.duplicados.slice(0, 5))}`);
 
-    // ---- lo escrito llego AL ARCHIVO, no solo a la memoria
+    // ---- lo escrito llego AL rutaArchivo, no solo a la memoria
     //
     // Todos los chequeos anteriores leen por la API, que responde desde la base EN MEMORIA
     // de sql.js. Que la API diga que el codigo esta no prueba que sobreviva a reiniciar el
     // servidor: eso depende de que saveDbToDisk() haya corrido despues del COMMIT. Se abre
     // el archivo de la copia con sql.js y se cuenta ahi.
     const enArchivo = await contarEnArchivo(copia);
-    verificar('los codigos llegaron al ARCHIVO y no solo a la memoria',
+    verificar('los codigos llegaron al rutaArchivo y no solo a la memoria',
       enArchivo.conCodigo > 0, `${enArchivo.conCodigo} de ${enArchivo.filas} filas con codigo en el archivo`);
     verificar('la columna codigo_externo existe en el archivo',
       enArchivo.columnas.includes('codigo_externo'), enArchivo.columnas.join(', '));
