@@ -313,6 +313,10 @@ api.get('/matriz-consolidada', async (c) => {
       inventarioUnidades: 0,
       costoInventario: 0,
       precioInventario: 0,
+      // El codigo va en TODAS las celdas, tambien en las que no se ofrecen, para que el juego
+      // de claves sea el mismo en toda la grilla. Una celda a la que le falta una clave que
+      // las demas tienen obliga a la pantalla a preguntar antes de leer.
+      codigoExterno: null,
       seOfrece: false,
     });
 
@@ -369,6 +373,10 @@ api.get('/matriz-consolidada', async (c) => {
           // IVA, asi que el valor del stock estaba inflado ~13%.
           costoInventario: r2(inv * r.costoUnitarioNeto),
           precioInventario: r2(inv * (pv > 0 ? pv : r.costoUnitarioNeto)),
+          // EL CODIGO DEL POS, en la celda. Es su granularidad exacta: una celda de esta
+          // matriz ES una prenda en una talla, que es lo que el codigo identifica. La columna
+          // ITEM no puede tenerlo porque su fila abarca de 9 a 16 codigos distintos.
+          codigoExterno: f.meta.codigoExterno ?? null,
           seOfrece: true,
         };
       }

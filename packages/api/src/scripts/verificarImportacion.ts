@@ -237,7 +237,7 @@ async function main() {
     // servidor: eso depende de que saveDbToDisk() haya corrido despues del COMMIT. Se abre
     // el archivo de la copia con sql.js y se cuenta ahi.
     const enArchivo = await contarEnArchivo(copia);
-    verificar('los codigos llegaron al rutaArchivo y no solo a la memoria',
+    verificar('los codigos llegaron al ARCHIVO y no solo a la memoria',
       enArchivo.conCodigo > 0, `${enArchivo.conCodigo} de ${enArchivo.filas} filas con codigo en el archivo`);
     verificar('la columna codigo_externo existe en el archivo',
       enArchivo.columnas.includes('codigo_externo'), enArchivo.columnas.join(', '));

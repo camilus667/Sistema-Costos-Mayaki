@@ -239,6 +239,9 @@
             <button class="excel-tab" onclick="switchExcelConcept('inventarioUnidades', this)" title="Inventario en unidades">Inventario</button>
             <button class="excel-tab" onclick="switchExcelConcept('costoInventario', this)" title="Costo del inventario">Costo inv.</button>
             <button class="excel-tab" onclick="switchExcelConcept('precioInventario', this)" title="Precio del inventario">Precio inv.</button>
+            <!-- El CODIGO DEL POS como una vista mas. Es la unica forma de verlo completo: su
+                 granularidad es la CELDA —una prenda en una talla— y no la fila. -->
+            <button class="excel-tab" onclick="switchExcelConcept('codigoExterno', this)" title="Código del producto en el sistema POS, por prenda y talla">Código POS</button>
           </div>
         </div>
 
@@ -2687,6 +2690,16 @@
           const cell = p.tallas[t.codigo];
           if (!cell) return '<td style="text-align:center;">-</td>';
 
+          // LA VISTA DEL CODIGO ES TEXTO, no un numero: no se suma, no se totaliza y no se
+          // formatea con separadores de miles. Tratarla como los otros conceptos daria un
+          // "0" donde falta el codigo y un total sin sentido en el pie.
+          if (currentExcelConcept === 'codigoExterno') {
+            const cod = cell.codigoExterno;
+            return cod
+              ? `<td style="text-align:center; font-family:ui-monospace,monospace; font-size:0.7rem; color:#93c5fd;">${String(cod).replace(/</g, '&lt;')}</td>`
+              : '<td style="text-align:center; color:#475569;">—</td>';
+          }
+
           const val = cell[currentExcelConcept] || 0;
           rowSubtotal += val;
           colTotals[t.codigo] += val;
@@ -2747,6 +2760,10 @@
         `;
       }).join('');
 
+      // LA VISTA DEL CODIGO NO LLEVA PIE. Sumar codigos no significa nada, y un "0" ahi se lee
+      // como un total real. Se oculta la fila entera en vez de mostrar guiones.
+      const esVistaTexto = currentExcelConcept === 'codigoExterno';
+
       let tfootElem = document.getElementById('tf-consolidada-foot');
       if (tfootElem) {
         const colTotalsCells = tallas.map(t => {
@@ -2778,7 +2795,7 @@
           subtotalFootHtml = `<td style="text-align:right; border-left:2px solid var(--border); padding-right:0.4rem; color:var(--success); font-size:0.82rem; font-weight:800;">${formattedGrandTotal}</td>`;
         }
 
-        tfootElem.innerHTML = `
+        if (esVistaTexto) { tfootElem.innerHTML = ''; } else tfootElem.innerHTML = `
           <tr style="border-top: 2px solid var(--border);">
             <th colspan="2" style="text-align:left; padding: 0.5rem 0.5rem; color:var(--warning); font-size:0.8rem; font-weight:800;">TOTAL GENERAL</th>
             ${colTotalsCells}
