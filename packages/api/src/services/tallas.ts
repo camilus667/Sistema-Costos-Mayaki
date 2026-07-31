@@ -103,3 +103,23 @@ export function esDeBanda(codigo: unknown, banda: 1 | 2 | 3): boolean {
  * leer "Cinturon talla 14" como un dato, y no lo es.
  */
 export const TALLA_PRODUCTOS_SIN_VARIANTE = '14';
+
+/**
+ * Encuentra una talla por codigo comparando en FORMA CANONICA las dos puntas.
+ *
+ * POR QUE NO SE COMPARA EN SQL. `codigoTallaCanonico` rellena a dos digitos, y la base puede tener
+ * `2` mientras la pantalla manda `02` —o al revés, si algun dia se aplica el renombre—. Un
+ * `WHERE codigo = ?` exacto falla en cualquiera de los dos sentidos, y falla RARO: el precio no se
+ * guarda y el error dice "No existe la talla 02" para una talla que si existe.
+ *
+ * Comparar en memoria sobre las candidatas del colegio cuesta nada —son 16 filas— y hace que el
+ * emparejamiento no dependa de en que formato quedo guardada la base.
+ */
+export function buscarTallaPorCodigo<T extends { codigo: string }>(
+  candidatas: T[],
+  codigo: unknown,
+): T | null {
+  const buscado = codigoTallaCanonico(codigo);
+  if (!buscado) return null;
+  return (candidatas || []).find((t) => codigoTallaCanonico(t?.codigo) === buscado) ?? null;
+}

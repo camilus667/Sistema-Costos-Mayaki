@@ -15,6 +15,8 @@ import {
 import { diagnosticarPorPrenda, resumirDiagnosticos } from '../services/diagnosticoCosto';
 // La referencia `CC-01` de cada prenda, para la columna `Prod`.
 import { referenciasDesdeBase } from '../services/referenciaPrendaDb';
+// Emparejar tallas sin depender de si la base guarda `2` o `02`.
+import { buscarTallaPorCodigo } from '../services/tallas';
 import XLSX from 'xlsx';
 import { resolverPrendaPorItem } from '../services/resolucion.service';
 import {
@@ -438,17 +440,17 @@ async function resolverCelda(
 
 /** Busca la talla por codigo dentro del vocabulario visible para esa prenda. */
 async function resolverTallaPorCodigo(db: any, tallaCodigo: string, colegioIdPrenda: string) {
-  const [talla] = await db
+  // Se traen las candidatas del colegio y se compara en FORMA CANONICA, no con un `WHERE codigo = ?`.
+  //
+  // El `eq` exacto que habia aca fallaba si los dos lados no estaban escritos igual: la base guarda
+  // `2` y la pantalla puede mandar `02`. Y fallaba raro —el precio no se guardaba y el error decia
+  // "No existe la talla 02" para una talla que si existe—. Son 16 filas: comparar en memoria no
+  // cuesta nada y deja de depender de en que formato quedo la base.
+  const candidatas = await db
     .select()
     .from(tallas)
-    .where(
-      and(
-        eq(tallas.codigo, tallaCodigo),
-        or(eq(tallas.colegioId, colegioIdPrenda), isNull(tallas.colegioId))
-      )
-    )
-    .limit(1);
-  return talla || null;
+    .where(or(eq(tallas.colegioId, colegioIdPrenda), isNull(tallas.colegioId)));
+  return buscarTallaPorCodigo(candidatas as any[], tallaCodigo);
 }
 
 // PUT /api/calculo/precio-venta - Actualizar PrecioDeVenta directamente en la matriz

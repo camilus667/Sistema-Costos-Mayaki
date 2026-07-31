@@ -1551,7 +1551,7 @@
           return;
         }
         tallaSel.innerHTML = tallas.map(t =>
-          `<option value="${t.id}">${t.codigo}</option>`
+          `<option value="${t.id}">${fmtTalla(t.codigo)}</option>`
         ).join('');
 
         // Seleccionar 16/34 por defecto, o la primera
@@ -1647,7 +1647,7 @@
           const idsActuales = Array.from(tallaSel.options).map(o => o.value).join(',');
           if (idsNuevos !== idsActuales) {
             tallaSel.innerHTML = p.tallasDisponibles.map(t =>
-              `<option value="${escAttr(t.tallaId)}">${escAttr(t.codigo)}</option>`
+              `<option value="${escAttr(t.tallaId)}">${escAttr(fmtTalla(t.codigo))}</option>`
             ).join('');
           }
           if (tallaActual) {
@@ -1890,7 +1890,7 @@
           <tr>
             <th style="width:78px; text-align:center; vertical-align:middle;">Prod</th>
             <th style="width:180px; text-align:left; vertical-align:middle;">Prenda</th>
-            ${json.tallas.map(t => `<th style="text-align:center; vertical-align:middle;">${t.codigo}</th>`).join('')}
+            ${json.tallas.map(t => `<th style="text-align:center; vertical-align:middle;">${fmtTalla(t.codigo)}</th>`).join('')}
           </tr>
         `;
 
@@ -2146,7 +2146,7 @@
           <tr style="background:#0d131f;">
             <th style="width:68px; text-align:center; padding:0.35rem 0.15rem; font-size:0.68rem;">Prod</th>
             <th style="text-align:left; padding:0.35rem 0.35rem; font-size:0.7rem;">Prenda (semiterminada / adquirida)</th>
-            ${tallasHeader.map(t => `<th style="width:70px; text-align:center; padding:0.35rem 0.15rem; font-size:0.68rem;">${t.codigo}</th>`).join('')}
+            ${tallasHeader.map(t => `<th style="width:70px; text-align:center; padding:0.35rem 0.15rem; font-size:0.68rem;">${fmtTalla(t.codigo)}</th>`).join('')}
           </tr>
         `;
 
@@ -2716,7 +2716,7 @@
       trHead.innerHTML = `
         <th style="width:78px;">Prod</th>
         <th>Prenda</th>
-        ${tallas.map(t => `<th style="text-align:center; padding:0.4rem 0.15rem;">${t.codigo}</th>`).join('')}
+        ${tallas.map(t => `<th style="text-align:center; padding:0.4rem 0.15rem;">${fmtTalla(t.codigo)}</th>`).join('')}
         ${showSubtotalColumn
           ? `<th style="text-align:right; color:var(--warning); border-left:2px solid var(--border); padding-right:0.4rem;">${currentExcelConcept === 'inventarioUnidades' ? 'SUBTOTAL' : 'SUBTOTAL Bs'}</th>`
           : '<th style="border-left:2px solid transparent;"></th>'}
@@ -3566,6 +3566,26 @@
       }
     }
 
+    /**
+     * Formatea un codigo de talla para MOSTRARLO, con dos digitos como minimo: `2` -> `02`.
+     *
+     * Es la misma forma canonica que usa el servidor en `codigoTallaCanonico`, y la que el POS ya
+     * escribe en sus variantes (`Talla 02`, `Talla 03`). La base guarda `2` y `4`, asi que sin esto
+     * la pantalla muestra un formato y el POS otro para la misma talla.
+     *
+     * SOLO PARA MOSTRAR. Los codigos que viajan como clave —`cellKey`, `data-tcodigo`, los
+     * argumentos de `recalcularPesoLive` y de los guardados de la matriz— quedan sin tocar: el
+     * emparejamiento del servidor ya normaliza las dos puntas (ver `buscarTallaPorCodigo`), pero
+     * cambiar una clave sin necesidad es pedirle a un bug que aparezca en otra parte.
+     *
+     * Los codigos que no son puro numero —`16/34`, `36/XS`— se devuelven tal cual: rellenar `16/34`
+     * no significa nada.
+     */
+    function fmtTalla(codigo) {
+      const s = String(codigo == null ? '' : codigo).trim();
+      return /^\d+$/.test(s) ? s.padStart(2, '0') : s;
+    }
+
     function switchAdminTab(tabName) {
       adminTabActual = tabName;
       document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
@@ -3615,7 +3635,7 @@
         const selectTallaDef = document.getElementById('cfg-talla-def');
         if (selectTallaDef && tallasUnicas.length > 0) {
           selectTallaDef.innerHTML = tallasUnicas.map(t =>
-            `<option value="${t.codigo}">${t.nombre} (${t.codigo})</option>`
+            `<option value="${t.codigo}">${t.nombre} (${fmtTalla(t.codigo)})</option>`
           ).join('');
         }
 
@@ -4822,7 +4842,7 @@
       container.innerHTML = (catalogoEmpresa.tallas || []).map(t => `
         <div style="background:#1e293b; padding:0.75rem; border-radius:8px; border:1px solid #334155; display:flex; align-items:center; justify-content:space-between;">
           <div>
-            <strong style="color:#f8fafc; display:block; font-size:0.9rem;">${t.codigo}</strong>
+            <strong style="color:#f8fafc; display:block; font-size:0.9rem;">${fmtTalla(t.codigo)}</strong>
             <span style="font-size:0.7rem; color:#94a3b8;">${t.nombre}</span>
           </div>
           <input type="checkbox" id="atalla-act-${t.id}" ${t.activo ? 'checked' : ''} style="width:18px; height:18px;">
@@ -4847,14 +4867,21 @@
           body: JSON.stringify({ tallas: payload })
         });
         const json = await res.json();
-        if (json.success) {
-          alert('✅ Configuración de tallas guardada.');
-          await cargarResumen();
-          await cargarMatrizConsolidada();
-          cargarInputConcept(currentInputConcept);
-          generarMatrizPrenda();
+        // UN FALLO SE DICE. Esto era `if (json.success) { ... }` SIN else: con un 404 o un 500 la
+        // pantalla no mostraba nada y el usuario quedaba creyendo que las tallas se guardaron. Es la
+        // tercera vez que aparece este mismo patron en el proyecto —los datos del colegio y el orden
+        // de colegios lo tenian igual—.
+        if (!json.success) {
+          alert('No se guardó la configuración de tallas: ' +
+                (json.error || ('el servidor respondió ' + res.status)));
+          return;
         }
-      } catch (e) { alert('Error al guardar tallas: ' + e); }
+        alert('✅ Configuración de tallas guardada.');
+        await cargarResumen();
+        await cargarMatrizConsolidada();
+        cargarInputConcept(currentInputConcept);
+        generarMatrizPrenda();
+      } catch (e) { alert('Error de red al guardar tallas: ' + e); }
     }
 
     function renderAdminPerfilColegio() {
@@ -5943,7 +5970,7 @@
           <table class="rp-tabla rp-matriz rp-densa">
             <thead><tr>
               <th class="rp-c">Prod</th><th class="rp-desc">Prenda</th>
-              ${tallas.map(t => `<th class="rp-r">${esc(t.codigo)}</th>`).join('')}
+              ${tallas.map(t => `<th class="rp-r">${esc(fmtTalla(t.codigo))}</th>`).join('')}
               <th class="rp-r rp-total-col">Subtotal</th>
             </tr></thead>
             <tbody>${cuerpo}</tbody>

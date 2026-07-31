@@ -5,6 +5,7 @@ import {
   esDeBanda,
   BANDAS_MANO_OBRA,
   TALLA_PRODUCTOS_SIN_VARIANTE,
+  buscarTallaPorCodigo,
 } from './tallas';
 
 /**
@@ -135,5 +136,54 @@ describe('talla de los productos sin variante', () => {
 
   it('cae en la banda 2, la del medio', () => {
     expect(bandaManoObra(TALLA_PRODUCTOS_SIN_VARIANTE)).toBe(2);
+  });
+});
+
+describe('buscarTallaPorCodigo', () => {
+  // La base guarda `2`, `4`, `6`; la pantalla y el POS escriben `02`, `04`, `06`. Esta funcion es
+  // la que evita que el guardado de precios falle por esa diferencia de formato.
+  const enBase = [
+    { id: 't2', codigo: '2' }, { id: 't4', codigo: '4' }, { id: 't10', codigo: '10' },
+    { id: 't16', codigo: '16/34' }, { id: 'txs', codigo: '36/XS' },
+  ];
+
+  it('encuentra `2` de la base cuando la pantalla manda `02`', () => {
+    // Con el `WHERE codigo = ?` exacto que habia antes, esto devolvia null y el error decia
+    // "No existe la talla 02" para una talla que si existe.
+    expect(buscarTallaPorCodigo(enBase, '02')?.id).toBe('t2');
+  });
+
+  it('y tambien al revés: la base con `02` y la pantalla mandando `2`', () => {
+    // Es el caso despues de aplicar el renombre a dos digitos. Funciona en los dos sentidos, asi
+    // que el emparejamiento deja de depender de cuando se corra esa migracion.
+    expect(buscarTallaPorCodigo([{ id: 'x', codigo: '02' }], '2')?.id).toBe('x');
+  });
+
+  it('los codigos que no son puro numero se comparan tal cual', () => {
+    expect(buscarTallaPorCodigo(enBase, '16/34')?.id).toBe('t16');
+    expect(buscarTallaPorCodigo(enBase, '36/XS')?.id).toBe('txs');
+  });
+
+  it('ignora los espacios de sobra', () => {
+    expect(buscarTallaPorCodigo(enBase, '  02  ')?.id).toBe('t2');
+  });
+
+  it('un codigo que no existe devuelve null, no la primera talla', () => {
+    // Devolver una talla cualquiera guardaria el precio en la talla equivocada, que es peor que
+    // no guardarlo.
+    expect(buscarTallaPorCodigo(enBase, '03')).toBeNull();
+    expect(buscarTallaPorCodigo(enBase, '99')).toBeNull();
+  });
+
+  it('NO confunde 10 con 1: rellenar no es truncar', () => {
+    expect(buscarTallaPorCodigo(enBase, '10')?.id).toBe('t10');
+    expect(buscarTallaPorCodigo(enBase, '1')).toBeNull();
+  });
+
+  it('no revienta con vacio, nulo ni lista vacia', () => {
+    expect(buscarTallaPorCodigo(enBase, '')).toBeNull();
+    expect(buscarTallaPorCodigo(enBase, null)).toBeNull();
+    expect(buscarTallaPorCodigo([], '02')).toBeNull();
+    expect(buscarTallaPorCodigo(null as any, '02')).toBeNull();
   });
 });

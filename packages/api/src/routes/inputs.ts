@@ -5,6 +5,7 @@ import { saveDbToDisk } from '../database/sqljs';
 import { getSystemConfig, setSystemConfig } from '../services/configService';
 import { costoUnitarioDeInsumo, costoUsoDeInsumo } from '../services/costoInsumo';
 import { agregarReferencias } from '../services/referenciaPrendaDb';
+import { buscarTallaPorCodigo } from '../services/tallas';
 import { cargarContextoCosteo, ensamblarInputs } from '../services/calculo/costeoInputs.service';
 import { calcularCostoTotal } from '../services/calculo/costoTotal.service';
 import { resolverPrendaPorItem, nuevoIdHex } from '../services/resolucion.service';
@@ -888,7 +889,13 @@ api.put('/peso-mat-prima', async (c) => {
     const [prod] = await db.select().from(productos).where(eq(productos.id, productoId)).limit(1);
     if (!prod) return c.json({ success: false, error: 'Producto no encontrado' }, 404);
 
-    const [tallaObj] = await db.select().from(tallas).where(and(eq(tallas.codigo, tallaCodigo), or(eq(tallas.colegioId, prod.colegioId), isNull(tallas.colegioId)))).limit(1);
+    // Comparacion CANONICA, no exacta: la base puede tener `2` y la pantalla mandar `02`. Ver
+    // `buscarTallaPorCodigo`.
+    const candidatasTalla = await db
+      .select()
+      .from(tallas)
+      .where(or(eq(tallas.colegioId, prod.colegioId), isNull(tallas.colegioId)));
+    const tallaObj = buscarTallaPorCodigo(candidatasTalla as any[], tallaCodigo);
     if (tallaObj) {
       const mermaPct = typeof mermaPorcentaje === 'number' ? Number(mermaPorcentaje) : 8;
 
