@@ -3,6 +3,7 @@ import { eq, and, asc, isNull } from 'drizzle-orm';
 import {
   productos,
   tallas,
+  colegioTallas,
   telas,
   pesoMateriaPrima,
   manoObra,
@@ -256,6 +257,35 @@ export async function cargarContextoCosteo(
   const tallasPorId = new Map<string, any>();
   const tallasPorColegio = new Map<string, any[]>();
 
+  // TALLAS ACTIVAS POR COLEGIO. `talla.activo` es un flag GLOBAL y las tallas del
+  // sistema son compartidas (colegio_id nulo), asi que ese flag no puede expresar
+  // "activa aca y apagada alla". La tabla colegio_talla si.
+  //
+  // REGLA: SIN FILA = ACTIVA. Es lo que hace que este cambio no mueva ningun costo
+  // el dia que se aplica: una base sin filas en colegio_talla se comporta
+  // exactamente como antes. La tabla solo habla cuando alguien apago algo.
+  //
+  // El flag global se sigue respetando: si una talla esta apagada globalmente, no la
+  // ve nadie. Es la puerta de arriba; colegio_talla es la de cada colegio.
+  let overridesPorColegio = new Map<string, Map<string, { activo: boolean; orden: number | null }>>();
+  try {
+    const filas = await db.select().from(colegioTallas);
+    for (const f of filas) {
+      const cid = String(f.colegioId);
+      if (!overridesPorColegio.has(cid)) overridesPorColegio.set(cid, new Map());
+      overridesPorColegio.get(cid)!.set(String(f.tallaId), {
+        activo: f.activo !== false,
+        orden: f.orden == null ? null : num(f.orden),
+      });
+    }
+  } catch (e) {
+    // La tabla puede no existir en una base muy vieja. Sin ella, todo activo, que es
+    // el comportamiento previo. No se aborta el costeo por una tabla de preferencias.
+    avisosGlobales.push(
+      'No se pudo leer la configuracion de tallas por colegio; se consideran todas activas.'
+    );
+  }
+
   const tallasCompartidas: any[] = [];
   const tallasEspecificas = new Map<string, any[]>();
   for (const t of listaTallas) {
@@ -273,11 +303,22 @@ export async function cargarContextoCosteo(
   const colegiosPresentes = new Set<string>();
   for (const p of listaProductos) if (p.colegioId) colegiosPresentes.add(String(p.colegioId));
   for (const cid of tallasEspecificas.keys()) colegiosPresentes.add(cid);
+  for (const cid of overridesPorColegio.keys()) colegiosPresentes.add(cid);
   for (const cid of colegiosPresentes) {
     const propias = tallasEspecificas.get(cid) || [];
+    const overrides = overridesPorColegio.get(cid);
     tallasPorColegio.set(
       cid,
-      [...tallasCompartidas, ...propias].sort((a: any, b: any) => num(a.orden) - num(b.orden))
+      [...tallasCompartidas, ...propias]
+        .filter((t: any) => {
+          const o = overrides?.get(String(t.id));
+          return o ? o.activo : true; // sin fila = activa
+        })
+        .sort((a: any, b: any) => {
+          const oa = overrides?.get(String(a.id))?.orden;
+          const ob = overrides?.get(String(b.id))?.orden;
+          return (oa == null ? num(a.orden) : oa) - (ob == null ? num(b.orden) : ob);
+        })
     );
   }
 

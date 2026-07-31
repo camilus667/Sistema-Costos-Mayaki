@@ -438,6 +438,7 @@
             <span style="font-size:0.62rem; font-weight:800; color:#93c5fd; letter-spacing:1px; padding:0 0.35rem;">DEL COLEGIO</span>
             <button class="admin-tab-btn" id="btn-atab-prendas" onclick="switchAdminTab('prendas')">Prendas &amp; Recetas</button>
             <button class="admin-tab-btn" id="btn-atab-colegios" onclick="switchAdminTab('colegios')">Perfil &amp; Colegios</button>
+            <button class="admin-tab-btn" id="btn-atab-importar" onclick="switchAdminTab('importar')">Importar POS</button>
             <button class="admin-tab-btn" style="background:#05966922; color:#34d399; border:1px solid #05966988; margin-left:0.35rem;" onclick="switchTab('snapshots-historico'); cargarSnapshotsLista();">Instantáneas</button>
           </div>
         </div>
@@ -763,6 +764,16 @@
 
           <!-- SUBTAB 3: TALLAS HABILITADAS -->
           <div id="admin-sec-tallas" style="display:none;">
+            <!-- El alcance se DICE. Hasta ahora esta pantalla escribia un flag global
+                 aunque estuviera dentro de la configuracion de un colegio: apagar una
+                 talla aca la apagaba en todos. Ahora es por colegio de verdad, y el
+                 usuario tiene que poder saber cual esta editando sin adivinarlo. -->
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:0.75rem;">
+              <div style="font-size:0.78rem; color:#94a3b8;">
+                Tallas que ofrece <strong id="tallas-ambito-nombre" style="color:#cbd5e1;">este colegio</strong>.
+                Apagar una talla aquí no la apaga en los demás colegios.
+              </div>
+            </div>
             <div style="display:flex; justify-content:flex-end; margin-bottom:0.75rem;">
               <button class="btn"
                 style="background:#38bdf8; color:#0f172a; font-weight:800; font-size:0.78rem; padding:0.45rem 0.95rem;"
@@ -772,6 +783,95 @@
             <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap:0.75rem;"
               id="container-admin-tallas">
               <!-- Tallas cargadas por JS -->
+            </div>
+          </div>
+
+          <!-- SUBTAB: IMPORTAR DESDE EL POS -->
+          <!--
+            TRES PASOS Y EL DEL MEDIO ES EL QUE IMPORTA. El paso 2 no escribe nada: muestra
+            que cambiaria y deja corregir. Se agrupa POR PRENDA porque las 297 filas de
+            Cambridge son 36 decisiones —a que prenda va cada nombre del POS— y 297 precios
+            que vienen del archivo y no exigen criterio.
+
+            Y se muestra ACTUAL -> NUEVO con el delta, no solo el precio nuevo. Medido sobre
+            el archivo real: de 463 filas, 429 cambian el precio y 126 cambian 40% o mas, la
+            mayor de 140 a 350. Un "OK" verde que oculta un salto de 150% invita a confirmar
+            sin mirar.
+          -->
+          <div id="admin-sec-importar" style="display:none;">
+            <div style="font-size:0.78rem; color:#94a3b8; margin-bottom:1rem; line-height:1.55;">
+              Trae <strong style="color:#cbd5e1;">precios y codigos</strong> del sistema POS para
+              <strong id="imp-ambito-nombre" style="color:#cbd5e1;">este colegio</strong>.
+              Se importa un colegio por vez. La vista previa no escribe nada.
+            </div>
+
+            <!-- ---------- PASO 1: archivo ---------- -->
+            <div style="border:1px solid #334155; border-radius:8px; padding:1rem; margin-bottom:1rem;">
+              <div style="font-size:0.7rem; font-weight:800; color:#38bdf8; letter-spacing:1px; margin-bottom:0.75rem;">
+                PASO 1 — EL ARCHIVO
+              </div>
+              <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+                <input type="file" id="imp-archivo" accept=".xlsx"
+                  style="font-size:0.78rem; color:#cbd5e1;" onchange="impArchivoElegido()">
+                <button class="btn" id="imp-btn-preview"
+                  style="background:#38bdf8; color:#0f172a; font-weight:800; font-size:0.78rem; padding:0.45rem 0.95rem;"
+                  onclick="impGenerarPreview()" disabled>Ver que cambiaria</button>
+              </div>
+              <div id="imp-estado-instantanea" style="font-size:0.74rem; margin-top:0.75rem;"></div>
+            </div>
+
+            <!-- ---------- PASO 2: revision ---------- -->
+            <div id="imp-paso2" style="display:none; border:1px solid #334155; border-radius:8px; padding:1rem; margin-bottom:1rem;">
+              <div style="font-size:0.7rem; font-weight:800; color:#fbbf24; letter-spacing:1px; margin-bottom:0.75rem;">
+                PASO 2 — REVISAR
+              </div>
+              <div id="imp-resumen" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:0.6rem; margin-bottom:1rem;"></div>
+              <div id="imp-avisos" style="margin-bottom:1rem;"></div>
+              <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse:collapse; font-size:0.74rem;">
+                  <thead>
+                    <tr style="border-bottom:2px solid #334155;">
+                      <th style="text-align:left; padding:0.4rem;">Nombre en el POS</th>
+                      <th style="text-align:left; padding:0.4rem;">Prenda del sistema</th>
+                      <th style="text-align:right; padding:0.4rem;">Conf.</th>
+                      <th style="text-align:right; padding:0.4rem;">Filas</th>
+                      <th style="text-align:right; padding:0.4rem;">Precio POS</th>
+                      <th style="text-align:right; padding:0.4rem;">Mayor cambio</th>
+                      <th style="text-align:left; padding:0.4rem;">Corregir</th>
+                    </tr>
+                  </thead>
+                  <tbody id="imp-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- ---------- PASO 3: confirmar ---------- -->
+            <div id="imp-paso3" style="display:none; border:1px solid #334155; border-radius:8px; padding:1rem;">
+              <div style="font-size:0.7rem; font-weight:800; color:#f87171; letter-spacing:1px; margin-bottom:0.75rem;">
+                PASO 3 — CONFIRMAR
+              </div>
+              <div style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1rem; font-size:0.78rem; color:#cbd5e1;">
+                <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                  <input type="checkbox" id="imp-crear-prendas" onchange="impRenderPlan()">
+                  Crear las prendas que el sistema no tiene
+                  <span style="color:#94a3b8;">(nacen sin costo)</span>
+                </label>
+                <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                  <input type="checkbox" id="imp-inventario">
+                  Traer tambien las cantidades de inventario
+                  <span style="color:#f87171;">(reemplaza el conteo actual)</span>
+                </label>
+              </div>
+              <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+                <button class="btn" id="imp-btn-instantanea"
+                  style="background:#059669; font-size:0.78rem; padding:0.45rem 0.95rem;"
+                  onclick="impCrearInstantanea()">Crear instantanea ahora</button>
+                <button class="btn" id="imp-btn-ejecutar"
+                  style="background:#dc2626; color:#fff; font-weight:800; font-size:0.78rem; padding:0.45rem 0.95rem;"
+                  onclick="impEjecutar()" disabled>Importar</button>
+                <span id="imp-progreso" style="font-size:0.74rem; color:#94a3b8;"></span>
+              </div>
+              <div id="imp-reporte" style="margin-top:1rem;"></div>
             </div>
           </div>
 
@@ -2682,6 +2782,287 @@
 
     let adminTabActual = 'telas';
 
+    // ==========================================================================
+    // IMPORTADOR DEL POS. Tres pasos, y el del medio es el que importa.
+    //
+    // El paso 2 NO ESCRIBE: pide /api/importar/preview, que devuelve que cambiaria y una
+    // HUELLA del contenido. El paso 3 manda esa huella y el servidor se niega si no
+    // coincide, porque vuelve a leer el archivo desde cero en vez de confiar en lo que
+    // manda esta pantalla. Asi no se puede revisar una planilla y confirmar otra.
+    //
+    // SE AGRUPA POR PRENDA. Las 297 filas de Cambridge son 36 decisiones: a que prenda del
+    // sistema va cada nombre del POS. Los precios de cada talla vienen del archivo y no
+    // exigen criterio. Mostrar 297 filas obligaria a leer 297 veces lo mismo.
+    // ==========================================================================
+    let impPlan = null;
+    let impCorrecciones = {};
+    let impPrendasDelColegio = [];
+
+    function impAlEntrar() {
+      const n = document.getElementById('imp-ambito-nombre');
+      if (n) n.textContent = nombreAmbito ? nombreAmbito() : 'este colegio';
+      impConsultarInstantanea();
+      impCargarPrendas();
+    }
+
+    async function impCargarPrendas() {
+      // Para el selector de correccion manual: SOLO las prendas de este colegio. Ofrecer las
+      // de otro permitiria mandar el precio de un colegio a la prenda de otro, que es el peor
+      // error posible de esta importacion.
+      try {
+        const r = await fetch('/api/productos?colegioId=' + encodeURIComponent(colegioFiltroActual || ''));
+        const j = await r.json();
+        impPrendasDelColegio = (j.data || j || []).map(p => ({ id: p.id, descripcion: p.descripcion }));
+      } catch (e) { impPrendasDelColegio = []; }
+    }
+
+    async function impConsultarInstantanea() {
+      const div = document.getElementById('imp-estado-instantanea');
+      if (!div) return;
+      try {
+        const r = await fetch('/api/snapshots');
+        const j = await r.json();
+        const n = (j.data || []).length;
+        div.innerHTML = n === 0
+          ? '<span style="color:#f87171;">No hay ninguna instantanea. Es obligatoria antes de importar.</span>'
+          : '<span style="color:#94a3b8;">' + n + ' instantanea(s) guardadas. La vista previa dira si alguna sirve.</span>';
+      } catch (e) { div.textContent = ''; }
+    }
+
+    function impArchivoElegido() {
+      const f = document.getElementById('imp-archivo').files[0];
+      document.getElementById('imp-btn-preview').disabled = !f;
+      // Un archivo nuevo invalida todo lo revisado, incluidas las correcciones: eran
+      // decisiones sobre OTRA planilla.
+      impPlan = null; impCorrecciones = {};
+      document.getElementById('imp-paso2').style.display = 'none';
+      document.getElementById('imp-paso3').style.display = 'none';
+      document.getElementById('imp-reporte').innerHTML = '';
+    }
+
+    async function impGenerarPreview() {
+      const f = document.getElementById('imp-archivo').files[0];
+      if (!f) return;
+      if (!colegioFiltroActual || colegioFiltroActual === 'all') {
+        alert('Elegi un colegio en el selector de arriba. Se importa un colegio por vez.');
+        return;
+      }
+      const btn = document.getElementById('imp-btn-preview');
+      btn.disabled = true; btn.textContent = 'Leyendo...';
+      try {
+        const fd = new FormData();
+        fd.append('archivo', f);
+        fd.append('colegioId', colegioFiltroActual);
+        fd.append('correcciones', JSON.stringify(impCorrecciones));
+        const r = await fetch('/api/importar/preview', { method: 'POST', body: fd });
+        const j = await r.json();
+        if (!j.success) { alert('No se pudo leer el archivo:\n\n' + (j.error || 'error desconocido')); return; }
+        impPlan = j.plan;
+        impPlan._instantanea = j.instantanea;
+        // El umbral lo decide el SERVIDOR y viaja en la respuesta. Escribirlo a mano aca
+        // seria una segunda verdad que se desincroniza el dia que cambie del otro lado, que
+        // es exactamente como este proyecto termino con la formula de costeo en seis lugares.
+        impPlan._umbral = j.umbralSalto;
+        impRenderPlan();
+        document.getElementById('imp-paso2').style.display = 'block';
+        document.getElementById('imp-paso3').style.display = 'block';
+      } catch (e) {
+        alert('Error de red: ' + e);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Ver que cambiaria';
+      }
+    }
+
+    function impTarjeta(valor, etiqueta, color) {
+      return '<div style="border:1px solid #334155; border-radius:6px; padding:0.5rem 0.6rem;">' +
+        '<div style="font-size:1.15rem; font-weight:800; color:' + color + ';">' + valor + '</div>' +
+        '<div style="font-size:0.62rem; color:#94a3b8; letter-spacing:0.5px;">' + etiqueta + '</div></div>';
+    }
+
+    function impPct(d) {
+      if (d === null || d === undefined) return '';
+      const p = d * 100;
+      return (p > 0 ? '+' : '') + p.toFixed(0) + '%';
+    }
+
+    function impRenderPlan() {
+      if (!impPlan) return;
+      const r = impPlan.resumen;
+      const crearPrendas = document.getElementById('imp-crear-prendas').checked;
+
+      document.getElementById('imp-resumen').innerHTML =
+        impTarjeta(r.decisiones, 'DECISIONES', '#f8fafc') +
+        impTarjeta(r.filasDelColegio, 'FILAS DEL ARCHIVO', '#cbd5e1') +
+        impTarjeta(r.actualizar, 'PRECIOS QUE CAMBIAN', '#fbbf24') +
+        impTarjeta(r.crear, 'PRECIOS NUEVOS', '#34d399') +
+        impTarjeta(r.sinCambio, 'SIN CAMBIO', '#94a3b8') +
+        impTarjeta(r.saltosExtremos, 'SALTOS GRANDES', r.saltosExtremos ? '#f87171' : '#94a3b8') +
+        impTarjeta(r.prendasPorCrear, 'PRENDAS QUE FALTAN', r.prendasPorCrear ? '#fbbf24' : '#94a3b8');
+
+      const avisos = (impPlan.avisos || []).map(a =>
+        '<div style="font-size:0.74rem; color:#fbbf24; border-left:3px solid #fbbf24; padding:0.35rem 0.6rem; margin-bottom:0.35rem; line-height:1.5;">' +
+        a.replace(/</g, '&lt;') + '</div>').join('');
+      document.getElementById('imp-avisos').innerHTML = avisos;
+
+      // El nombre del colegio se toma del PLAN, que lo trae el servidor, y no de
+      // nombreAmbito(). Esa funcion depende de un cache del navegador, y en un estado
+      // transitorio devuelve "Ámbito <id-hexadecimal>", que es basura para el usuario. El
+      // servidor ya resolvio el colegio para armar este plan: es la fuente correcta.
+      const nom = document.getElementById('imp-ambito-nombre');
+      if (nom && impPlan.colegioNombre) nom.textContent = impPlan.colegioNombre;
+
+      const opciones = impPrendasDelColegio.map(p =>
+        '<option value="' + p.id + '">' + String(p.descripcion).replace(/</g, '&lt;') + '</option>').join('');
+
+      const filas = impPlan.grupos.map(g => {
+        // El semaforo: verde resuelve solo, amarillo exige mirar, rojo no se va a escribir.
+        const seEscribe = g.estado === 'ok' || (g.estado === 'sin-producto' && crearPrendas);
+        const color = g.estado === 'ok' ? '#34d399' : (g.estado === 'sin-producto' && crearPrendas) ? '#fbbf24' : '#f87171';
+        const marca = g.estado === 'ok' ? 'OK' : g.estado === 'sin-producto' ? (crearPrendas ? 'SE CREA' : 'FALTA') :
+                      g.estado === 'revisar' ? 'REVISAR' : g.estado.toUpperCase();
+        const dm = g.resumen.deltaMaximo;
+        const grande = dm !== null && dm >= (impPlan._umbral || 0.40);
+        const elegido = impCorrecciones[g.nombrePos];
+        const rango = g.resumen.precioMin === g.resumen.precioMax
+          ? g.resumen.precioMin.toFixed(0)
+          : g.resumen.precioMin.toFixed(0) + '-' + g.resumen.precioMax.toFixed(0);
+
+        return '<tr style="border-bottom:1px solid #1e293b;' + (seEscribe ? '' : ' opacity:0.65;') + '">' +
+          '<td style="padding:0.4rem;"><span style="color:' + color + '; font-weight:800; font-size:0.62rem; margin-right:0.4rem;">' + marca + '</span>' +
+            String(g.nombrePos).replace(/</g, '&lt;') + '</td>' +
+          '<td style="padding:0.4rem; color:#cbd5e1;">' + (g.productoDescripcion ? String(g.productoDescripcion).replace(/</g, '&lt;') : '<span style="color:#64748b;">ninguna</span>') + '</td>' +
+          '<td style="padding:0.4rem; text-align:right; color:#94a3b8;">' + (g.confianza ? (g.confianza * 100).toFixed(0) + '%' : '') + '</td>' +
+          '<td style="padding:0.4rem; text-align:right; color:#94a3b8;">' + g.resumen.filas + '</td>' +
+          '<td style="padding:0.4rem; text-align:right; color:#cbd5e1;">' + rango + '</td>' +
+          '<td style="padding:0.4rem; text-align:right; font-weight:' + (grande ? '800' : '400') + '; color:' + (grande ? '#f87171' : '#94a3b8') + ';">' +
+            (dm === null ? '' : impPct(dm)) + '</td>' +
+          '<td style="padding:0.4rem;">' +
+            '<select onchange="impCorregir(this, \'' + String(g.nombrePos).replace(/'/g, "\\'") + '\')" ' +
+              'style="background:#1e293b; color:#cbd5e1; border:1px solid #334155; border-radius:4px; font-size:0.7rem; padding:0.15rem;">' +
+              '<option value="">— sin cambiar —</option>' +
+              '<option value="crear"' + (elegido === 'crear' ? ' selected' : '') + '>crear la prenda</option>' +
+              '<option value="omitir"' + (elegido === 'omitir' ? ' selected' : '') + '>saltear</option>' +
+              opciones.replace('value="' + elegido + '"', 'value="' + elegido + '" selected') +
+            '</select>' +
+          '</td></tr>';
+      }).join('');
+      document.getElementById('imp-tbody').innerHTML = filas;
+
+      // El boton de importar solo se habilita con una instantanea vigente. Dejarlo activo y
+      // que el servidor rechace al final seria hacer perder el trabajo de revisar.
+      const inst = impPlan._instantanea || {};
+      const btn = document.getElementById('imp-btn-ejecutar');
+      btn.disabled = !inst.vigente;
+      document.getElementById('imp-progreso').innerHTML = inst.vigente
+        ? '<span style="color:#34d399;">' + (inst.mensaje || '') + '</span>'
+        : '<span style="color:#f87171;">' + (inst.mensaje || 'Falta la instantanea.') + '</span>';
+    }
+
+    function impCorregir(sel, nombrePos) {
+      if (!sel.value) delete impCorrecciones[nombrePos];
+      else impCorrecciones[nombrePos] = sel.value;
+      // Se vuelve a pedir la vista previa: una correccion cambia el plan y por lo tanto la
+      // HUELLA. Recalcularla en el navegador seria inventar una verdad que el servidor no
+      // comparte, y la ejecucion se negaria.
+      impGenerarPreview();
+    }
+
+    async function impCrearInstantanea() {
+      const btn = document.getElementById('imp-btn-instantanea');
+      btn.disabled = true; btn.textContent = 'Creando...';
+      try {
+        const r = await fetch('/api/snapshots', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nombre: 'Antes de importar POS — ' + new Date().toLocaleString('es-BO'),
+            descripcion: 'Creada automaticamente antes de una importacion del POS.',
+            colegioId: colegioFiltroActual || null,
+          }),
+        });
+        const j = await r.json();
+        if (j.success === false) { alert('No se pudo crear la instantanea:\n\n' + j.error); return; }
+        await impConsultarInstantanea();
+        // Se regenera el plan para que el servidor confirme que la instantanea ya sirve.
+        await impGenerarPreview();
+      } finally {
+        btn.disabled = false; btn.textContent = 'Crear instantanea ahora';
+      }
+    }
+
+    async function impEjecutar() {
+      if (!impPlan) return;
+      const f = document.getElementById('imp-archivo').files[0];
+      if (!f) { alert('Volve a elegir el archivo.'); return; }
+
+      const inventario = document.getElementById('imp-inventario').checked;
+      const crearPrendas = document.getElementById('imp-crear-prendas').checked;
+      const r = impPlan.resumen;
+
+      const detalle =
+        'Colegio: ' + impPlan.colegioNombre + '\n' +
+        'Precios que cambian: ' + r.actualizar + '\n' +
+        'Precios nuevos: ' + r.crear + '\n' +
+        (r.saltosExtremos ? 'CAMBIOS DE 40% O MAS: ' + r.saltosExtremos + '\n' : '') +
+        (crearPrendas && r.prendasPorCrear ? 'Prendas que se van a crear: ' + r.prendasPorCrear + ' (sin costo)\n' : '') +
+        (inventario ? 'SE VA A REEMPLAZAR EL INVENTARIO.\n' : 'El inventario no se toca.\n') +
+        '\nEl precio anterior no queda guardado. La vuelta atras es restaurar la instantanea.';
+      if (!confirm('Confirmar la importacion?\n\n' + detalle)) return;
+
+      const btn = document.getElementById('imp-btn-ejecutar');
+      btn.disabled = true; btn.textContent = 'Importando...';
+      document.getElementById('imp-progreso').innerHTML = '<span style="color:#fbbf24;">Escribiendo en la base...</span>';
+      try {
+        const fd = new FormData();
+        fd.append('archivo', f);
+        fd.append('colegioId', impPlan.colegioId);
+        fd.append('correcciones', JSON.stringify(impCorrecciones));
+        fd.append('opciones', JSON.stringify({ huella: impPlan.huella, inventario: inventario, crearPrendas: crearPrendas }));
+        const resp = await fetch('/api/importar/ejecutar', { method: 'POST', body: fd });
+        const j = await resp.json();
+        impRenderReporte(j, resp.status);
+        if (j.success) {
+          impPlan = null; impCorrecciones = {};
+          document.getElementById('imp-paso2').style.display = 'none';
+          // Los datos de toda la pantalla cambiaron: se recargan en vez de dejar numeros
+          // viejos. La funcion se llama cargarResumen, no cargarResumenGeneral: el nombre
+          // equivocado no habria dado ningun error, solo un resumen desactualizado en
+          // silencio, que es la clase de falla mas dificil de notar.
+          if (typeof cargarResumen === 'function') cargarResumen();
+        }
+      } catch (e) {
+        document.getElementById('imp-reporte').innerHTML =
+          '<div style="color:#f87171; font-size:0.78rem;">Error de red: ' + e + '</div>';
+      } finally {
+        btn.disabled = false; btn.textContent = 'Importar';
+        document.getElementById('imp-progreso').innerHTML = '';
+      }
+    }
+
+    function impRenderReporte(j, estado) {
+      const div = document.getElementById('imp-reporte');
+      if (!j.success) {
+        div.innerHTML = '<div style="border:2px solid #f87171; border-radius:6px; padding:0.75rem; font-size:0.78rem; color:#fca5a5; line-height:1.55;">' +
+          '<strong>No se importo nada (' + estado + ').</strong><br>' + String(j.error || '').replace(/</g, '&lt;') + '</div>';
+        return;
+      }
+      const r = j.reporte;
+      const creadas = (r.prendasCreadas || []).map(p =>
+        '<li>' + String(p.descripcion).replace(/</g, '&lt;') + ' (item ' + p.itemNumero + ')</li>').join('');
+      const salteados = (r.gruposSalteados || []).map(g =>
+        '<li>' + String(g.nombrePos).replace(/</g, '&lt;') + ' — ' + String(g.motivo).replace(/</g, '&lt;') + ' (' + g.filas + ' filas)</li>').join('');
+      div.innerHTML =
+        '<div style="border:2px solid #34d399; border-radius:6px; padding:0.75rem; font-size:0.78rem; color:#cbd5e1; line-height:1.6;">' +
+        '<strong style="color:#34d399;">Importacion terminada — ' + j.colegio + '</strong><br>' +
+        'Precios nuevos: ' + r.preciosCreados + ' &nbsp;·&nbsp; actualizados: ' + r.preciosActualizados +
+        ' &nbsp;·&nbsp; sin cambio: ' + r.preciosSinCambio + '<br>' +
+        'Codigos del POS escritos: ' + r.codigosEscritos +
+        (r.inventarioActualizado ? '<br>Cantidades de inventario actualizadas: ' + r.inventarioActualizado : '') +
+        (creadas ? '<br><br><strong>Prendas creadas (sin costo):</strong><ul style="margin:0.25rem 0 0 1.1rem;">' + creadas + '</ul>' : '') +
+        (salteados ? '<br><br><strong style="color:#fbbf24;">No se importaron:</strong><ul style="margin:0.25rem 0 0 1.1rem;">' + salteados + '</ul>' : '') +
+        (j.respaldo ? '<br><br><span style="color:#94a3b8; font-size:0.72rem;">Respaldo del archivo: ' + j.respaldo + '</span>' : '') +
+        '</div>';
+    }
+
     function switchAdminTab(tabName) {
       adminTabActual = tabName;
       document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
@@ -2700,9 +3081,12 @@
       if (secSistema) secSistema.style.display = tabName === 'sistema' ? 'block' : 'none';
       const secInsumos = document.getElementById('admin-sec-insumos');
       if (secInsumos) secInsumos.style.display = tabName === 'insumos' ? 'block' : 'none';
+      const secImportar = document.getElementById('admin-sec-importar');
+      if (secImportar) secImportar.style.display = tabName === 'importar' ? 'block' : 'none';
 
       if (tabName === 'sistema') cargarConfigSistemaAdmin();
       if (tabName === 'insumos') cargarInsumosAdmin();
+      if (tabName === 'importar') impAlEntrar();
       actualizarAlcanceConfig(tabName);
     }
 
@@ -2808,6 +3192,12 @@
      * y no se ejecutaba nunca, y por eso la pantalla se quedaba cargando.
      */
     async function cargarConfigAdminColegio() {
+      // El nombre del colegio que se esta editando, en la pantalla de tallas. Sale de
+      // `nombreAmbito()`, que deriva de la variable de estado y no del DOM: es la
+      // misma fuente de verdad que usan los reportes.
+      const rotuloTallas = document.getElementById('tallas-ambito-nombre');
+      if (rotuloTallas) rotuloTallas.textContent = nombreAmbito();
+
       // Lo de la empresa, siempre. No necesita colegio y no debe esperarlo.
       await cargarCatalogoEmpresa();
       cargarInsumosAdmin();

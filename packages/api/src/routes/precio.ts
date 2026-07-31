@@ -208,6 +208,10 @@ api.get('/', async (c) => {
       precioBs: preciosVenta.precioBs,
       vigenteDesde: preciosVenta.vigenteDesde,
       vigenteHasta: preciosVenta.vigenteHasta,
+      // El codigo del POS viaja con el precio, que es donde vive. Sin el en el listado no
+      // hay forma de comprobar que una importacion lo escribio, ni de que la pantalla lo
+      // muestre despues.
+      codigoExterno: preciosVenta.codigoExterno,
       colegioId: productos.colegioId,
       itemNumero: productos.itemNumero,
     })

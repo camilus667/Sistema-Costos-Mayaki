@@ -25,6 +25,7 @@ import exportRoutes from './routes/export';
 import inputRoutes from './routes/inputs';
 import costeoRoutes from './routes/costeo';
 import snapshotRoutes from './routes/snapshots';
+import importarRoutes from './routes/importar';
 import { asc, eq } from 'drizzle-orm';
 import { costearLote } from './services/calculo/costeoInputs.service';
 import {
@@ -432,10 +433,15 @@ app.route('/api/inputs', inputRoutes);
 // reemplazar nada, para poder comparar paridad antes de tocar esas pantallas.
 app.route('/api/costeo', costeoRoutes);
 app.route('/api/snapshots', snapshotRoutes);
+app.route('/api/importar', importarRoutes);
 
 // Iniciar servidor si se ejecuta directamente
 async function start() {
-  const PORT = 3000;
+  // El puerto sale del entorno y cae en 3000, que es lo que uso el proyecto siempre.
+  // Estaba escrito a mano, y eso impedia levantar una segunda instancia: el script de
+  // verificacion del importador necesita una apuntada a una COPIA de la base, en su propio
+  // puerto, para no depender de la que ya este corriendo ni escribir en la base real.
+  const PORT = Number(process.env.PORT) || 3000;
 
   console.log(`🚀 Iniciando servidor local en http://localhost:${PORT}`);
   console.log('📊 Base de datos: sql.js (en memoria con datos de CAMBRIDGE.xlsx)');

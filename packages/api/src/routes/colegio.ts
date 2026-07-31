@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
-import { eq, asc, or, isNull } from 'drizzle-orm';
-import { colegios, productos, telas, tallas } from '../database/schema';
+import { eq, and, asc, or, isNull } from 'drizzle-orm';
+import { colegios, productos, telas, tallas, colegioTallas } from '../database/schema';
 import { saveDbToDisk } from '../database/sqljs';
 import { crearPrendaConTallas } from '../services/crearPrenda.service';
 
@@ -155,12 +155,39 @@ api.get('/:id/config', async (c) => {
   const tList = await db.select().from(telas).where(or(eq(telas.colegioId, id), isNull(telas.colegioId))).orderBy(asc(telas.orden), asc(telas.descripcion));
   const taList = await db.select().from(tallas).where(or(eq(tallas.colegioId, id), isNull(tallas.colegioId))).orderBy(asc(tallas.orden));
 
+  // EL `activo` QUE DEVUELVE ESTA PANTALLA ES EL DE ESTE COLEGIO, no el global.
+  //
+  // Antes devolvia `talla.activo`, que es un flag global sobre una fila compartida.
+  // La pantalla de Configuracion de un colegio mostraba entonces el estado de TODOS,
+  // y al guardar lo escribia para todos. Mostrar el estado equivocado es la mitad del
+  // defecto: la otra mitad era que el PUT ignoraba el `:id`.
+  //
+  // SIN FILA = ACTIVA, para que una base sin configurar se vea igual que antes.
+  const overrides = new Map<string, any>();
+  try {
+    const filas = await db.select().from(colegioTallas).where(eq(colegioTallas.colegioId, id));
+    for (const f of filas) overrides.set(String(f.tallaId), f);
+  } catch (e) {}
+
+  const tallasDelColegio = taList.map((t: any) => {
+    const o = overrides.get(String(t.id));
+    return {
+      ...t,
+      // `activo` pasa a ser el efectivo para ESTE colegio: el global manda como
+      // puerta de arriba, y el del colegio decide dentro.
+      activo: t.activo === false ? false : (o ? o.activo !== false : true),
+      activoGlobal: t.activo !== false,
+      orden: o && o.orden != null ? o.orden : t.orden,
+      configuradaParaEsteColegio: !!o,
+    };
+  });
+
   return c.json({
     success: true,
     colegio: col,
     productos: prods,
     telas: tList,
-    tallas: taList,
+    tallas: tallasDelColegio,
   });
 });
 
@@ -255,23 +282,99 @@ api.post('/:id/prendas', async (c) => {
   });
 });
 
-// PUT /api/colegios/:id/tallas-config - Activar/desactivar tallas del colegio
+// PUT /api/colegios/:id/tallas-config - Activar/desactivar tallas DE ESTE colegio
+//
+// ESTE ENDPOINT RECIBIA EL COLEGIO EN LA RUTA Y NO LO USABA:
+//
+//   await db.update(tallas).set({ activo }).where(eq(tallas.id, t.id));
+//
+// Escribia `talla.activo`, que es un flag global, sobre filas que tienen colegio_id
+// NULO y por lo tanto son COMPARTIDAS. Resultado: apagar una talla "en Cambridge" la
+// apagaba tambien en Internacional SM. La URL prometia un alcance que la consulta no
+// tenia, que es el mismo defecto que el proyecto ya documento en export.ts —"tres
+// parametros declarados y ninguno aplicado, un endpoint que acepta un filtro y lo
+// ignora, que es peor que uno que no lo acepta"—.
+//
+// Ahora escribe en colegio_talla, una fila por par colegio-talla. SIN FILA = ACTIVA,
+// asi que solo se escribe lo que el usuario decidio y una base sin configurar sigue
+// comportandose como antes.
 api.put('/:id/tallas-config', async (c) => {
   const db = (c as any).db;
+  const colegioId = c.req.param('id');
   const body = await c.req.json();
 
-  if (Array.isArray(body.tallas)) {
-    for (const t of body.tallas) {
-      if (!t.id) continue;
-      const updateData: any = {};
-      if (t.activo !== undefined) updateData.activo = t.activo;
-      if (t.orden !== undefined) updateData.orden = t.orden;
-      await db.update(tallas).set(updateData).where(eq(tallas.id, t.id));
-    }
-    saveDbToDisk();
+  // El colegio TIENE que existir. Sin esta guarda, una fila de colegio_talla con un
+  // colegio inexistente seria invisible para toda pantalla que filtre y quedaria
+  // apagando tallas de nadie. Es la misma huerfana que el proyecto ya limpio a mano.
+  const [col] = await db.select().from(colegios).where(eq(colegios.id, colegioId)).limit(1);
+  if (!col) {
+    return c.json(
+      {
+        success: false,
+        error:
+          `No existe el colegio "${colegioId}". La configuracion de tallas es POR ` +
+          `colegio: sin colegio real no hay a quien aplicarla.`,
+      },
+      404
+    );
   }
 
-  return c.json({ success: true, message: 'Configuración de tallas guardada exitosamente' });
+  if (!Array.isArray(body.tallas)) {
+    return c.json({ success: false, error: 'Se espera un arreglo "tallas".' }, 400);
+  }
+
+  const tallasValidas = new Set(
+    (await db.select({ id: tallas.id }).from(tallas)).map((t: any) => String(t.id))
+  );
+
+  let escritas = 0;
+  const ignoradas: string[] = [];
+
+  for (const t of body.tallas) {
+    if (!t.id) continue;
+    if (!tallasValidas.has(String(t.id))) {
+      ignoradas.push(String(t.id));
+      continue;
+    }
+
+    const existentes = await db
+      .select()
+      .from(colegioTallas)
+      .where(and(eq(colegioTallas.colegioId, colegioId), eq(colegioTallas.tallaId, String(t.id))))
+      .limit(1);
+
+    const datos: any = {};
+    if (t.activo !== undefined) datos.activo = t.activo !== false;
+    if (t.orden !== undefined) datos.orden = t.orden;
+    if (Object.keys(datos).length === 0) continue;
+
+    if (existentes.length > 0) {
+      await db.update(colegioTallas).set(datos).where(eq(colegioTallas.id, existentes[0].id));
+    } else {
+      await db.insert(colegioTallas).values({
+        colegioId,
+        tallaId: String(t.id),
+        activo: datos.activo !== undefined ? datos.activo : true,
+        orden: datos.orden !== undefined ? datos.orden : null,
+      });
+    }
+    escritas++;
+  }
+
+  saveDbToDisk();
+
+  // Se devuelve CUANTAS filas se escribieron, no solo un mensaje de exito. Un
+  // "guardado exitosamente" sobre cero escrituras es exactamente el patron que hizo
+  // invisible la mitad de los defectos de este sistema.
+  return c.json({
+    success: true,
+    message: `Configuración de tallas guardada para ${col.nombre}.`,
+    colegio: col.nombre,
+    tallasConfiguradas: escritas,
+    avisos: ignoradas.length > 0
+      ? [`${ignoradas.length} talla(s) del pedido no existen y se ignoraron.`]
+      : [],
+  });
 });
 
 export default api;

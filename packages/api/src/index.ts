@@ -19,6 +19,7 @@ import precioRoutes from './routes/precio';
 import exportRoutes from './routes/export';
 import costeoRoutes from './routes/costeo';
 import snapshotRoutes from './routes/snapshots';
+import importarRoutes from './routes/importar';
 import dashboardHtml from './dashboard.html';
 
 export interface Env {
@@ -140,5 +141,6 @@ app.route('/api/export', exportRoutes);
 // resolver todavia.
 app.route('/api/costeo', costeoRoutes);
 app.route('/api/snapshots', snapshotRoutes);
+app.route('/api/importar', importarRoutes);
 
 export default app;
