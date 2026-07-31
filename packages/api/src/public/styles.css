@@ -1341,3 +1341,26 @@ footer {
   display: block;
   margin-bottom: 0.2rem;
 }
+
+
+/* ===========================================================================
+   TARJETAS DE CONFIGURACION, EN FILA
+
+   Tres bloques chicos apilados verticalmente obligan a bajar por algo que entra
+   de un vistazo, y a 1920 px dejaban 700 px de pantalla sin usar al lado.
+
+   `auto-fit` con `minmax(25rem, 1fr)` reparte sin media queries: tres columnas
+   en una pantalla ancha, dos cuando no caben tres, una sola en un portatil
+   angosto. Un ancho fijo siempre queda mal en algun tamaño.
+
+   `align-items: start` es lo que evita que las tres crezcan hasta la altura de
+   la mas alta —el defecto clasico de una grilla de tarjetas—, y `max-width` le
+   pone un techo para que en un monitor muy ancho no se estiren sin sentido.
+   =========================================================================== */
+.admin-tarjetas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(25rem, 1fr));
+  gap: 1rem;
+  align-items: start;
+  max-width: 96rem;
+}

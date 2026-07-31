@@ -930,9 +930,20 @@
             El limite es el CONTENIDO, no el contenedor: 62rem para el formulario y 34rem para
             la lista de colegios, que es lo que necesitan un nombre y un telefono.
           -->
-          <div id="admin-sec-colegios" style="display:none; max-width:62rem;">
+          <!--
+            TRES TARJETAS EN UNA FILA, no apiladas.
+            Acotar el ancho no alcanzaba: las tres seguian una debajo de otra, cada una medio
+            vacia, y a 1920 px quedaban 700 px de pantalla sin usar al lado. Tres bloques
+            chicos apilados obligan a bajar por algo que entra de un vistazo.
+            `auto-fit` con `minmax(25rem, 1fr)` las pone en tres columnas en una pantalla ancha,
+            en dos cuando no caben tres, y en una sola en un portatil angosto —sin media
+            queries y sin un ancho fijo que quede mal en algun tamaño—.
+            `align-items: start` es lo que evita que las tres crezcan hasta la altura de la mas
+            alta, que es el defecto clasico de una grilla de tarjetas.
+          -->
+          <div id="admin-sec-colegios" class="admin-tarjetas" style="display:none;">
             <div
-              style="background:#1e293b; padding:1.1rem 1.25rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
+              style="background:#1e293b; padding:1.1rem 1.25rem; border-radius:10px; border:1px solid #334155;">
               <h4 style="margin-top:0; margin-bottom:0.85rem; color:#f8fafc;">🏛️ Datos del Colegio</h4>
 
               <!-- Aviso cuando no hay un colegio elegido. Antes esta seccion mostraba un
@@ -944,28 +955,35 @@
                 Estás en <strong>TODA LA EMPRESA</strong>. Elegí un colegio en el selector de arriba para editar sus datos.
               </div>
 
-              <!-- Las columnas piden lo que necesitan: el nombre y la direccion son largos, el
-                   NIT y el telefono son cortos. Con `1fr 1fr` los cuatro quedaban iguales y los
-                   dos cortos desperdiciaban la mitad de su caja. -->
               <!-- `form-campos` alinea el texto a la IZQUIERDA. `cell-editable-sm` lo centra
                    porque esta hecha para celdas de tabla; en un formulario eso aleja la
                    etiqueta del dato. Ver el bloque en styles.css. -->
-              <div id="col-edit-campos" class="form-campos" style="display:grid; grid-template-columns: minmax(0,1.6fr) minmax(0,1fr); gap:0.75rem 1rem; margin-bottom:1rem;">
-                <div>
+              <!-- Dentro de una tarjeta angosta los campos se apilan SOLOS: `auto-fit` con un
+                   minimo de 9rem da dos columnas cuando hay lugar y una cuando no. Con
+                   `1.6fr 1fr` fijas, en una columna de 25rem el NIT quedaba de 9rem.
+                   El NOMBRE ocupa la fila entera (`grid-column: 1/-1`) porque es el dato mas
+                   largo y el que se lee primero; NIT, direccion y telefono se reparten abajo.
+                   Con las cuatro cajas iguales el NIT tenia el mismo ancho que el nombre. -->
+              <div id="col-edit-campos" class="form-campos" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap:0.7rem 0.9rem; margin-bottom:0.9rem;">
+                <div style="grid-column: 1 / -1;">
                   <label style="font-size:0.74rem; color:#94a3b8;">Nombre del Colegio</label>
                   <input type="text" id="col-edit-nombre" class="cell-editable-sm" style="width:100%; font-weight:700;">
                 </div>
+                <!-- Los dos cortos juntos y los dos largos a fila completa. Con NIT y Direccion
+                     compartiendo fila, el Telefono quedaba solo en media fila con un hueco al
+                     lado. El orden de tabulado sigue siendo razonable: nombre, NIT, telefono,
+                     direccion. -->
                 <div>
                   <label style="font-size:0.74rem; color:#94a3b8;">NIT / Identificación</label>
                   <input type="text" id="col-edit-nit" class="cell-editable-sm" style="width:100%;">
                 </div>
                 <div>
-                  <label style="font-size:0.74rem; color:#94a3b8;">Dirección</label>
-                  <input type="text" id="col-edit-dir" class="cell-editable-sm" style="width:100%;">
-                </div>
-                <div>
                   <label style="font-size:0.74rem; color:#94a3b8;">Teléfono de Contacto</label>
                   <input type="text" id="col-edit-tel" class="cell-editable-sm" style="width:100%;">
+                </div>
+                <div style="grid-column: 1 / -1;">
+                  <label style="font-size:0.74rem; color:#94a3b8;">Dirección</label>
+                  <input type="text" id="col-edit-dir" class="cell-editable-sm" style="width:100%;">
                 </div>
               </div>
               <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
@@ -979,7 +997,7 @@
                  se ven varios juntos: la vista de empresa, los reportes y las matrices.
                  Mientras nadie arrastre, el orden es la FECHA en que se agregaron, que es lo
                  que pidio el usuario y lo que hace que esta pantalla sea opcional. -->
-            <div style="background:#1e293b; padding:1.1rem 1.25rem; border-radius:10px; border:1px solid #334155; margin-bottom:1.25rem;">
+            <div style="background:#1e293b; padding:1.1rem 1.25rem; border-radius:10px; border:1px solid #334155;">
               <h4 style="margin-top:0; margin-bottom:0.5rem; color:#93c5fd;">↕️ Orden de los Colegios</h4>
               <div style="font-size:0.78rem; color:#94a3b8; margin-bottom:0.85rem; line-height:1.55;">
                 Arrastrá para cambiar en qué orden aparecen cuando se ven varios juntos.
@@ -988,7 +1006,9 @@
               <!-- 34rem: lo que necesita un nombre de colegio con su insignia. A ancho completo,
                    una lista de dos filas de 1740 px se lee como una tabla a la que le faltan
                    columnas. -->
-              <div id="orden-colegios-lista" style="display:flex; flex-direction:column; gap:0.3rem; margin-bottom:0.85rem; max-width:34rem;"></div>
+              <!-- Ya no lleva un tope propio: la columna de la grilla la acota, y un max-width
+                   fijo aca la dejaria angosta dentro de una columna ancha. -->
+              <div id="orden-colegios-lista" style="display:flex; flex-direction:column; gap:0.3rem; margin-bottom:0.85rem;"></div>
               <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
                 <button class="btn" id="btn-guardar-orden-colegios" onclick="guardarOrdenColegios()"
                   style="background:#38bdf8; color:#0f172a; font-weight:800; font-size:0.78rem; padding:0.45rem 0.95rem;"
@@ -997,9 +1017,9 @@
               </div>
             </div>
 
-            <div style="background:#0f172a; padding:1.25rem; border-radius:10px; border:1px solid #1e293b;">
-              <h4 style="margin-top:0; color:#34d399;">➕ Dar de Alta un Nuevo Colegio en el Sistema</h4>
-              <div class="form-campos" style="display:grid; grid-template-columns: minmax(0,1.6fr) minmax(0,1fr); gap:0.75rem 1rem; margin-bottom:1rem;">
+            <div style="background:#0f172a; padding:1.1rem 1.25rem; border-radius:10px; border:1px solid #1e293b;">
+              <h4 style="margin-top:0; margin-bottom:0.85rem; color:#34d399;">➕ Dar de Alta un Colegio</h4>
+              <div class="form-campos" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap:0.7rem 0.9rem; margin-bottom:0.9rem;">
                 <div>
                   <label style="font-size:0.78rem; color:#94a3b8;">Nombre del Nuevo Colegio *</label>
                   <input type="text" id="ncol-nombre" class="cell-editable-sm" style="width:100%;"
@@ -3473,7 +3493,12 @@
       const secTallas = document.getElementById('admin-sec-tallas');
       if (secTallas) secTallas.style.display = tabName === 'tallas' ? 'block' : 'none';
       const secColegios = document.getElementById('admin-sec-colegios');
-      if (secColegios) secColegios.style.display = tabName === 'colegios' ? 'block' : 'none';
+      // Se pone '' y NO 'block': esta seccion es una grilla de tres tarjetas (.admin-tarjetas).
+      // Un `style.display = 'block'` es inline y le gana a la hoja de estilos, asi que el
+      // `display:grid` de la clase quedaba anulado y las tarjetas volvian a apilarse —el
+      // max-width si se aplicaba, lo que hacia ver el sintoma como "sigue muy ancho"—.
+      // Con '' se borra el display inline y manda la clase.
+      if (secColegios) secColegios.style.display = tabName === 'colegios' ? '' : 'none';
       const secSistema = document.getElementById('admin-sec-sistema');
       if (secSistema) secSistema.style.display = tabName === 'sistema' ? 'block' : 'none';
       const secInsumos = document.getElementById('admin-sec-insumos');

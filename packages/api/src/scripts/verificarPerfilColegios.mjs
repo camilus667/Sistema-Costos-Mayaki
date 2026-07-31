@@ -12,6 +12,23 @@
  * De ahi que este arnes mida pixeles Y comportamiento: el ancho se arregla mirando, pero un
  * boton que no hace nada solo se detecta apretandolo.
  *
+ * SEGUNDA VUELTA. Acotar el ancho no alcanzo: "sigue demasiado ancho y deberia estar uno a lado
+ * de otro". Las tres tarjetas seguian apiladas, cada una de ~1130 px y medio vacia, con ~700 px
+ * de pantalla sin usar al lado. Por eso el chequeo de ancho CAMBIO de sujeto, no se relajo:
+ * antes medía la SECCION, y ahora la seccion tiene que ser ancha justamente porque contiene tres
+ * columnas. Lo que debe ser angosta es cada TARJETA. Medir la seccion ahora seria medir lo
+ * contrario de lo que se pidio.
+ *
+ * Los cuatro chequeos nuevos y por que cada uno:
+ *   comparten fila               es literalmente el pedido
+ *   la seccion es mas BAJA       que la suma de las tarjetas; imposible si estuvieran apiladas
+ *   las alturas son DISTINTAS    sin `align-items: start` una grilla estira las tres a la mas
+ *                                alta, y quedan dos tarjetas con un hueco abajo
+ *   a 900 px se apilan           un ancho fijo en columnas se rompe en un portatil angosto; que
+ *                                vuelvan a una sola columna prueba que la grilla se adapta
+ *
+ * Se comprobo que discriminan forzando `display:block` en el contenedor: los cuatro fallan.
+ *
  * Uso:
  *   CHROME_PATH=/ruta/a/chrome node src/scripts/verificarPerfilColegios.mjs [puerto]
  */
@@ -71,14 +88,50 @@ try {
     };
   });
 
+  // Las tres tarjetas son los hijos directos de la seccion. Se miden sus rectangulos para saber
+  // si comparten fila: dos cajas comparten fila si sus rangos verticales se solapan y sus bordes
+  // izquierdos son distintos. Comparar solo `top` seria fragil —un par de pixeles de diferencia
+  // por el borde ya lo rompe— y comparar solo `left` no distingue una fila de una diagonal.
+  const medirTarjetas = () => page.evaluate(() => {
+    const sec = document.getElementById('admin-sec-colegios');
+    const cajas = [...sec.children].map((el) => {
+      const r = el.getBoundingClientRect();
+      return {
+        titulo: (el.querySelector('h4')?.textContent || '').trim().slice(0, 28),
+        left: Math.round(r.left), top: Math.round(r.top),
+        ancho: Math.round(r.width), alto: Math.round(r.height),
+      };
+    });
+    return { cajas, seccionAlto: Math.round(sec.getBoundingClientRect().height) };
+  });
+
+  const seSolapanVertical = (a, b) => a.top < b.top + b.alto && b.top < a.top + a.alto;
+
   console.log('--- A 1920 px, CON EL AMBITO EN TODA LA EMPRESA ---');
   let m = await medir();
   console.log(`       panel disponible ${m.panel} px, seccion ${m.seccion} px`);
   console.log(`       nombre ${m.nombre} px, NIT ${m.nit} px, fila de colegio ${m.filaColegio} px`);
-  v('la seccion NO ocupa todo el panel', m.seccion > 0 && m.seccion < m.panel * 0.85,
-    `${m.seccion} de ${m.panel} px`);
   v('la fila de un colegio es angosta, no una barra de punta a punta',
     m.filaColegio > 0 && m.filaColegio < 620, `${m.filaColegio} px`);
+
+  console.log('\n--- LAS TRES TARJETAS, UNA A LADO DE OTRA ---');
+  const t3 = await medirTarjetas();
+  for (const c of t3.cajas) {
+    console.log(`       "${c.titulo}"  left ${c.left}  top ${c.top}  ${c.ancho}x${c.alto} px`);
+  }
+  v('hay tres tarjetas', t3.cajas.length === 3, `${t3.cajas.length}`);
+  v('ninguna tarjeta es una banda de punta a punta',
+    t3.cajas.every((c) => c.ancho < 620), t3.cajas.map((c) => `${c.titulo}=${c.ancho}px`).join(', '));
+  v('las tres comparten fila: se solapan verticalmente',
+    seSolapanVertical(t3.cajas[0], t3.cajas[1]) && seSolapanVertical(t3.cajas[1], t3.cajas[2]),
+    t3.cajas.map((c) => `top ${c.top} alto ${c.alto}`).join(' | '));
+  v('y estan en columnas distintas',
+    new Set(t3.cajas.map((c) => c.left)).size === 3, t3.cajas.map((c) => c.left).join(', '));
+  const sumaAltos = t3.cajas.reduce((a, c) => a + c.alto, 0);
+  v('la seccion es MAS BAJA que la suma de las tarjetas: no estan apiladas',
+    t3.seccionAlto < sumaAltos * 0.75, `seccion ${t3.seccionAlto} px, suma ${sumaAltos} px`);
+  v('no se estiran todas a la altura de la mas alta',
+    new Set(t3.cajas.map((c) => c.alto)).size > 1, t3.cajas.map((c) => c.alto).join(', '));
 
   console.log('\n--- SIN COLEGIO ELEGIDO: se dice, y no se deja escribir en el aire ---');
   v('aparece el aviso', m.avisoVisible === true);
@@ -98,7 +151,12 @@ try {
   v('el aviso se va', m.avisoVisible === false);
   v('los campos se muestran', m.camposVisibles === true);
   v('el boton se habilita', m.btnDeshabilitado === false);
-  v('y la seccion sigue acotada', m.seccion < m.panel * 0.85, `${m.seccion} de ${m.panel} px`);
+  const t3b = await medirTarjetas();
+  v('con el formulario visible las tarjetas SIGUEN en fila',
+    seSolapanVertical(t3b.cajas[0], t3b.cajas[1]) && seSolapanVertical(t3b.cajas[1], t3b.cajas[2]),
+    t3b.cajas.map((c) => `${c.titulo}: top ${c.top} alto ${c.alto}`).join(' | '));
+  v('y ninguna se pasa de 620 px', t3b.cajas.every((c) => c.ancho < 620),
+    t3b.cajas.map((c) => c.ancho).join(', '));
   // El ancho de los campos se mide ACA y no antes: con el ambito en empresa estan ocultos y
   // `getBoundingClientRect` da 0 para todos, asi que la comparacion pasaba o fallaba por la
   // razon equivocada. Medir un elemento oculto es medir nada.
@@ -137,6 +195,20 @@ try {
   const estLimpio = await page.evaluate(() => document.getElementById('col-edit-estado')?.textContent || '');
   v('al elegir un colegio el mensaje anterior se limpia', estLimpio.trim() === '',
     `quedo: "${estLimpio}"`);
+
+  console.log('\n--- EN UNA PANTALLA ANGOSTA VUELVEN A APILARSE ---');
+  // Sin esto, tres columnas fijas obligarian a desplazamiento horizontal en un portatil de 1366
+  // o menos, que es peor que el apilado original.
+  await page.setViewport({ width: 900, height: 1000 });
+  await new Promise((r) => setTimeout(r, 900));
+  const angosto = await medirTarjetas();
+  console.log(`       a 900 px: ${angosto.cajas.map((c) => `left ${c.left} ancho ${c.ancho}`).join(' | ')}`);
+  v('a 900 px las tarjetas se apilan en una columna',
+    new Set(angosto.cajas.map((c) => c.left)).size === 1, angosto.cajas.map((c) => c.left).join(', '));
+  v('y no desbordan el ancho de la ventana',
+    angosto.cajas.every((c) => c.left + c.ancho <= 900), angosto.cajas.map((c) => c.left + c.ancho).join(', '));
+  await page.setViewport({ width: 1920, height: 1080 });
+  await new Promise((r) => setTimeout(r, 900));
 
   v('sin errores de consola', errores.length === 0, errores.slice(0, 2).join(' | '));
   v('la base real no se toco',
