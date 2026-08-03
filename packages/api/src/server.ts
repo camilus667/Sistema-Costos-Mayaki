@@ -23,6 +23,7 @@ import calculoRoutes from './routes/calculo';
 // que las dos pantallas no puedan discrepar.
 import { ordenarPrendasDesdeBase } from './services/ordenPrendasDb';
 import { referenciasDesdeBase } from './services/referenciaPrendaDb';
+import { obtenerTallasActivasPorColegio, obtenerMapTallasActivasPorColegio } from './services/tallas';
 import inventarioRoutes from './routes/inventario';
 import precioRoutes from './routes/precio';
 import exportRoutes from './routes/export';
@@ -30,6 +31,7 @@ import inputRoutes from './routes/inputs';
 import costeoRoutes from './routes/costeo';
 import snapshotRoutes from './routes/snapshots';
 import importarRoutes from './routes/importar';
+import tipoPrendaRoutes from './routes/tipoPrenda';
 import { asc, eq, or, and, isNull } from 'drizzle-orm';
 import { costearLote } from './services/calculo/costeoInputs.service';
 import {
@@ -244,7 +246,8 @@ app.get('/api/dashboard-resumen', async (c) => {
 
   const anio = (await db.select().from(schema.aniosEscolares).limit(1))[0];
   const admin = (await db.select().from(schema.usuarios).limit(1))[0];
-  const tallas = await db.select().from(schema.tallas).orderBy(asc(schema.tallas.orden));
+  const mapTallasActivas = await obtenerMapTallasActivasPorColegio(db);
+  const tallas = await obtenerTallasActivasPorColegio(db, colegioId);
 
   let conds = [or(eq(schema.productos.activo, true), isNull(schema.productos.activo))];
   if (colegioId) conds.push(eq(schema.productos.colegioId, colegioId));
@@ -298,7 +301,7 @@ app.get('/api/dashboard-resumen', async (c) => {
     const margenPct =
       ingresoNeto > 0 ? ((ingresoNeto - costoNeto) / ingresoNeto) * 100 : 0;
 
-    costeo.set(`${f.meta.productoId}_${f.meta.tallaId}`, {
+    costeo.set(`${String(f.meta.productoId)}_${String(f.meta.tallaId)}`, {
       costo: costoNeto,
       precio: precioVenta,
       ingresoNeto,
@@ -328,10 +331,18 @@ app.get('/api/dashboard-resumen', async (c) => {
     let maxCosto = 0;
     let minPrecio = Infinity;
     let maxPrecio = 0;
-    const margenes: number[] = [];
+    let catCostoTotalBs = 0;
+    let catIngresoNetoBs = 0;
+    let margenes: number[] = [];
 
     tallas.forEach((t: any) => {
-      const clave = `${p.id}_${t.id}`;
+      const cid = String(p.colegioId);
+      const activasSet = mapTallasActivas.get(cid);
+      if (activasSet && !activasSet.has(String(t.id))) {
+        return; // Omitir tallas desactivadas para este colegio
+      }
+
+      const clave = `${String(p.id)}_${String(t.id)}`;
       const c2 = costeo.get(clave);
       if (!c2) return;
 
@@ -340,22 +351,22 @@ app.get('/api/dashboard-resumen', async (c) => {
       const inNeto = c2.ingresoNeto;
       const mg = c2.margenPct;
       const inv = stockPorClave.get(clave) || 0;
+      const seOfrece = ct > 0 && pv > 0;
 
-      if (ct > 0) {
+      if (seOfrece) {
         if (ct < minCosto) minCosto = ct;
         if (ct > maxCosto) maxCosto = ct;
+        catCostoTotalBs += ct;
+        if (inNeto > 0) catIngresoNetoBs += inNeto;
       }
       if (pv > 0) {
         if (pv < minPrecio) minPrecio = pv;
         if (pv > maxPrecio) maxPrecio = pv;
-        // El margen sobre venta se promedia solo donde hay precio Y costo: con costo 0
-        // el margen sale 100% y ensucia el promedio sin informar nada.
         if (ct > 0) margenes.push(mg);
       }
 
       prodStock += inv;
       prodCostoBs += inv * ct;
-      // Sin precio de venta se valoriza al costo, igual que antes.
       prodVentaBs += inv * (pv > 0 ? pv : ct);
       prodIngresoNetoBs += inv * (inNeto > 0 ? inNeto : ct);
     });
@@ -369,9 +380,10 @@ app.get('/api/dashboard-resumen', async (c) => {
     // dos difieren en el debito fiscal, y contarlo como ganancia seria contar como
     // propia una plata que se le debe al fisco.
     const gananciaBs = prodIngresoNetoBs - prodCostoBs;
-    const margenPct = margenes.length > 0
-      ? margenes.reduce((a, b) => a + b, 0) / margenes.length
-      : 0;
+    // Margen financiero catálogo de la prenda sobre tallas activas (Ganancia Catálogo / Ingreso Neto Catálogo * 100)
+    const realPrendaMarginPct = catIngresoNetoBs > 0
+      ? (((catIngresoNetoBs - catCostoTotalBs) / catIngresoNetoBs) * 100)
+      : (margenes.length > 0 ? margenes.reduce((a, b) => a + b, 0) / margenes.length : 0);
 
     return {
       id: p.id,
@@ -387,13 +399,16 @@ app.get('/api/dashboard-resumen', async (c) => {
       valorVentaTotalBs: parseFloat(prodVentaBs.toFixed(2)),
       ingresoNetoTotalBs: parseFloat(prodIngresoNetoBs.toFixed(2)),
       gananciaEstimadaBs: parseFloat(gananciaBs.toFixed(2)),
-      margenPromedioPct: parseFloat(margenPct.toFixed(2)),
+      margenPromedioPct: parseFloat(realPrendaMarginPct.toFixed(2)),
       // Si el motor no pudo costear ninguna talla, la fila lo dice en vez de mostrar 0.
       sinCosteo: maxCosto === 0,
     };
   });
 
   const gananciaTotalBs = totalIngresoNetoBs - totalValorCostoBs;
+  // Margen global sobre ventas/ingreso neto
+  const margenVentasGlobalPct = totalIngresoNetoBs > 0 ? (gananciaTotalBs / totalIngresoNetoBs) * 100 : 0;
+  // Margen global sobre inversión/costo
   const margenPromedioGlobalPct = totalValorCostoBs > 0 ? (gananciaTotalBs / totalValorCostoBs) * 100 : 0;
   // Lo que se factura menos lo que queda: con factura es el debito fiscal, sin
   // factura es exactamente 0. Se expone para que la pantalla pueda explicar por
@@ -411,7 +426,10 @@ app.get('/api/dashboard-resumen', async (c) => {
     admin: admin?.email || '',
     tallasCount: tallas.length,
     productosCount: productos.length,
-    variacionesCount: productos.length * tallas.length,
+    variacionesCount: productos.reduce((sum: number, p: any) => {
+      const setAct = mapTallasActivas.get(String(p.colegioId));
+      return sum + (setAct ? setAct.size : tallas.length);
+    }, 0),
     telasCount: telas.length,
     accesoriosCount: accesorios.length,
     // KPIs Financieros Clave
@@ -422,6 +440,7 @@ app.get('/api/dashboard-resumen', async (c) => {
     ivaDebitoTotalBs: parseFloat(ivaDebitoTotalBs.toFixed(2)),
     gananciaTotalBs: parseFloat(gananciaTotalBs.toFixed(2)),
     margenPromedioGlobalPct: parseFloat(margenPromedioGlobalPct.toFixed(2)),
+    margenVentasGlobalPct: parseFloat(margenVentasGlobalPct.toFixed(2)),
     // Modo fiscal con el que se calculo esta respuesta. Huella, igual que
     // `fuenteCosto`: si la pantalla muestra un modo y el backend calculo el otro,
     // este campo lo delata en vez de que la diferencia pase inadvertida.
@@ -468,6 +487,7 @@ app.route('/api/inputs', inputRoutes);
 app.route('/api/costeo', costeoRoutes);
 app.route('/api/snapshots', snapshotRoutes);
 app.route('/api/importar', importarRoutes);
+app.route('/api/tipos-prenda', tipoPrendaRoutes);
 
 // Iniciar servidor si se ejecuta directamente
 async function start() {
@@ -501,7 +521,7 @@ async function start() {
     }
   );
 
-  if (process.env.SERVE_POS !== 'false') {
+  if (process.env.SERVE_POS === 'true') {
     try {
       const posAppModule = await import('../../pos-manager/src/app');
       const posApp = posAppModule.default;

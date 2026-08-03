@@ -46,6 +46,7 @@ import { costearLote } from '../services/calculo/costeoInputs.service';
 import { referenciasDesdeBase } from '../services/referenciaPrendaDb';
 import { ordenarPrendasDesdeBase } from '../services/ordenPrendasDb';
 import { codigosPosDesdeBase, claveCodigoPos } from '../services/codigoPos';
+import { obtenerMapTallasActivasPorColegio } from '../services/tallas';
 import { colegios } from '../database/schema';
 import { saveDbToDisk } from '../database/sqljs';
 import {
@@ -160,10 +161,18 @@ async function construirFilasInventario(c: any, opciones: { soloConStock: boolea
   // columna. Es la unica pantalla donde el codigo cabe en una columna sin mentir: aca una fila ES
   // una prenda con su talla, y el codigo identifica exactamente esa combinacion. En una matriz
   // donde la fila es una prenda y las columnas son tallas, el codigo va en la celda.
+  const mapTallasActivas = await obtenerMapTallasActivasPorColegio(db);
   const codigosPos = await codigosPosDesdeBase(db);
 
   const data = filasInv
-    .filter((i: any) => (opciones.soloConStock ? Number(i.cantidad) > 0 : true))
+    .filter((i: any) => {
+      const cid = String(i.colegioId);
+      const setActivas = mapTallasActivas.get(cid);
+      if (setActivas && !setActivas.has(String(i.tallaId))) {
+        return false; // Omitir completamente tallas desactivadas para este colegio
+      }
+      return opciones.soloConStock ? Number(i.cantidad) > 0 : true;
+    })
     .map((i: any) => {
       const costeo = costeoPorClave.get(`${i.productoId}_${i.tallaId}`);
       const costoUnitario = costeo ? costeo.costoUnitario : 0;
@@ -202,10 +211,11 @@ async function construirFilasInventario(c: any, opciones: { soloConStock: boolea
   return { db, data, fiscal, avisosFiscales, sinCosteo };
 }
 
-// GET /api/inventario/stock - Muestra SOLO los artículos con stock físico > 0
+// GET /api/inventario/stock - Muestra los artículos con stock físico (o todos si todos=true)
 api.get('/stock', async (c) => {
+  const todos = c.req.query('todos') === 'true' || c.req.query('incluirCeros') === 'true';
   const { data, fiscal, avisosFiscales, sinCosteo } =
-    await construirFilasInventario(c, { soloConStock: true });
+    await construirFilasInventario(c, { soloConStock: !todos });
 
   return c.json({
     success: true,
@@ -502,6 +512,44 @@ api.post('/salida', zValidator('json', transaccionSchema), async (c) => {
     data: nuevaTransaccion[0],
     message: 'Salida registrada exitosamente',
   }, 201);
+});
+
+// PUT /api/inventario/ajuste-masivo - Actualizar stock de múltiples items de inventario
+api.put('/ajuste-masivo', async (c) => {
+  const db = (c as any).db;
+  const body = await c.req.json(); // { updates: [{ productoId, tallaId, cantidad }] }
+
+  if (!body.updates || !Array.isArray(body.updates) || body.updates.length === 0) {
+    return c.json({ success: false, error: 'No se recibieron actualizaciones de inventario' }, 400);
+  }
+
+  let modificados = 0;
+  for (const u of body.updates) {
+    if (!u.productoId || !u.tallaId) continue;
+    const cant = Math.max(0, Math.round(Number(u.cantidad) || 0));
+
+    // Verificar si existe la fila
+    const existencia = await db
+      .select({ id: inventario.id })
+      .from(inventario)
+      .where(and(eq(inventario.productoId, u.productoId), eq(inventario.tallaId, u.tallaId)))
+      .limit(1);
+
+    if (existencia.length > 0) {
+      await db
+        .update(inventario)
+        .set({ cantidad: cant, actualizadoEn: new Date().toISOString() })
+        .where(and(eq(inventario.productoId, u.productoId), eq(inventario.tallaId, u.tallaId)));
+    } else {
+      await db
+        .insert(inventario)
+        .values({ productoId: u.productoId, tallaId: u.tallaId, cantidad: cant });
+    }
+    modificados++;
+  }
+
+  saveDbToDisk();
+  return c.json({ success: true, message: `Se actualizaron ${modificados} items de inventario.`, count: modificados });
 });
 
 export default api;

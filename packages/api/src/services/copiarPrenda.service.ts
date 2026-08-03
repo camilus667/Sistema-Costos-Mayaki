@@ -198,35 +198,28 @@ export async function copiarPrendaDeReferencia(
   }
 
   // ------------------------------------------------------------- mano obra
+  // Fase 6: "copiar mano de obra" ya no copia filas de mano_obra por talla.
+  // La MO vive en el tipo de prenda genérico (tipo_prenda + mano_obra_tipo). Copiar
+  // consiste en asignar el mismo tipoPrendaId al destino. Es una sola fila en `producto`.
   if (que.manoObra) {
-    const moOrigen = await db.select().from(manoObra).where(eq(manoObra.productoId, origenId));
-    const moDestino = await db.select().from(manoObra).where(eq(manoObra.productoId, productoId));
-    const destinoPorTalla = new Map<string, any>();
-    for (const m of moDestino) destinoPorTalla.set(m.tallaId, m);
+    const tipoOrigenId = origen.tipoPrendaId;
+    const tipoDestinoId = destino.tipoPrendaId;
 
-    let actualizados = 0;
-    let insertados = 0;
-    let saltados = 0;
-
-    for (const mo of moOrigen) {
-      if (!tallasValidas.has(mo.tallaId)) { saltados++; continue; }
-      const costoBs = Number(mo.costoBs) || 0;
-
-      const existente = destinoPorTalla.get(mo.tallaId);
-      if (existente) {
-        const yaTieneDato = (Number(existente.costoBs) || 0) > 0;
-        if (yaTieneDato && !reemplazar) { saltados++; continue; }
-        await db.update(manoObra).set({ costoBs }).where(eq(manoObra.id, existente.id));
-        actualizados++;
-      } else {
-        await db.insert(manoObra).values({ id: nuevoIdHex(), productoId, tallaId: mo.tallaId, costoBs });
-        insertados++;
-      }
-    }
-
-    resumen.manoObra = { actualizados, insertados, saltados };
-    if (moOrigen.length === 0) {
-      resumen.avisos.push('La prenda de origen no tiene mano de obra cargada, asi que no habia nada que copiar.');
+    if (!tipoOrigenId) {
+      resumen.manoObra = { actualizados: 0, insertados: 0, saltados: 0 };
+      resumen.avisos.push('La prenda de origen no tiene tipo de prenda asignado; no hay mano de obra que copiar.');
+    } else if (tipoDestinoId && tipoDestinoId === tipoOrigenId) {
+      resumen.manoObra = { actualizados: 0, insertados: 0, saltados: 1 };
+      resumen.avisos.push('El destino ya tiene el mismo tipo de prenda asignado. Sin cambios.');
+    } else if (tipoDestinoId && tipoDestinoId !== tipoOrigenId && !reemplazar) {
+      resumen.manoObra = { actualizados: 0, insertados: 0, saltados: 1 };
+      resumen.avisos.push(
+        'El destino ya tiene un tipo de prenda asignado y "reemplazar" no está activo. ' +
+        'Para sobreescribir, copiar con reemplazar=true.'
+      );
+    } else {
+      await db.update(productos).set({ tipoPrendaId: tipoOrigenId }).where(eq(productos.id, productoId));
+      resumen.manoObra = { actualizados: 1, insertados: 0, saltados: 0 };
     }
   }
 

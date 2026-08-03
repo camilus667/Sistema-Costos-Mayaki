@@ -106,12 +106,12 @@ describe('bandas de mano de obra — el defecto que el renombre habria causado',
   it('NINGUNA talla real cae en la banda 3 por accidente', () => {
     // La guarda que discrimina. Si la normalizacion se rompiera, las tallas chicas
     // caerian al `else` y este test lo diría — es exactamente el sintoma medido.
-    const chicas = ['02', '04', '06', '08', '10'];
+    const chicas = ['02', '03', '04', '06', '08', '10'];
     for (const c of chicas) expect(bandaManoObra(c)).not.toBe(3);
   });
 
-  it('las tres bandas cubren las 16 tallas y no se solapan', () => {
-    const todas = ['02', '04', '06', '08', '10', '12', '14', '16/34', '36/XS', '38/S',
+  it('las bandas cubren las tallas y no se solapan', () => {
+    const todas = ['02', '03', '04', '06', '08', '10', '12', '14', '16/34', '36/XS', '38/S',
                    '40/M', '42/L', '44/XL', '46/2XL', '48/3XL', '50/4XL'];
     const plano = BANDAS_MANO_OBRA.flat();
     expect(new Set(plano).size).toBe(plano.length);

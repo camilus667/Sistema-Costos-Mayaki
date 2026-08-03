@@ -61,7 +61,7 @@ export function codigoTallaCanonico(codigo: unknown): string {
  * de este trabajo.
  */
 export const BANDAS_MANO_OBRA: readonly (readonly string[])[] = [
-  ['02', '04', '06', '08', '10'],
+  ['02', '03', '04', '06', '08', '10'],
   ['12', '14', '16/34', '36/XS', '38/S'],
   ['40/M', '42/L', '44/XL', '46/2XL', '48/3XL', '50/4XL'],
 ] as const;
@@ -123,3 +123,104 @@ export function buscarTallaPorCodigo<T extends { codigo: string }>(
   if (!buscado) return null;
   return (candidatas || []).find((t) => codigoTallaCanonico(t?.codigo) === buscado) ?? null;
 }
+
+import { eq, asc, or, isNull } from 'drizzle-orm';
+import { tallas, colegioTallas, colegios } from '../database/schema';
+
+/**
+ * Mapa de tallas activas por colegio: Map<colegioId, Set<tallaId>>
+ */
+export async function obtenerMapTallasActivasPorColegio(db: any): Promise<Map<string, Set<string>>> {
+  const todasTallas = await db
+    .select()
+    .from(tallas)
+    .where(or(eq(tallas.activo, true), isNull(tallas.activo)));
+
+  let config: any[] = [];
+  try {
+    config = await db.select().from(colegioTallas);
+  } catch (e) {}
+
+  const overrides = new Map<string, Map<string, boolean>>();
+  for (const f of config) {
+    const cid = String(f.colegioId);
+    if (!overrides.has(cid)) overrides.set(cid, new Map());
+    overrides.get(cid)!.set(String(f.tallaId), f.activo !== false && f.activo !== 0);
+  }
+
+  const mapActivas = new Map<string, Set<string>>();
+  let todosColegios: any[] = [];
+  try {
+    todosColegios = await db.select({ id: colegios.id }).from(colegios);
+  } catch (e) {}
+
+  for (const col of todosColegios) {
+    const cid = String(col.id);
+    const colOverrides = overrides.get(cid);
+    const setActivas = new Set<string>();
+
+    for (const t of todasTallas) {
+      const tid = String(t.id);
+      if (colOverrides && colOverrides.has(tid)) {
+        if (colOverrides.get(tid) === true) setActivas.add(tid);
+      } else {
+        setActivas.add(tid); // SIN FILA = ACTIVA
+      }
+    }
+    mapActivas.set(cid, setActivas);
+  }
+
+  return mapActivas;
+}
+
+/**
+ * Obtiene las tallas activas para un colegio (o activas en al menos un colegio si colegioId es 'all').
+ */
+export async function obtenerTallasActivasPorColegio(
+  db: any,
+  colegioId?: string | null
+): Promise<any[]> {
+  const todas = await db
+    .select()
+    .from(tallas)
+    .where(or(eq(tallas.activo, true), isNull(tallas.activo)))
+    .orderBy(asc(tallas.orden));
+
+  let config: any[] = [];
+  try {
+    config = await db.select().from(colegioTallas);
+  } catch (e) {}
+
+  const overrides = new Map<string, Map<string, boolean>>();
+  for (const f of config) {
+    const cid = String(f.colegioId);
+    if (!overrides.has(cid)) overrides.set(cid, new Map());
+    overrides.get(cid)!.set(String(f.tallaId), f.activo !== false && f.activo !== 0);
+  }
+
+  if (colegioId && colegioId !== 'all') {
+    const colOverrides = overrides.get(String(colegioId));
+    return todas.filter((t: any) => {
+      const tid = String(t.id);
+      if (colOverrides && colOverrides.has(tid)) {
+        return colOverrides.get(tid) === true;
+      }
+      return true; // SIN FILA = ACTIVA
+    });
+  }
+
+  if (overrides.size > 0) {
+    return todas.filter((t: any) => {
+      const tid = String(t.id);
+      for (const [, colOverrides] of overrides.entries()) {
+        if (!colOverrides.has(tid) || colOverrides.get(tid) === true) {
+          return true;
+        }
+      }
+      return false;
+    });
+  }
+
+  return todas;
+}
+

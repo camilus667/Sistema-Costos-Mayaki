@@ -16,7 +16,7 @@ import { diagnosticarPorPrenda, resumirDiagnosticos } from '../services/diagnost
 // La referencia `CC-01` de cada prenda, para la columna `Prod`.
 import { referenciasDesdeBase } from '../services/referenciaPrendaDb';
 // Emparejar tallas sin depender de si la base guarda `2` o `02`.
-import { buscarTallaPorCodigo } from '../services/tallas';
+import { buscarTallaPorCodigo, obtenerTallasActivasPorColegio, obtenerMapTallasActivasPorColegio } from '../services/tallas';
 import XLSX from 'xlsx';
 import { codigosPosDesdeBase, claveCodigoPos } from '../services/codigoPos';
 import { resolverPrendaPorItem } from '../services/resolucion.service';
@@ -185,7 +185,8 @@ api.get('/matriz-consolidada', async (c) => {
     for (const cid of colegiosEnAmbito) {
       for (const t of (ctx.tallasPorColegio.get(cid) || [])) idsActivos.add(String(t.id));
     }
-    const tallasGlobales = await db.select().from(tallas).orderBy(asc(tallas.orden));
+    const mapTallasActivas = await obtenerMapTallasActivasPorColegio(db);
+    const tallasGlobales = await obtenerTallasActivasPorColegio(db, colegioId);
     const allTallas = idsActivos.size > 0
       ? tallasGlobales.filter((t: any) => idsActivos.has(String(t.id)))
       : tallasGlobales;
@@ -252,6 +253,13 @@ api.get('/matriz-consolidada', async (c) => {
       for (const f of porProducto.get(prod.id) || []) porTalla.set(f.meta.tallaId, f);
 
       for (const talla of allTallas) {
+        const cid = String(prod.colegioId);
+        const activasSet = mapTallasActivas.get(cid);
+        if (activasSet && !activasSet.has(String(talla.id))) {
+          rowObj.tallas[talla.codigo] = celdaVacia();
+          continue;
+        }
+
         const inv = invMap.get(`${prod.id}_${talla.id}`) ?? 0;
         const f = porTalla.get(talla.id);
 

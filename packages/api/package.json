@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "dev:local": "tsx src/server.ts",
+    "dev:local": "tsx watch src/server.ts",
     "build": "tsc",
     "deploy": "wrangler deploy",
     "lint": "eslint \"src/**/*.ts\"",

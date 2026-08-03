@@ -81,6 +81,30 @@ export const aniosEscolares = sqliteTable('anio_escolar', {
 });
 
 // ============================================
+// TIPOS DE PRENDA GENERICOS (catálogo compartido, sin colegio)
+// ============================================
+/**
+ * Catálogo de tipos de prenda genéricos: "Camisa de varón", "Short", etc.
+ *
+ * POR QUE EXISTE. Los costos de mano de obra no cambian entre colegios — confeccionar
+ * una camisa cuesta lo mismo independientemente de para qué colegio sea. Antes, esos
+ * costos vivían en `mano_obra` vinculados a un `productoId` específico de cada colegio,
+ * así que Cambridge y Internacional SM mantenían valores separados aunque debían ser
+ * idénticos. Este catálogo rompe esa duplicación: un solo tipo agrupa todos los productos
+ * equivalentes de todos los colegios y les da la misma MO.
+ *
+ * CICLO DE VIDA. El tipo se puede eliminar solo si ningún producto lo referencia (409
+ * si tiene asignados). Un tipo nuevo empieza sin MO; el diagnostico de costeo lo
+ * detecta igual que antes.
+ */
+export const tipoPrenda = sqliteTable('tipo_prenda', {
+  id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
+  nombre: text('nombre').notNull(),
+  activo: integer('activo', { mode: 'boolean' }).default(true).notNull(),
+  creadoEn: text('creado_en').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+// ============================================
 // PRODUCTOS
 // ============================================
 export const productos = sqliteTable('producto', {
@@ -116,6 +140,14 @@ export const productos = sqliteTable('producto', {
   operacionesExtra: real('operaciones_extra').default(0),
   activo: integer('activo', { mode: 'boolean' }).default(true).notNull(),
   creadoEn: text('creado_en').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  /**
+   * Tipo de prenda genérico al que pertenece este producto.
+   *
+   * NULLABLE: las prendas sin tipo usan la tabla `mano_obra` legacy (backward compat).
+   * Después de la migración automática, todos los productos quedan con tipo asignado y
+   * `mano_obra` queda vacía.
+   */
+  tipoPrendaId: text('tipo_prenda_id').references(() => tipoPrenda.id),
 });
 
 // ============================================
@@ -254,8 +286,36 @@ export const detalleAccesorio = sqliteTable('detalle_acc', {
 }));
 
 // ============================================
-// MANO DE OBRA
+// MANO DE OBRA POR TIPO DE PRENDA (tabla principal desde Fase 6)
 // ============================================
+/**
+ * Costos de mano de obra vinculados a un tipo de prenda genérico, por talla.
+ *
+ * Reemplaza a `mano_obra` (que era por productoId). El cambio elimina la duplicación:
+ * un solo registro por (tipo, talla) en vez de uno por (productoId, talla) multiplicado
+ * por cada colegio que tenga ese tipo de prenda.
+ *
+ * UNIQUE en (tipoPrendaId, tallaId): impide dos filas para el mismo tipo y talla,
+ * que antes era posible y generaba un aviso "mano_obra duplicada".
+ */
+export const manoObraTipo = sqliteTable('mano_obra_tipo', {
+  id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
+  tipoPrendaId: text('tipo_prenda_id').notNull().references(() => tipoPrenda.id),
+  tallaId: text('talla_id').notNull().references(() => tallas.id),
+  costoBs: real('costo_bs').notNull(),
+}, (t) => ({
+  // Un tipo no puede tener dos costos para la misma talla.
+  tipoTallaUnico: uniqueIndex('idx_mo_tipo_talla').on(t.tipoPrendaId, t.tallaId),
+}));
+
+// ============================================
+// MANO DE OBRA POR PRODUCTO (tabla legacy — vacía después de la migración automática)
+// ============================================
+/**
+ * @deprecated Usar `manoObraTipo` (keyed por tipoPrendaId). Esta tabla se mantiene en el
+ * schema para compatibilidad con snapshots anteriores y scripts de diagnóstico, pero
+ * después de la migración automática queda vacía y el motor la ignora.
+ */
 export const manoObra = sqliteTable('mano_obra', {
   id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
   productoId: text('producto_id').notNull().references(() => productos.id),
@@ -471,4 +531,68 @@ export const posSnapshots = sqliteTable('pos_snapshot', {
   creadoPor: text('creado_por'),
   creadoEn: text('creado_en').default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
+
+// ============================================
+// VENTAS POS Y PROYECCIONES DE VENTAS
+// ============================================
+export const posVentas = sqliteTable('pos_venta', {
+  id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
+  nPedido: text('n_pedido').notNull(),
+  tipo: text('tipo').default('Pedido'),
+  estado: text('estado').notNull(),
+  fecha: text('fecha').notNull(),
+  fechaIso: text('fecha_iso'),
+  anio: integer('anio').notNull(),
+  mes: integer('mes').notNull(),
+  trimestre: text('trimestre').notNull(),
+  posIdProducto: text('pos_id_producto'),
+  nombreProductoRaw: text('nombre_producto_raw').notNull(),
+  nombreLimpio: text('nombre_limpio').notNull(),
+  colegioGrupo: text('colegio_grupo').notNull(),
+  talla: text('talla'),
+  cantidad: real('cantidad').notNull().default(1),
+  precioUnitario: real('precio_unitario').notNull().default(0),
+  subtotal: real('subtotal').notNull().default(0),
+  totalCobrado: real('total_cobrado').notNull().default(0),
+  costoUnitario: real('costo_unitario').default(0),
+  costoTotal: real('costo_total').default(0),
+  usuario: text('usuario'),
+  sucursal: text('sucursal'),
+  medioPago: text('medio_pago'),
+  datosOriginales: text('datos_originales'),
+  creadoEn: text('creado_en').default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (t) => ({
+  porFecha: index('idx_pos_venta_fecha').on(t.anio, t.mes),
+  porGrupo: index('idx_pos_venta_grupo').on(t.colegioGrupo),
+  porProducto: index('idx_pos_venta_producto').on(t.nombreLimpio),
+}));
+
+export const proyeccionReglas = sqliteTable('proyeccion_regla', {
+  id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
+  colegioOrigen: text('colegio_origen').notNull(),
+  colegioDestino: text('colegio_destino').notNull(),
+  prendaOrigen: text('prenda_origen').notNull(),
+  prendaDestino: text('prenda_destino').notNull(),
+  tallaOrigen: text('talla_origen'),
+  tallaDestino: text('talla_destino'),
+  factorAjuste: real('factor_ajuste').default(1.0).notNull(),
+  similaridadPct: real('similaridad_pct').default(100.0).notNull(),
+  creadoEn: text('creado_en').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const proyeccionesGuardadas = sqliteTable('proyeccion_guardada', {
+  id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
+  nombre: text('nombre').notNull(),
+  descripcion: text('descripcion'),
+  colegioOrigen: text('colegio_origen').notNull(),
+  colegioDestino: text('colegio_destino').notNull(),
+  periodoOrigen: text('periodo_origen').notNull(),
+  periodoProyectado: text('periodo_proyectado').notNull(),
+  factorEscalaAlumnos: real('factor_escala_alumnos').default(1.0),
+  vendedorSimulado: text('vendedor_simulado'),
+  resultadosJson: text('resultados_json').notNull(),
+  creadoPor: text('creado_por'),
+  creadoEn: text('creado_en').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 

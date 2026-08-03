@@ -13,33 +13,34 @@ import { ordenarPrendasDesdeBase } from '../services/ordenPrendasDb';
 // —el orden se arrastra ahi mismo—, asi que es la que menos puede mostrar otro.
 import { agregarReferencias } from '../services/referenciaPrendaDb';
 
+import { posicionesDeColegios } from '../services/ordenPrendas';
+
 const api = new Hono();
 
 // Esquema de creación de colegio
 const crearColegioSchema = z.object({
   nombre: z.string().min(1).max(255),
-  direccion: z.string().max(500).optional(),
-  nit: z.string().max(50).optional(),
-  telefono: z.string().max(50).optional(),
-  /**
-   * Abreviatura del colegio: la que forma `CC-01` en la columna `Prod` y la que empareja el
-   * sufijo del codigo del POS al importar.
-   *
-   * Tope de 12 caracteres: la mas larga que usa el POS es `IntlSM` (6). Doce da margen sin que
-   * alguien pegue un nombre entero y rompa el ancho de la columna, que convive con 16 columnas
-   * de tallas.
-   */
-  abreviatura: z.string().max(12).optional(),
+  direccion: z.string().max(500).nullish(),
+  nit: z.string().max(50).nullish(),
+  telefono: z.string().max(50).nullish(),
+  abreviatura: z.string().max(50).nullish(),
+  activo: z.union([z.boolean(), z.number(), z.string()]).optional(),
 });
 
 // GET /api/colegios - Listar colegios
 api.get('/', async (c) => {
   const db = (c as any).db;
-  const allColegios = await db.select().from(colegios).orderBy(asc(colegios.nombre));
+  const allColegios = await db.select().from(colegios);
+  const posiciones = posicionesDeColegios(allColegios as any);
+  const ordenados = [...allColegios].sort((a, b) => {
+    const pa = posiciones.get(String(a.id)) ?? Number.MAX_SAFE_INTEGER;
+    const pb = posiciones.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER;
+    return pa - pb;
+  });
 
   return c.json({
     success: true,
-    data: allColegios,
+    data: ordenados,
   });
 });
 
@@ -65,31 +66,41 @@ api.get('/:id', async (c) => {
 });
 
 // POST /api/colegios - Crear colegio
-/**
- * Deja la abreviatura en MAYUSCULAS, o en null si viene vacia.
- *
- * Se hace en el servidor y no solo en la pantalla porque es lo que empareja el sufijo del codigo
- * del POS: `cc` y `CC` tienen que ser el mismo colegio, y guardar los dos crearia dos abreviaturas
- * para uno solo. Y una cadena vacia no es una abreviatura: es la ausencia de una, y `null` es como
- * se dice eso —si se guardara `''`, la columna diria que hay un valor cuando no lo hay—.
- */
 function normalizarAbrev<T extends { abreviatura?: unknown }>(cuerpo: T): T {
   if (!('abreviatura' in (cuerpo as any))) return cuerpo;
   const v = String((cuerpo as any).abreviatura ?? '').trim().toUpperCase();
   return { ...cuerpo, abreviatura: v || null } as T;
 }
 
-api.post('/', zValidator('json', crearColegioSchema), async (c) => {
-  const db = (c as any).db;
-  const body = c.req.valid('json');
+api.post('/', zValidator('json', crearColegioSchema, (result, c) => {
+  if (!result.success) {
+    return c.json({
+      success: false,
+      error: 'Error de validación: ' + result.error.issues.map(i => i.message).join(', ')
+    }, 400);
+  }
+}), async (c) => {
+  try {
+    const db = (c as any).db;
+    const body = c.req.valid('json');
+    const payload: any = { ...normalizarAbrev(body) };
+    if ('activo' in body) {
+      payload.activo = (body.activo === true || body.activo === 1 || body.activo === 'true' || body.activo === '1') ? 1 : 0;
+    } else {
+      payload.activo = 1;
+    }
 
-  const [newColegio] = await db.insert(colegios).values(normalizarAbrev(body)).returning();
+    const [newColegio] = await db.insert(colegios).values(payload).returning();
+    saveDbToDisk();
 
-  return c.json({
-    success: true,
-    data: newColegio,
-    message: 'Colegio creado exitosamente',
-  }, 201);
+    return c.json({
+      success: true,
+      data: newColegio,
+      message: 'Colegio creado exitosamente',
+    }, 201);
+  } catch (e: any) {
+    return c.json({ success: false, error: 'Error al crear colegio: ' + (e?.message || String(e)) }, 500);
+  }
 });
 
 // PUT /api/colegios/:id - Actualizar colegio
@@ -180,74 +191,109 @@ api.put('/orden', async (c) => {
   });
 });
 
-api.put('/:id', zValidator('json', crearColegioSchema.partial()), async (c) => {
-  const db = (c as any).db;
-  const id = c.req.param('id');
-  const body = c.req.valid('json');
-
-  const [updatedColegio] = await db
-    .update(colegios)
-    .set(normalizarAbrev(body))
-    .where(eq(colegios.id, id))
-    .returning();
-
-  if (!updatedColegio) {
-    return c.json({ success: false, error: 'Colegio no encontrado' }, 404);
+api.put('/:id', zValidator('json', crearColegioSchema.partial(), (result, c) => {
+  if (!result.success) {
+    return c.json({
+      success: false,
+      error: 'Error de validación: ' + result.error.issues.map(i => i.message).join(', ')
+    }, 400);
   }
+}), async (c) => {
+  try {
+    const db = (c as any).db;
+    const id = c.req.param('id');
+    const body = c.req.valid('json');
 
-  return c.json({
-    success: true,
-    data: updatedColegio,
-    message: 'Colegio actualizado exitosamente',
-  });
+    const payload: any = { ...normalizarAbrev(body) };
+    if ('activo' in body) {
+      payload.activo = (body.activo === true || body.activo === 1 || body.activo === 'true' || body.activo === '1') ? 1 : 0;
+    }
+
+    const [updatedColegio] = await db
+      .update(colegios)
+      .set(payload)
+      .where(eq(colegios.id, id))
+      .returning();
+
+    if (!updatedColegio) {
+      return c.json({ success: false, error: 'Colegio no encontrado' }, 404);
+    }
+
+    saveDbToDisk();
+
+    return c.json({
+      success: true,
+      data: updatedColegio,
+      message: 'Colegio actualizado exitosamente',
+    });
+  } catch (e: any) {
+    console.error('Error al actualizar colegio:', e);
+    return c.json({ success: false, error: 'Error al actualizar colegio: ' + (e?.message || String(e)) }, 500);
+  }
 });
 
 // DELETE /api/colegios/:id - Eliminar colegio
 api.delete('/:id', async (c) => {
-  const db = (c as any).db;
-  const id = c.req.param('id');
+  try {
+    const db = (c as any).db;
+    const id = c.req.param('id');
 
-  const [deletedColegio] = await db
-    .delete(colegios)
-    .where(eq(colegios.id, id))
-    .returning();
+    const [deletedColegio] = await db
+      .delete(colegios)
+      .where(eq(colegios.id, id))
+      .returning();
 
-  if (!deletedColegio) {
-    return c.json({ success: false, error: 'Colegio no encontrado' }, 404);
+    if (!deletedColegio) {
+      return c.json({ success: false, error: 'Colegio no encontrado' }, 404);
+    }
+
+    saveDbToDisk();
+
+    return c.json({
+      success: true,
+      message: 'Colegio eliminado exitosamente',
+    });
+  } catch (e: any) {
+    console.error('Error al eliminar colegio:', e);
+    return c.json({ success: false, error: 'Error al eliminar colegio: ' + (e?.message || String(e)) }, 500);
   }
-
-  return c.json({
-    success: true,
-    message: 'Colegio eliminado exitosamente',
-  });
 });
 
 // PATCH /api/colegios/:id/toggle - Activar/Desactivar colegio
 api.patch('/:id/toggle', async (c) => {
-  const db = (c as any).db;
-  const id = c.req.param('id');
+  try {
+    const db = (c as any).db;
+    const id = c.req.param('id');
 
-  const [colegio] = await db
-    .select()
-    .from(colegios)
-    .where(eq(colegios.id, id))
-    .limit(1);
+    const [colegio] = await db
+      .select()
+      .from(colegios)
+      .where(eq(colegios.id, id))
+      .limit(1);
 
-  if (!colegio) {
-    return c.json({ success: false, error: 'Colegio no encontrado' }, 404);
+    if (!colegio) {
+      return c.json({ success: false, error: 'Colegio no encontrado' }, 404);
+    }
+
+    const nuevoEstadoInt = (colegio.activo === 1 || colegio.activo === true) ? 0 : 1;
+
+    const [updatedColegio] = await db
+      .update(colegios)
+      .set({ activo: nuevoEstadoInt })
+      .where(eq(colegios.id, id))
+      .returning();
+
+    saveDbToDisk();
+
+    return c.json({
+      success: true,
+      data: updatedColegio,
+      message: `Colegio ${nuevoEstadoInt === 1 ? 'activado' : 'desactivado'} exitosamente`,
+    });
+  } catch (e: any) {
+    console.error('Error en toggle colegio:', e);
+    return c.json({ success: false, error: 'Error al cambiar estado de colegio: ' + (e?.message || String(e)) }, 500);
   }
-
-  const [updatedColegio] = await db
-    .update(colegios)
-    .set({ activo: !colegio.activo })
-    .where(eq(colegios.id, id))
-    .returning();
-
-  return c.json({
-    success: true,
-    data: updatedColegio,
-    message: `Colegio ${updatedColegio.activo ? 'activado' : 'desactivado'} exitosamente`,
-  });
 });
 
 // GET /api/colegios/:id/config - Obtener toda la configuración del colegio

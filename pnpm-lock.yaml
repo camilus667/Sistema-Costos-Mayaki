@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      cross-env:
+        specifier: ^7.0.3
+        version: 7.0.3
       prettier:
         specifier: ^3.2.5
         version: 3.9.6
@@ -83,6 +86,46 @@ importers:
         version: 3.114.17(@cloudflare/workers-types@4.20260702.1)
 
   packages/pos-manager:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^2.0.11
+        version: 2.0.11(hono@4.12.31)
+      '@sistema-uniformes/api':
+        specifier: workspace:*
+        version: link:../api
+      '@sistema-uniformes/shared':
+        specifier: workspace:*
+        version: link:../shared
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@cloudflare/workers-types@4.20260702.1)(sql.js@1.14.1)
+      exceljs:
+        specifier: ^4.4.0
+        version: 4.4.0
+      hono:
+        specifier: ^4.0.0
+        version: 4.12.31
+      sql.js:
+        specifier: ^1.14.1
+        version: 1.14.1
+      xlsx:
+        specifier: ^0.18.5
+        version: 0.18.5
+    devDependencies:
+      '@types/node':
+        specifier: ^20.11.0
+        version: 20.19.43
+      tsx:
+        specifier: ^4.23.1
+        version: 4.23.1
+      typescript:
+        specifier: ^5.4.5
+        version: 5.9.3
+      vitest:
+        specifier: ^1.2.0
+        version: 1.6.1(@types/node@20.19.43)
+
+  packages/sales-manager:
     dependencies:
       '@hono/node-server':
         specifier: ^2.0.11
@@ -2139,6 +2182,14 @@ packages:
       crc-32: 1.2.2
       readable-stream: 3.6.2
     dev: false
+
+  /cross-env@7.0.3:
+    resolution: {integrity: sha512-+/HKd6EgcQCJGh2PSjZuUitQBQynKor4wrFbRg4DtAgS1aWO+gU52xpH7M9ScGgXSYmAVS9bIJ8EzuaGw0oNAw==}
+    engines: {node: '>=10.14', npm: '>=6', yarn: '>=1'}
+    hasBin: true
+    dependencies:
+      cross-spawn: 7.0.6
+    dev: true
 
   /cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}

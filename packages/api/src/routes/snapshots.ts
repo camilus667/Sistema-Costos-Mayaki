@@ -10,6 +10,8 @@ import {
   telas,
   accesorios,
   manoObra,
+  manoObraTipo,
+  tipoPrenda,
   costosIndirectos,
   pesoMateriaPrima,
   preciosAdquisicion,
@@ -98,21 +100,21 @@ api.post('/', async (c) => {
       pesosList,
       adquisicionList,
       ventaList,
-      inventarioList
+      inventarioList,
+      manoObraTipoList,
+      tiposPrendaList
     ] = await Promise.all([
       db.select().from(productos),
       db.select().from(telas),
       db.select().from(accesorios),
-      db.select().from(manoObra),
+      db.select().from(manoObra),       // legacy — vacía post-migración
       db.select().from(costosIndirectos),
       db.select().from(pesoMateriaPrima),
       db.select().from(preciosAdquisicion).where(isNull(preciosAdquisicion.vigenteHasta)),
       db.select().from(preciosVenta).where(isNull(preciosVenta.vigenteHasta)),
-      // EL INVENTARIO FALTABA, y es el hueco que volvia inutil exigir una instantanea
-      // antes de importar. La instantanea guardaba productos, telas, accesorios, mano
-      // de obra, indirectos, pesos y los dos tipos de precio — todo menos las
-      // cantidades. Importar stock era, hasta ahora, irreversible.
-      db.select().from(inventario)
+      db.select().from(inventario),
+      db.select().from(manoObraTipo),   // Fase 6: MO por tipo de prenda
+      db.select().from(tipoPrenda),     // Fase 6: catálogo de tipos
     ]);
 
     const datosObj = {
@@ -120,7 +122,9 @@ api.post('/', async (c) => {
       productos: prods,
       telas: telasList,
       accesorios: accesorioList,
-      manoObra: manoObraList,
+      manoObra: manoObraList,           // compatibilidad con snapshots anteriores
+      manoObraTipo: manoObraTipoList,   // Fase 6
+      tiposPrenda: tiposPrendaList,     // Fase 6
       costosIndirectos: indirectosList,
       pesoMateriaPrima: pesosList,
       preciosAdquisicion: adquisicionList,
@@ -276,7 +280,18 @@ api.post('/:id/restaurar', async (c) => {
 
     if (alcance === 'completo') {
       await reponer('peso_mat_prima', pesoMateriaPrima, datos.pesoMateriaPrima, porProductoYTalla);
-      await reponer('mano_obra', manoObra, datos.manoObra, porProductoYTalla);
+      // Fase 6: restaurar mano_obra_tipo y tipo_prenda en vez de mano_obra.
+      // Para snapshots viejos (sin manoObraTipo) se mantiene la restauracion de mano_obra
+      // como fallback de compatibilidad.
+      if (Array.isArray(datos.manoObraTipo) && datos.manoObraTipo.length > 0) {
+        await reponer('mano_obra_tipo', manoObraTipo, datos.manoObraTipo, () => true);
+        if (Array.isArray(datos.tiposPrenda) && datos.tiposPrenda.length > 0) {
+          await reponer('tipo_prenda', tipoPrenda, datos.tiposPrenda, () => true);
+        }
+      } else {
+        // Snapshot viejo: restaurar mano_obra legacy
+        await reponer('mano_obra', manoObra, datos.manoObra, porProductoYTalla);
+      }
       await reponer('precio_adquisicion', preciosAdquisicion, datos.preciosAdquisicion, porProductoYTalla);
       await reponer('tela', telas, datos.telas, () => true);
       await reponer('accesorio', accesorios, datos.accesorios, () => true);

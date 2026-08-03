@@ -68,6 +68,7 @@ const crearProductoSchema = z.object({
   descripcion: z.string().min(1),
   orden: z.number().int().optional(),
   telaId: z.string().optional().nullable(),
+  tipoPrendaId: z.string().optional().nullable(),
   modoCosteo: z.enum(['confeccion', 'adquirido']).optional(),
   factorComplejidad: z.number().positive().optional(),
   costoFijo: z.number().optional(),
@@ -287,7 +288,7 @@ api.put('/:id', zValidator('json', crearProductoSchema.partial()), async (c) => 
   // alguien lo haya pensado.
   const cambios: any = {};
   for (const k of [
-    'colegioId', 'anioId', 'itemNumero', 'orden', 'descripcion', 'telaId',
+    'colegioId', 'anioId', 'itemNumero', 'orden', 'descripcion', 'telaId', 'tipoPrendaId',
     'modoCosteo', 'factorComplejidad', 'costoFijo', 'planchadoExtra',
     'colocacionBotones', 'operacionesExtra', 'activo',
   ]) {

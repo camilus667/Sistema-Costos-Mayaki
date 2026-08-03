@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gestor de Ventas y Proyecciones Inteligentes - Mayaki</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="shortcut icon" href="favicon.svg">
+
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Chart.js para visualización de gráficos -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="dark-theme">
+  <div class="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo-icon">📊</div>
+        <div class="brand-text">
+          <h1>Sales Projections</h1>
+          <span class="subtitle">Mayaki Intelligence</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-btn active" data-tab="tab-importar">
+          <span class="icon">📁</span> Importar Reportes
+        </button>
+        <button class="nav-btn" data-tab="tab-analisis">
+          <span class="icon">📈</span> Análisis Histórico
+        </button>
+        <button class="nav-btn" data-tab="tab-proyeccion">
+          <span class="icon">🔮</span> Proyección Inteligente
+        </button>
+        <button class="nav-btn" data-tab="tab-simulador">
+          <span class="icon">⚡</span> Simulador & Excel
+        </button>
+      </nav>
+
+      <div class="db-status-card">
+        <div class="status-indicator online"></div>
+        <div class="status-info">
+          <span class="status-label">Base de Datos SQLite</span>
+          <span class="status-val">Central Compartida</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Header -->
+      <header class="top-header">
+        <div class="page-title">
+          <h2 id="current-tab-title">Importador de Ventas & Productos</h2>
+          <p id="current-tab-subtitle">Carga los archivos Excel exportados del POS para alimentar las métricas</p>
+        </div>
+
+        <div class="header-actions">
+          <button class="btn btn-secondary" id="btn-refresh-stats">🔄 Actualizar</button>
+          <button class="btn btn-danger" id="btn-vaciar-datos">🗑️ Vaciar Datos de Ventas</button>
+        </div>
+      </header>
+
+      <!-- TAB 1: IMPORTAR -->
+      <section id="tab-importar" class="tab-pane active">
+        <div class="grid-cards">
+          <div class="glass-card import-card">
+            <h3>📥 Carga de Reportes de Ventas (.xlsx)</h3>
+            <p>Selecciona tu archivo <code>sales_export_*.xlsx</code> para procesar pedidos, cantidades y totales.</p>
+
+            <div class="dropzone" id="dropzone-sales">
+              <div class="dropzone-icon">📄</div>
+              <p>Arrastra tu archivo Excel aquí o <strong>haz clic para seleccionar</strong></p>
+              <input type="file" id="input-file-sales" accept=".xlsx, .xls" hidden />
+            </div>
+
+            <div id="import-status" class="status-message"></div>
+          </div>
+
+          <div class="glass-card summary-card">
+            <h3>📊 Colegios e Historial Detectado</h3>
+            <div id="colegios-list" class="summary-list">
+              <div class="skeleton-loader">Cargando datos históricos...</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: ANÁLISIS HISTÓRICO -->
+      <section id="tab-analisis" class="tab-pane">
+        <div class="filter-bar glass-card">
+          <div class="filter-group">
+            <label>Agrupación:</label>
+            <select id="filter-agrupacion" class="select-input">
+              <option value="trimestral">Trimestral (Q1, Q2, Q3, Q4)</option>
+              <option value="mensual">Mensual (Ene - Dic)</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label>Colegio / Grupo:</label>
+            <select id="filter-colegio-analisis" class="select-input">
+              <option value="">Todos los Colegios</option>
+              <option value="Inf S Marcos">Infantil San Marcos (Inf SM)</option>
+              <option value="Col S Marcos">Colegio San Marcos (Col SM)</option>
+              <option value="Intl S Marcos">Intl San Marcos</option>
+              <option value="Cambridge">Cambridge</option>
+              <option value="Edad de Oro">Edad de Oro</option>
+              <option value="Saint Jude">Saint Jude</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label>Año:</label>
+            <select id="filter-anio-analisis" class="select-input">
+              <option value="">Todos los Años</option>
+              <option value="2025">2025</option>
+              <option value="2026">2026</option>
+            </select>
+          </div>
+
+          <button class="btn btn-primary" id="btn-aplicar-filtros-analisis">Filtrar Analytics</button>
+        </div>
+
+        <!-- KPI Cards de Montos por Colegio -->
+        <div class="metrics-grid margin-top">
+          <div class="metric-card glass-card highlight-blue">
+            <span class="metric-title">💰 Recaudación Total Histórica</span>
+            <span class="metric-value" id="kpi-total-monto">Bs. 0</span>
+          </div>
+          <div class="metric-card glass-card highlight-green">
+            <span class="metric-title">🏆 Colegio con Mayor Venta</span>
+            <span class="metric-value" id="kpi-top-colegio">-</span>
+          </div>
+          <div class="metric-card glass-card">
+            <span class="metric-title">📦 Total Unidades Vendidas</span>
+            <span class="metric-value" id="kpi-total-unidades">0 u.</span>
+          </div>
+        </div>
+
+        <!-- Tablas Principales en 2 Columnas (Arriba) -->
+        <div class="top-tables-grid margin-top">
+          <!-- Columna 1: Ventas por Colegio -->
+          <div class="glass-card table-card">
+            <h3>🏫 Ventas Totales por Colegio</h3>
+            <div class="table-container compact-scroll">
+              <table class="data-table" id="table-montos-colegios">
+                <thead>
+                  <tr>
+                    <th>Colegio</th>
+                    <th>Venta Total (Bs.)</th>
+                    <th>% Total</th>
+                    <th>Unidades</th>
+                    <th>Precio Prom.</th>
+                    <th>Trans.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td colspan="6" class="text-center">Cargando datos de colegios...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Columna 2: Desglose por Prenda y Tallas -->
+          <div class="glass-card table-card">
+            <h3>👗 Desglose por Prenda y Tallas Vendidas</h3>
+            <div class="table-container compact-scroll">
+              <table class="data-table" id="table-ventas-prenda">
+                <thead>
+                  <tr>
+                    <th>Prenda</th>
+                    <th>Colegio</th>
+                    <th>Unidades</th>
+                    <th>Venta (Bs)</th>
+                    <th>Tallas Vendidas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td colspan="5" class="text-center">Cargando desglose de prendas...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gráficos por Período -->
+        <div class="charts-grid margin-top">
+          <div class="glass-card chart-card">
+            <h3>📈 Volumen de Ventas en Unidades por Período</h3>
+            <div class="chart-wrapper">
+              <canvas id="chart-ventas-unidades"></canvas>
+            </div>
+          </div>
+
+          <div class="glass-card chart-card">
+            <h3>💰 Recaudación Total en Bs.</h3>
+            <div class="chart-wrapper">
+              <canvas id="chart-ventas-monto"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: PROYECCIÓN INTELIGENTE -->
+      <section id="tab-proyeccion" class="tab-pane">
+        <div class="glass-card projection-control-card">
+          <h3>🔮 Configuración de Proyección Comparativa entre Colegios</h3>
+          <p>Utiliza patrones de ventas históricas de un colegio modelo para proyectar las ventas de otro colegio mediante similitud de prendas.</p>
+
+          <div class="grid-form">
+            <div class="form-group">
+              <label>Colegio Origen (Patrón Histórico Base):</label>
+              <select id="proj-colegio-origen" class="select-input">
+                <option value="Inf SM">Infantil San Marcos (Inf SM)</option>
+                <option value="Col SM">Colegio San Marcos (Col SM)</option>
+                <option value="Intl S Marcos">Intl San Marcos</option>
+                <option value="Edad de Oro">Edad de Oro</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Colegio Destino (Proyectar Ventas):</label>
+              <select id="proj-colegio-destino" class="select-input">
+                <option value="Cambridge">Cambridge</option>
+                <option value="Saint Jude">Saint Jude</option>
+                <option value="Intl S Marcos">Intl San Marcos</option>
+                <option value="Edad de Oro">Edad de Oro</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Año Base:</label>
+              <select id="proj-anio" class="select-input">
+                <option value="2025">2025</option>
+                <option value="2026">2026</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Trimestre Base:</label>
+              <select id="proj-trimestre" class="select-input">
+                <option value="">Año Completo</option>
+                <option value="Q1">Q1 (Ene - Mar)</option>
+                <option value="Q2">Q2 (Abr - Jun)</option>
+                <option value="Q3">Q3 (Jul - Sep)</option>
+                <option value="Q4">Q4 (Oct - Dic)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Factor Escala Alumnos (Multiplicador):</label>
+              <input type="number" id="proj-factor-escala" class="text-input" value="1.0" step="0.1" min="0.1" />
+              <small>Ej. 1.2 si el colegio destino tiene 20% más estudiantes</small>
+            </div>
+
+            <div class="form-group">
+              <label>Factor Crecimiento Esperado (%):</label>
+              <input type="number" id="proj-factor-crecimiento" class="text-input" value="5.0" step="1" />
+              <small>Ej. 5% de crecimiento en ventas</small>
+            </div>
+          </div>
+
+          <div class="form-actions margin-top">
+            <button class="btn btn-accent btn-lg" id="btn-calcular-proyeccion">🚀 Calcular Proyección Inteligente</button>
+          </div>
+        </div>
+
+        <div id="projection-results" class="hidden">
+          <div class="metrics-grid margin-top">
+            <div class="metric-card glass-card">
+              <span class="metric-title">Unidades Históricas (Origen)</span>
+              <span class="metric-value" id="val-unidades-origen">0</span>
+            </div>
+            <div class="metric-card glass-card highlight-green">
+              <span class="metric-title">Unidades Proyectadas (Destino)</span>
+              <span class="metric-value" id="val-unidades-proyectadas">0</span>
+            </div>
+            <div class="metric-card glass-card highlight-blue">
+              <span class="metric-title">Venta Estimada (Bs.)</span>
+              <span class="metric-value" id="val-monto-proyectado">Bs. 0</span>
+            </div>
+          </div>
+
+          <div class="glass-card table-card margin-top">
+            <h3>🧩 Mapeo Inteligente de Prendas y Tallas Proyectadas</h3>
+            <div class="table-container">
+              <table class="data-table" id="table-proyeccion-mapeos">
+                <thead>
+                  <tr>
+                    <th>Prenda Origen</th>
+                    <th>Prenda Destino Equivalente</th>
+                    <th>Similitud</th>
+                    <th>Unidades Hist.</th>
+                    <th>Precio Est. (Bs)</th>
+                    <th>Tallas y Cantidades Proyectadas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Inyectado por JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: SIMULADOR & EXCEL -->
+      <section id="tab-simulador" class="tab-pane">
+        <div class="glass-card simulator-card">
+          <h3>⚡ Generador y Exportador de Ventas Simuladas en Excel (.xlsx)</h3>
+          <p>Exporta un reporte de ventas simulado en el formato oficial de 38 columnas de <code>sales_export_*.xlsx</code> para alimentarlo a otros sistemas o simular vendedor y sucursal.</p>
+
+          <div class="grid-form">
+            <div class="form-group">
+              <label>Nombre del Vendedor / Usuario:</label>
+              <input type="text" id="sim-vendedor" class="text-input" value="Sara Limachi SM" placeholder="Ej. Sara Limachi SM" />
+            </div>
+
+            <div class="form-group">
+              <label>Número Inicial de Pedido:</label>
+              <input type="number" id="sim-npedido" class="text-input" value="3000" />
+            </div>
+
+            <div class="form-group">
+              <label>Fecha Inicio Simulación:</label>
+              <input type="date" id="sim-fecha-inicio" class="text-input" value="2026-01-15" />
+            </div>
+
+            <div class="form-group">
+              <label>Fecha Fin Simulación:</label>
+              <input type="date" id="sim-fecha-fin" class="text-input" value="2026-03-31" />
+            </div>
+          </div>
+
+          <div class="form-actions margin-top">
+            <button class="btn btn-success btn-lg" id="btn-exportar-excel-simulado">
+              📥 Descargar sales_export_simulado.xlsx
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,11 +1,14 @@
 import { Decimal } from 'decimal.js';
-import { eq, and, asc, isNull } from 'drizzle-orm';
+import { eq, and, asc, isNull, or } from 'drizzle-orm';
 import {
   productos,
   tallas,
   colegioTallas,
   telas,
   pesoMateriaPrima,
+  manoObraTipo,
+  // manoObra se mantiene en el import solo para backward compat con snapshots viejos que
+  // guardan datos en ese campo. El motor ya no lee de esta tabla directamente.
   manoObra,
   accesorios,
   detalleAccesorio,
@@ -156,7 +159,17 @@ export interface ContextoCosteo {
   tallasPorColegio: Map<string, any[]>;
   telasPorId: Map<string, any>;
   pesoPorClave: Map<string, any>;
-  manoObraPorClave: Map<string, any>;
+  /**
+   * MO keyed por `tipoPrendaId_tallaId`. Fuente principal desde Fase 6.
+   * Se usa cuando `producto.tipoPrendaId` está asignado.
+   */
+  manoObraTipoPorClave: Map<string, any>;
+  /**
+   * MO keyed por `productoId_tallaId`. Fallback legacy para snapshots viejos
+   * que tienen datos en el campo `manoObra` del JSON (sin `manoObraTipo`).
+   * En una base post-migración este mapa siempre está vacío.
+   */
+  manoObraLegacyPorClave: Map<string, any>;
   accesoriosPorProducto: Map<string, LineaAccesorio[]>;
   precioVentaPorClave: Map<string, any>;
   precioAdquisicionPorClave: Map<string, any>;
@@ -371,15 +384,39 @@ export async function cargarContextoCosteo(
   }
 
   // --- mano de obra ---
-  const listaMO = (snapData && Array.isArray(snapData.manoObra)) ? snapData.manoObra : await db.select().from(manoObra);
-  const manoObraPorClave = new Map<string, any>();
-  for (const m of listaMO) {
-    const k = clave(m.productoId, m.tallaId);
-    if (manoObraPorClave.has(k)) {
-      avisosGlobales.push(`mano_obra duplicada para ${k}. Se usa la primera fila.`);
+  //
+  // Desde Fase 6 la MO se guarda en mano_obra_tipo (por tipoPrendaId + tallaId).
+  // Para snapshots viejos que tienen datos en `snapData.manoObra` (sin `manoObraTipo`)
+  // se construye también el mapa legacy, que el ensamblador usa como fallback cuando
+  // el producto no tiene tipoPrendaId.
+  //
+  // En producción post-migración: manoObraTipoPorClave tiene datos, manoObraLegacyPorClave
+  // está vacío, y todos los productos tienen tipoPrendaId → el fallback nunca se activa.
+
+  // Mapa principal: tipoPrendaId_tallaId → fila de mano_obra_tipo
+  const listaMOTipo = (snapData && Array.isArray(snapData.manoObraTipo))
+    ? snapData.manoObraTipo
+    : await db.select().from(manoObraTipo);
+  const manoObraTipoPorClave = new Map<string, any>();
+  for (const m of listaMOTipo) {
+    const k = clave(m.tipoPrendaId, m.tallaId);
+    if (manoObraTipoPorClave.has(k)) {
+      avisosGlobales.push(`mano_obra_tipo duplicada para ${k}. Se usa la primera fila.`);
       continue;
     }
-    manoObraPorClave.set(k, m);
+    manoObraTipoPorClave.set(k, m);
+  }
+
+  // Mapa legacy: productoId_tallaId → fila de mano_obra (solo snapshots viejos)
+  // En producción post-migración mano_obra está vacía; esto devuelve [] siempre.
+  const listaMOLegacy = (snapData && Array.isArray(snapData.manoObra))
+    ? snapData.manoObra
+    : [];
+  const manoObraLegacyPorClave = new Map<string, any>();
+  for (const m of listaMOLegacy) {
+    const k = clave(m.productoId, m.tallaId);
+    if (manoObraLegacyPorClave.has(k)) continue;
+    manoObraLegacyPorClave.set(k, m);
   }
 
   // --- receta de accesorios: detalle_acc unido al catalogo ---
@@ -587,7 +624,8 @@ export async function cargarContextoCosteo(
     tallasPorColegio,
     telasPorId,
     pesoPorClave,
-    manoObraPorClave,
+    manoObraTipoPorClave,
+    manoObraLegacyPorClave,
     accesoriosPorProducto,
     precioVentaPorClave,
     precioAdquisicionPorClave,
@@ -685,9 +723,16 @@ export function ensamblarInputs(
   }
 
   // ---------- mano de obra ----------
-  // Sin fabricar nada. El camino viejo, cuando no encontraba la fila, promediaba
-  // todas las tallas y si tampoco habia usaba 15.0 Bs hardcodeados.
-  const filaMO = ctx.manoObraPorClave.get(k);
+  // Sin fabricar nada. Desde Fase 6 la MO viene del tipo de prenda genérico;
+  // para snapshots viejos (sin manoObraTipo) se cae al mapa legacy por productoId.
+  let filaMO: any;
+  if (producto.tipoPrendaId) {
+    // Camino normal post-migración: buscar por tipoPrendaId + tallaId
+    filaMO = ctx.manoObraTipoPorClave.get(clave(producto.tipoPrendaId, talla.id));
+  } else {
+    // Fallback para snapshots viejos o prendas sin tipo asignado
+    filaMO = ctx.manoObraLegacyPorClave.get(k);
+  }
   const tieneManoObra = !!filaMO;
   const costoManoObraBs = num(filaMO?.costoBs);
   if (!tieneManoObra && modoCosteo === 'confeccion') {

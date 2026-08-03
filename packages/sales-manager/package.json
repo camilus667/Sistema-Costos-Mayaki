@@ -1,0 +1,28 @@
+{
+  "name": "@sistema-uniformes/sales-manager",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.0.11",
+    "@sistema-uniformes/api": "workspace:*",
+    "@sistema-uniformes/shared": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "exceljs": "^4.4.0",
+    "hono": "^4.0.0",
+    "sql.js": "^1.14.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsx": "^4.23.1",
+    "typescript": "^5.4.5",
+    "vitest": "^1.2.0"
+  }
+}

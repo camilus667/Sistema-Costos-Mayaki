@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="sales-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0f19"/>
+      <stop offset="100%" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <linearGradient id="chart-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="50%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+    <linearGradient id="bar-green" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#059669"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    <filter id="glow-sales" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="10" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="128" fill="url(#sales-bg)"/>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="none" stroke="url(#chart-grad)" stroke-width="8" stroke-opacity="0.6"/>
+
+  <g filter="url(#glow-sales)">
+    <!-- Bar Chart Background Bars -->
+    <rect x="96" y="280" width="56" height="136" rx="12" fill="#6366f1" fill-opacity="0.4"/>
+    <rect x="184" y="220" width="56" height="196" rx="12" fill="#8b5cf6" fill-opacity="0.6"/>
+    <rect x="272" y="160" width="56" height="256" rx="12" fill="url(#bar-green)" fill-opacity="0.9"/>
+    <rect x="360" y="100" width="56" height="316" rx="12" fill="url(#chart-grad)"/>
+
+    <!-- Projection Trend Arrow -->
+    <path d="M 96 340 L 184 260 L 272 200 L 388 96" fill="none" stroke="#f43f5e" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="388,72 416,116 364,116" fill="#f43f5e"/>
+
+    <!-- Spark Dots -->
+    <circle cx="96" cy="340" r="14" fill="#ffffff"/>
+    <circle cx="184" cy="260" r="14" fill="#ffffff"/>
+    <circle cx="272" cy="200" r="14" fill="#ffffff"/>
+    <circle cx="388" cy="96" r="16" fill="#38bdf8"/>
+  </g>
+</svg>

@@ -46,6 +46,68 @@
   --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Pestañas de Modos de Ajuste de Pesos */
+.tab-mode-btn {
+  flex: 1;
+  padding: 0.65rem 1.1rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+.tab-mode-btn:hover {
+  background: #273549;
+  color: #f8fafc;
+  border-color: #475569;
+}
+.tab-mode-btn.active {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+  border-color: #3b82f6;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45);
+}
+
+.searchable-select-wrapper {
+  position: relative;
+  width: 100%;
+}
+.searchable-select-input {
+  cursor: text;
+}
+.searchable-select-options {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 250px;
+  overflow-y: auto;
+  background: #1e293b;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  z-index: 99999;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.8);
+  margin-top: 2px;
+}
+.searchable-option-item {
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  border-bottom: 1px solid #334155;
+  font-size: 0.8rem;
+  transition: background 0.15s ease;
+}
+.searchable-option-item:hover, .searchable-option-item.selected {
+  background: #334155;
+}
+.searchable-option-item:last-child {
+  border-bottom: none;
+}
+
 /* Reset Global & Tipografía */
 * {
   box-sizing: border-box;
@@ -112,7 +174,7 @@ header {
   background: var(--bg-header);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
-  padding: 0.75rem 1.75rem;
+  padding: 0.5rem 1.5rem;
   position: sticky;
   top: 0;
   z-index: 50;
@@ -133,6 +195,7 @@ header {
   font-size: 1.15rem;
   font-weight: 700;
   background: linear-gradient(135deg, #818cf8, #c084fc);
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   letter-spacing: -0.01em;
@@ -211,7 +274,7 @@ header {
 /* Pestañas Principales Navegación */
 nav.tabs {
   background: #0d131f;
-  padding: 0.6rem 1.75rem;
+  padding: 0.4rem 1.5rem;
   display: flex;
   gap: 0.5rem;
   border-bottom: 1px solid var(--border);
@@ -263,15 +326,15 @@ nav.tabs {
    abajo, cada una con su propia linea garantizada. */
 .panel-toolbar {
   border-bottom: 2px solid #334155;
-  padding-bottom: 0.55rem;
-  margin-bottom: 1.25rem;
+  padding-bottom: 0.6rem;
+  margin-bottom: 0.75rem;
 }
 
 .panel-toolbar-top {
   display: flex;
   align-items: center;
   gap: 1rem;
-  margin-bottom: 0.6rem;
+  margin-bottom: 0.75rem;
   /* Los controles van a la DERECHA, igual que en `.panel-header`.
      Sin `justify-content` quedaban pegados al titulo: medido a 1600 px, el ordenador, la
      paginacion y el boton PDF terminaban en 583 px con el borde del panel en 1572 —casi mil
@@ -286,6 +349,7 @@ nav.tabs {
   font-weight: 700;
   color: var(--text-main);
   margin: 0;
+  line-height: 1.2;
   white-space: nowrap;
 }
 
@@ -362,7 +426,7 @@ nav.tabs {
 /* Main Layout & Contenido */
 main {
   flex: 1;
-  padding: 1.5rem 1.75rem;
+  padding: 0.85rem 1.5rem;
   max-width: 1800px;
   margin: 0 auto;
   width: 100%;
@@ -390,7 +454,7 @@ main {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   gap: 1.15rem;
-  margin-bottom: 1.75rem;
+  margin-bottom: 1rem;
 }
 
 .stat-card {
@@ -450,8 +514,8 @@ main {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 1.4rem;
-  margin-bottom: 1.75rem;
+  padding: 0.75rem 1.25rem 1rem 1.25rem;
+  margin-bottom: 1.25rem;
   box-shadow: var(--shadow-md);
 }
 
@@ -459,13 +523,15 @@ main {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.15rem;
+  margin-bottom: 0.75rem;
 }
 
 .panel-title {
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--text-main);
+  margin: 0;
+  line-height: 1.2;
   letter-spacing: -0.01em;
 }
 
@@ -1101,43 +1167,62 @@ footer {
      * es el papel, no el viewport.
      * ================================================================== */
 
-    /* FUERA DE PANTALLA, PERO MAQUETADO. Y esta distincion es el corazon del
-       ajuste a una hoja: con `display: none` el navegador no calcula geometria, asi
-       que `scrollHeight` devuelve 0, la busqueda binaria concluye que todo entra con
-       escala 1 y el reporte se imprime desbordado. Peor todavia, los chequeos que
-       comparan alto de contenido contra alto de hoja comparan 0 contra 0 y dan verde
-       sin haber medido nada: un verde vacuo, de los que este proyecto ya conoce.
-       Posicionado fuera del lienzo el elemento SI se maqueta, las medidas son reales
-       y el ajuste puede hacer su trabajo. */
-    #rp-root { position: absolute; left: -99999px; top: 0; }
+    /* FUERA DE PANTALLA.
+       El reporte solo debe visualizarse al imprimir (@media print). En pantalla (@media screen)
+       el contenedor esta estrictamente oculto para evitar interferir con la interfaz oscura del dashboard. */
+    #rp-root {
+      display: none !important;
+      position: absolute !important;
+      left: -99999px !important;
+      top: -99999px !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+      z-index: -99999 !important;
+    }
 
-    .rp-hoja { overflow: hidden; }
-    .rp-fit { transform-origin: top left; }
+    .rp-hoja { overflow: visible; box-sizing: border-box; width: 100%; height: auto; }
+    .rp-fit { width: 100%; height: auto; }
 
     @media print {
-      /* Se oculta la aplicación entera y se muestra sólo el reporte. Es más
-         robusto que ir tapando pestaña por pestaña: una pestaña nueva no se
-         "olvida" de esconderse. */
+      /* Se oculta la aplicación entera y se muestra sólo el reporte. */
       body.rp-imprimiendo > *:not(#rp-root) { display: none !important; }
       body.rp-imprimiendo { background: #fff !important; margin: 0 !important; padding: 0 !important; }
-      /* Al imprimir vuelve al flujo normal, en el origen de la hoja. */
+
+      /* Al imprimir se activa exclusivamente el reporte. */
       body.rp-imprimiendo #rp-root {
         display: block !important;
-        position: static !important; left: auto !important; top: auto !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        position: static !important;
+        left: auto !important;
+        top: auto !important;
+        z-index: auto !important;
+        width: 100% !important;
+        height: auto !important;
       }
 
-      /* MODO MULTIPAGINA. Un listado se reparte entre hojas en vez de aplastarse en una.
-         `overflow: visible` es lo que lo permite: `.rp-hoja` recorta por defecto, que es
-         correcto para una hoja unica y esconde las filas que sobran en un listado.
-         El encabezado se repite en cada pagina con `table-header-group`, y las filas no se
-         parten al medio. */
-      #rp-root.rp-multipagina .rp-hoja { overflow: visible !important; height: auto !important; }
-      #rp-root.rp-multipagina thead { display: table-header-group; }
-      #rp-root.rp-multipagina tr { break-inside: avoid; page-break-inside: avoid; }
-      #rp-root.rp-multipagina tfoot { display: table-row-group; }
+      #rp-root .rp-hoja {
+        overflow: visible !important;
+        height: auto !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
 
-      /* Sin esto Chrome descarta los fondos de las bandas de sección y de la fila
-         de totales, que son lo que hace legible una tabla de 19 columnas. */
+      #rp-root .rp-fit {
+        zoom: 1 !important;
+        transform: none !important;
+        width: 100% !important;
+        height: auto !important;
+      }
+
+      /* MODO MULTIPAGINA. El encabezado se repite en cada pagina con table-header-group. */
+      #rp-root thead { display: table-header-group !important; }
+      #rp-root tr { break-inside: avoid !important; page-break-inside: avoid !important; }
+      #rp-root tfoot { display: table-row-group !important; }
+
+      /* Preservar colores y fondos al imprimir */
       #rp-root, #rp-root * {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
@@ -1204,24 +1289,24 @@ footer {
       background: #fff;
       color: var(--rp-tinta);
       font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-      font-size: 9.5pt;
+      font-size: 10pt;
       line-height: 1.35;
     }
 
     /* ---- Encabezado ejecutivo ---- */
-    .rp-head { border-bottom: 2.5pt solid var(--rp-guindo); padding-bottom: 6pt; margin-bottom: 8pt; }
+    .rp-head { border-bottom: 2.5pt solid var(--rp-guindo); padding-bottom: 5pt; margin-bottom: 6pt; }
     .rp-head-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16pt; }
-    .rp-marca { font-size: 8.5pt; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--rp-guindo); }
-    .rp-titulo { font-size: 16pt; font-weight: 800; margin: 2pt 0 0; letter-spacing: -0.015em; color: var(--rp-tinta); }
-    .rp-sub { font-size: 10pt; color: var(--rp-gris-osc); margin-top: 1pt; font-weight: 700; }
+    .rp-marca { font-size: 10pt; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--rp-guindo); line-height: 1.1; }
+    .rp-titulo { font-size: 16pt; font-weight: 800; margin: 1pt 0 0; letter-spacing: -0.015em; color: var(--rp-tinta); line-height: 1.15; }
+    .rp-sub { font-size: 10.5pt; color: var(--rp-gris-osc); margin-top: 1pt; font-weight: 700; line-height: 1.2; }
 
     .rp-meta { display: grid; grid-template-columns: repeat(2, auto); gap: 2pt 14pt; text-align: right; flex-shrink: 0; }
     .rp-meta-chk { flex-shrink: 0; padding-top: 1pt; padding-left: 2pt; }
-    .rp-meta-item span { display: block; font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.07em; color: var(--rp-gris-osc); font-weight: 800; }
-    .rp-meta-item strong { display: block; font-size: 9.5pt; color: var(--rp-tinta); font-weight: 800; }
+    .rp-meta-item span { display: block; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.07em; color: var(--rp-gris-osc); font-weight: 800; line-height: 1.1; }
+    .rp-meta-item strong { display: block; font-size: 10.5pt; color: var(--rp-tinta); font-weight: 800; line-height: 1.2; }
 
     /* ---- Tira de indicadores ---- */
-    .rp-kpis { display: flex; gap: 6pt; margin-top: 8pt; }
+    .rp-kpis { display: flex; gap: 6pt; margin-top: 6pt; }
     .rp-kpi {
       flex: 1; border: 0.75pt solid var(--rp-linea); border-left: 3.5pt solid var(--rp-gris-osc);
       padding: 5pt 7pt; background: #fff;
@@ -1230,47 +1315,47 @@ footer {
        en guindo, no por invertir el fondo. */
     .rp-kpi-dest { border-left: 3.5pt solid var(--rp-guindo); background: var(--rp-guindo-tenue); }
     .rp-kpi-dest .rp-kpi-v { color: var(--rp-guindo-osc); }
-    .rp-kpi-t { display: block; font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--rp-gris-osc); font-weight: 800; }
-    .rp-kpi-v { display: block; font-size: 12.5pt; font-weight: 800; color: var(--rp-tinta); margin-top: 1.5pt; letter-spacing: -0.02em; }
-    .rp-kpi-s { display: block; font-size: 8pt; color: var(--rp-tinta); margin-top: 0.5pt; font-weight: 700; }
+    .rp-kpi-t { display: block; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--rp-gris-osc); font-weight: 800; line-height: 1.1; }
+    .rp-kpi-v { display: block; font-size: 13pt; font-weight: 800; color: var(--rp-tinta); margin-top: 1pt; letter-spacing: -0.02em; line-height: 1.15; }
+    .rp-kpi-s { display: block; font-size: 9pt; color: var(--rp-tinta); margin-top: 0.5pt; font-weight: 700; line-height: 1.15; }
 
     /* Indicador de escenario de precios: un cuadrito, sin leyenda. */
-    .rp-chk { display: inline-block; width: 8pt; height: 8pt; border: 0.75pt solid var(--rp-gris); background: #fff; }
+    .rp-chk { display: inline-block; width: 9pt; height: 9pt; border: 0.75pt solid var(--rp-gris); background: #fff; }
     .rp-chk-on { background: var(--rp-guindo); border-color: var(--rp-guindo); }
 
     /* ---- Tablas ---- */
-    .rp-h2 { font-size: 10pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+    .rp-h2 { font-size: 11pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
              color: var(--rp-guindo); margin: 9pt 0 3pt; padding-bottom: 2pt;
              border-bottom: 1.5pt solid var(--rp-guindo); }
 
     .rp-tabla { width: 100%; border-collapse: collapse; margin-bottom: 4pt; }
     /* Encabezado: gris muy claro, tinta oscura en negrita y un filete guindo grueso
-       debajo. Antes era una banda negra con texto blanco. */
+       debajo. */
     .rp-tabla th {
-      background: #f0f2f2; color: var(--rp-tinta); font-size: 8pt; font-weight: 800; text-align: left;
-      padding: 4pt 5pt; text-transform: uppercase; letter-spacing: 0.03em;
+      background: #f0f2f2; color: var(--rp-tinta); font-size: 10pt; font-weight: 800; text-align: left;
+      padding: 5pt 6pt; text-transform: uppercase; letter-spacing: 0.03em;
       border-right: 0.5pt solid var(--rp-linea);
       border-top: 0.5pt solid var(--rp-linea);
       border-bottom: 1.5pt solid var(--rp-guindo);
     }
-    .rp-tabla td { font-size: 8.5pt; color: var(--rp-tinta); padding: 3pt 4.5pt; border-bottom: 0.5pt solid #d1d5db; border-right: 0.5pt solid #e5e7eb; }
+    .rp-tabla td { font-size: 10pt; color: var(--rp-tinta); padding: 4pt 5.5pt; border-bottom: 0.5pt solid #d1d5db; border-right: 0.5pt solid #e5e7eb; }
     .rp-tabla tbody tr:nth-child(even) td { background: #f8fafc; }
     /* Cierre sin fondo, con doble filete arriba: la convencion contable, y no gasta
        tinta. Las cifras del cierre van en guindo. */
     .rp-tabla tfoot td {
-      background: #fff; color: var(--rp-tinta); font-weight: 800; font-size: 9pt;
-      padding: 4.5pt; border: none;
+      background: #fff; color: var(--rp-tinta); font-weight: 800; font-size: 10.5pt;
+      padding: 5pt 6pt; border: none;
       border-top: 1.75pt solid var(--rp-tinta);
       border-bottom: 1pt solid var(--rp-tinta);
     }
     .rp-tabla tfoot td.rp-r { color: var(--rp-guindo-osc); }
-    .rp-densa { font-size: 8pt; }
-    .rp-densa td { padding: 2.2pt 3.5pt; }
-    .rp-densa th { font-size: 7.5pt; padding: 3pt 3.5pt; }
+    .rp-densa { font-size: 10pt; }
+    .rp-densa td { padding: 3.5pt 4.5pt; font-size: 10pt; }
+    .rp-densa th { font-size: 10pt; padding: 4pt 4.5pt; }
 
     .rp-r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .rp-c { text-align: center; white-space: nowrap; }
-    .rp-nota { font-size: 7.5pt; color: #374151; font-weight: 600; margin-top: 0.5pt; }
+    .rp-nota { font-size: 9pt; color: #374151; font-weight: 600; margin-top: 0.5pt; }
 
     /* Matriz de conceptos por talla. La primera columna se ancla porque es la
        única que dice QUÉ se está leyendo. */

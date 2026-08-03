@@ -5,8 +5,10 @@
   "description": "Sistema centralizado de gestión de uniformes escolares",
   "scripts": {
     "dev": "pnpm --filter @sistema-uniformes/api dev:local",
-    "dev:all": "pnpm --filter @sistema-uniformes/api dev:local",
+    "dev:api": "pnpm --filter @sistema-uniformes/api dev:local",
     "dev:pos": "pnpm --filter @sistema-uniformes/pos-manager dev",
+    "dev:sales": "pnpm --filter @sistema-uniformes/sales-manager dev",
+    "dev:all": "node scripts/start-all.cjs",
     "test": "turbo test",
     "typecheck": "turbo typecheck",
     "dev:local": "pnpm --filter @sistema-uniformes/api dev:local",

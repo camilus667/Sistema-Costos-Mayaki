@@ -20,6 +20,7 @@ import exportRoutes from './routes/export';
 import costeoRoutes from './routes/costeo';
 import snapshotRoutes from './routes/snapshots';
 import importarRoutes from './routes/importar';
+import tipoPrendaRoutes from './routes/tipoPrenda';
 import dashboardHtml from './dashboard.html';
 
 export interface Env {
@@ -142,5 +143,6 @@ app.route('/api/export', exportRoutes);
 app.route('/api/costeo', costeoRoutes);
 app.route('/api/snapshots', snapshotRoutes);
 app.route('/api/importar', importarRoutes);
+app.route('/api/tipos-prenda', tipoPrendaRoutes);
 
 export default app;

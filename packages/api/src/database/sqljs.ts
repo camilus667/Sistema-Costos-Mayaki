@@ -81,6 +81,12 @@ export function saveDbToDisk() {
 }
 
 const createTablesSQL = `
+CREATE TABLE IF NOT EXISTS "tipo_prenda" (
+ "id" text PRIMARY KEY NOT NULL,
+ "nombre" text NOT NULL,
+ "activo" integer DEFAULT 1 NOT NULL,
+ "creado_en" text DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
 CREATE TABLE IF NOT EXISTS "colegio" (
  "id" text PRIMARY KEY NOT NULL,
  "nombre" text NOT NULL,
@@ -198,6 +204,12 @@ CREATE TABLE IF NOT EXISTS "peso_mat_prima" (
 CREATE TABLE IF NOT EXISTS "mano_obra" (
  "id" text PRIMARY KEY NOT NULL,
  "producto_id" text NOT NULL,
+ "talla_id" text NOT NULL,
+ "costo_bs" real NOT NULL
+);
+CREATE TABLE IF NOT EXISTS "mano_obra_tipo" (
+ "id" text PRIMARY KEY NOT NULL,
+ "tipo_prenda_id" text NOT NULL,
  "talla_id" text NOT NULL,
  "costo_bs" real NOT NULL
 );
@@ -327,6 +339,62 @@ CREATE TABLE IF NOT EXISTS "pos_snapshot" (
  "descripcion" text,
  "datos_json" text NOT NULL,
  "total_productos" integer DEFAULT 0 NOT NULL,
+ "creado_por" text,
+ "creado_en" text DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS "pos_venta" (
+ "id" text PRIMARY KEY NOT NULL,
+ "n_pedido" text NOT NULL,
+ "tipo" text DEFAULT 'Pedido',
+ "estado" text NOT NULL,
+ "fecha" text NOT NULL,
+ "fecha_iso" text,
+ "anio" integer NOT NULL,
+ "mes" integer NOT NULL,
+ "trimestre" text NOT NULL,
+ "pos_id_producto" text,
+ "nombre_producto_raw" text NOT NULL,
+ "nombre_limpio" text NOT NULL,
+ "colegio_grupo" text NOT NULL,
+ "talla" text,
+ "cantidad" real DEFAULT 1 NOT NULL,
+ "precio_unitario" real DEFAULT 0 NOT NULL,
+ "subtotal" real DEFAULT 0 NOT NULL,
+ "total_cobrado" real DEFAULT 0 NOT NULL,
+ "costo_unitario" real DEFAULT 0,
+ "costo_total" real DEFAULT 0,
+ "usuario" text,
+ "sucursal" text,
+ "medio_pago" text,
+ "datos_originales" text,
+ "creado_en" text DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS "proyeccion_regla" (
+ "id" text PRIMARY KEY NOT NULL,
+ "colegio_origen" text NOT NULL,
+ "colegio_destino" text NOT NULL,
+ "prenda_origen" text NOT NULL,
+ "prenda_destino" text NOT NULL,
+ "talla_origen" text,
+ "talla_destino" text,
+ "factor_ajuste" real DEFAULT 1.0 NOT NULL,
+ "similaridad_pct" real DEFAULT 100.0 NOT NULL,
+ "creado_en" text DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS "proyeccion_guardada" (
+ "id" text PRIMARY KEY NOT NULL,
+ "nombre" text NOT NULL,
+ "descripcion" text,
+ "colegio_origen" text NOT NULL,
+ "colegio_destino" text NOT NULL,
+ "periodo_origen" text NOT NULL,
+ "periodo_proyectado" text NOT NULL,
+ "factor_escala_alumnos" real DEFAULT 1.0,
+ "vendedor_simulado" text,
+ "resultados_json" text NOT NULL,
  "creado_por" text,
  "creado_en" text DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
@@ -477,7 +545,133 @@ export async function getDb(opciones: OpcionesGetDb = {}) {
   }
   try { dbInstance.run('CREATE INDEX IF NOT EXISTS "idx_precio_adq_producto" ON "precio_adquisicion" ("producto_id");'); } catch (e) {}
 
+  // Fase 6: columna tipo_prenda_id en producto y tabla mano_obra_tipo.
+  // Idempotentes: el try vacio es correcto, si ya existen son no-ops.
+  try { dbInstance.run('ALTER TABLE "producto" ADD COLUMN "tipo_prenda_id" TEXT REFERENCES "tipo_prenda"("id");'); } catch (e) {}
+  try {
+    dbInstance.run('CREATE UNIQUE INDEX IF NOT EXISTS "idx_mo_tipo_talla" ON "mano_obra_tipo" ("tipo_prenda_id", "talla_id");');
+  } catch (e) {}
+
   dbDrizzle = drizzle(dbInstance, { schema: schemaModule });
+
+  // ---------------------------------------------------------------------------
+  // MIGRACIÓN AUTOMÁTICA: mano_obra → tipo_prenda + mano_obra_tipo
+  //
+  // Se ejecuta UNA SOLA VEZ, cuando tipo_prenda está vacía pero mano_obra tiene
+  // filas. Agrupa los productos por itemNumero, crea un tipo por cada grupo, copia
+  // los costos MO a mano_obra_tipo, actualiza tipo_prenda_id en cada producto y
+  // vacía mano_obra. Después del primer arranque, tipo_prenda ya tiene filas y
+  // nunca vuelve a entrar.
+  //
+  // SI mano_obra ya está vacía y tipo_prenda también (base nueva o recién reseteada)
+  // no hace nada. La condición de entrada evita re-migraciones accidentales.
+  // ---------------------------------------------------------------------------
+  try {
+    const tipoCnt = dbInstance.exec('SELECT COUNT(*) FROM tipo_prenda;');
+    const moCnt   = dbInstance.exec('SELECT COUNT(*) FROM mano_obra;');
+    const tienesTipos = Number(tipoCnt[0]?.values[0][0] || 0) > 0;
+    const tieneMO     = Number(moCnt[0]?.values[0][0]   || 0) > 0;
+
+    if (!tienesTipos && tieneMO) {
+      console.log('🔄  Migración Fase 6: unificando mano_obra → tipo_prenda + mano_obra_tipo...');
+
+      // 1. Obtener todos los productos, agrupados por itemNumero
+      const prodRows = dbInstance.exec(
+        'SELECT id, item_numero, descripcion, colegio_id FROM producto WHERE activo = 1 OR activo IS NULL ORDER BY item_numero, colegio_id;'
+      );
+      const productos_: Array<{ id: string; itemNumero: number; descripcion: string; colegioId: string }> = [];
+      if (prodRows.length) {
+        for (const row of prodRows[0].values) {
+          productos_.push({ id: String(row[0]), itemNumero: Number(row[1]), descripcion: String(row[2]), colegioId: String(row[3]) });
+        }
+      }
+
+      // 2. Agrupar por itemNumero
+      const grupos = new Map<number, Array<typeof productos_[0]>>();
+      for (const p of productos_) {
+        const arr = grupos.get(p.itemNumero) || [];
+        arr.push(p);
+        grupos.set(p.itemNumero, arr);
+      }
+
+      // 3. Obtener todas las filas de mano_obra
+      const moRows = dbInstance.exec('SELECT id, producto_id, talla_id, costo_bs FROM mano_obra;');
+      const moPorProducto = new Map<string, Array<{ tallaId: string; costoBs: number }>>();
+      if (moRows.length) {
+        for (const row of moRows[0].values) {
+          const pid = String(row[1]);
+          const arr = moPorProducto.get(pid) || [];
+          arr.push({ tallaId: String(row[2]), costoBs: Number(row[3]) });
+          moPorProducto.set(pid, arr);
+        }
+      }
+
+      // Función para generar un id hex aleatorio (como la BD)
+      const hexId = () => {
+        const arr = new Uint8Array(16);
+        for (let i = 0; i < 16; i++) arr[i] = Math.floor(Math.random() * 256);
+        return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+      };
+
+      let tiposCreados = 0;
+      let productosActualizados = 0;
+
+      for (const [itemNumero, prods] of grupos.entries()) {
+        // Nombre del tipo = descripción del primer producto del grupo
+        const nombre = prods[0].descripcion.trim();
+        const tipoId = hexId();
+
+        // Crear tipo_prenda
+        dbInstance.run(
+          'INSERT INTO tipo_prenda (id, nombre, activo, creado_en) VALUES (?, ?, 1, CURRENT_TIMESTAMP);',
+          [tipoId, nombre]
+        );
+        tiposCreados++;
+
+        // Buscar el primer producto del grupo que tenga MO
+        let moFuente: Array<{ tallaId: string; costoBs: number }> | undefined;
+        for (const p of prods) {
+          const mo = moPorProducto.get(p.id);
+          if (mo && mo.length > 0) {
+            moFuente = mo;
+            break;
+          }
+        }
+
+        // Copiar MO a mano_obra_tipo
+        if (moFuente) {
+          for (const mo of moFuente) {
+            try {
+              dbInstance.run(
+                'INSERT OR IGNORE INTO mano_obra_tipo (id, tipo_prenda_id, talla_id, costo_bs) VALUES (?, ?, ?, ?);',
+                [hexId(), tipoId, mo.tallaId, mo.costoBs]
+              );
+            } catch (e) {
+              // Ignorar duplicados (índice único)
+            }
+          }
+        }
+
+        // Actualizar tipo_prenda_id en TODOS los productos del grupo (todos los colegios)
+        for (const p of prods) {
+          dbInstance.run('UPDATE producto SET tipo_prenda_id = ? WHERE id = ?;', [tipoId, p.id]);
+          productosActualizados++;
+        }
+      }
+
+      // Vaciar mano_obra (los datos ya están en mano_obra_tipo)
+      dbInstance.run('DELETE FROM mano_obra;');
+
+      console.log(
+        `✅  Migración completada: ${tiposCreados} tipo(s) creados, ` +
+        `${productosActualizados} producto(s) actualizados. mano_obra vaciada.`
+      );
+    } else if (tienesTipos) {
+      // Ya migrado
+    }
+  } catch (migErr) {
+    console.error('❌ Error en migración Fase 6 (mano_obra → tipo_prenda). El sistema sigue funcionando con mano_obra:', migErr);
+  }
 
   let rowCount = 0;
   if (isDbFileExisting) {

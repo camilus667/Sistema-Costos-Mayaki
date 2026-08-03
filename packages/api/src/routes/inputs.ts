@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { eq, and, asc, or, isNull } from 'drizzle-orm';
-import { productos, tallas, pesoMateriaPrima, manoObra, telas, accesorios, detalleAccesorio, costosIndirectos, preciosAdquisicion } from '../database/schema';
+import { productos, tallas, pesoMateriaPrima, manoObra, manoObraTipo, tipoPrenda, telas, accesorios, detalleAccesorio, costosIndirectos, preciosAdquisicion } from '../database/schema';
 import { saveDbToDisk } from '../database/sqljs';
 import { getSystemConfig, setSystemConfig } from '../services/configService';
 import { costoUnitarioDeInsumo, costoUsoDeInsumo } from '../services/costoInsumo';
@@ -15,9 +15,7 @@ import {
   resolverPrecios,
   etiquetaModalidad,
 } from '../services/modalidadFiscal';
-import { bandaManoObra, esDeBanda } from '../services/tallas';
-// El criterio de orden vive en UNA sola casa: services/ordenPrendas.ts. Los cinco sitios de
-// este archivo lo escribian a mano, dos de una forma y tres de otra.
+import { bandaManoObra, esDeBanda, buscarTallaPorCodigo, obtenerTallasActivasPorColegio, obtenerMapTallasActivasPorColegio } from '../services/tallas';
 import { ordenarPrendasDesdeBase } from '../services/ordenPrendasDb';
 
 /** Redondeo de presentacion. El motor ya redondea sus propias salidas. */
@@ -250,11 +248,11 @@ api.put('/tabla-auxiliar-accesorios/:id', async (c) => {
 api.get('/peso-mat-prima', async (c) => {
   const db = (c as any).db;
   const colegioId = c.req.query('colegioId');
-
   const conds = [or(eq(productos.activo, true), isNull(productos.activo))];
   if (colegioId && colegioId !== 'all') conds.push(eq(productos.colegioId, colegioId));
   const allProds = await ordenarPrendasDesdeBase(db, await db.select().from(productos).where(and(...conds)).orderBy(asc(productos.orden), asc(productos.itemNumero)));
-  const allTallas = await db.select().from(tallas).orderBy(asc(tallas.orden));
+  const mapTallasActivas = await obtenerMapTallasActivasPorColegio(db);
+  const allTallas = await obtenerTallasActivasPorColegio(db, colegioId);
 
   let pesos: any[] = [];
   try {
@@ -291,6 +289,12 @@ api.get('/peso-mat-prima', async (c) => {
     };
 
     allTallas.forEach((talla: any) => {
+      const cid = String(prod.colegioId);
+      const activasSet = mapTallasActivas.get(cid);
+      if (activasSet && !activasSet.has(String(talla.id))) {
+        return; // Omitir tallas desactivadas para este colegio
+      }
+
       const dbRec = pesoMap.get(`${prod.id}_${talla.id}`);
       const key = `${prod.itemNumero}_${talla.codigo}`;
 
@@ -343,11 +347,8 @@ api.get('/precios-adquisicion', async (c) => {
   ];
   if (colegioId && colegioId !== 'all') conds.push(eq(productos.colegioId, colegioId));
   const allProds = await ordenarPrendasDesdeBase(db, await db.select().from(productos).where(and(...conds)).orderBy(asc(productos.orden), asc(productos.itemNumero)));
-  let tallasQuery = db.select().from(tallas);
-  if (colegioId && colegioId !== 'all') {
-    tallasQuery = db.select().from(tallas).where(or(eq(tallas.colegioId, colegioId), isNull(tallas.colegioId)));
-  }
-  const allTallas = await tallasQuery.orderBy(asc(tallas.orden));
+  const mapTallasActivas = await obtenerMapTallasActivasPorColegio(db);
+  const allTallas = await obtenerTallasActivasPorColegio(db, colegioId);
 
   let precios: any[] = [];
   try {
@@ -367,6 +368,12 @@ api.get('/precios-adquisicion', async (c) => {
     };
 
     allTallas.forEach((t: any) => {
+      const cid = String(prod.colegioId);
+      const activasSet = mapTallasActivas.get(cid);
+      if (activasSet && !activasSet.has(String(t.id))) {
+        return; // Omitir tallas desactivadas para este colegio
+      }
+
       const precio = preciosMap.get(`${prod.id}_${t.id}`) ?? 0;
       rowObj.tallas[t.codigo] = {
         tallaId: t.id,
@@ -677,63 +684,60 @@ api.put('/accesorios-matriz-celda', async (c) => {
   });
 });
 
-// GET /api/inputs/mano-de-obra - Costos de mano de obra en los 3 grupos de tallas oficiales (2-10, 12-S, M-4XL)
+// GET /api/inputs/mano-de-obra - Costos de mano de obra por tipo de prenda (una fila por tipo)
+//
+// Desde Fase 6 la MO vive en tipo_prenda + mano_obra_tipo. Este endpoint sigue exponiéndola
+// en el mismo formato (grupos 1/2/3) para que el frontend no cambie. La diferencia:
+// ya no hay una fila por producto de cada colegio, sino una sola fila por tipo genérico.
 api.get('/mano-de-obra', async (c) => {
   const db = (c as any).db;
-  const colegioId = c.req.query('colegioId');
 
-  const condsMo = [or(eq(productos.activo, true), isNull(productos.activo))];
-  if (colegioId && colegioId !== 'all') condsMo.push(eq(productos.colegioId, colegioId));
-  const allProds = await ordenarPrendasDesdeBase(db, await db.select().from(productos).where(and(...condsMo)).orderBy(asc(productos.orden), asc(productos.itemNumero)));
-  const allTallas = await db.select().from(tallas).orderBy(asc(tallas.orden));
-
-  let moList: any[] = [];
   try {
-    moList = await db.select().from(manoObra);
-  } catch (e) {}
+    const tipos = await db.select().from(tipoPrenda).where(
+      or(eq(tipoPrenda.activo, true), isNull(tipoPrenda.activo))
+    ).orderBy(asc(tipoPrenda.nombre));
 
-  const moDbMap = new Map<string, number>();
-  moList.forEach((m: any) => moDbMap.set(`${m.productoId}_${m.tallaId}`, m.costoBs));
+    const moRows = await db.select().from(manoObraTipo);
+    const todasTallas = await db.select().from(tallas).orderBy(asc(tallas.orden));
 
-  // SE FUE LA PLANILLA. Igual que con los pesos, la base ya ganaba: el Excel entraba solo por el
-  // `?? excelMo`, y `mano_obra` tiene 448 filas con las 28 prendas cubiertas, asi que ese
-  // respaldo no se usaba nunca. Sin fila en la base, el costo es 0.
-  const moExcelMap = new Map<number, { grupo1: number; grupo2: number; grupo3: number }>();
+    const moPorTipo = new Map<string, { grupo1: number; grupo2: number; grupo3: number }>();
+    for (const mo of moRows) {
+      const t = todasTallas.find((t: any) => t.id === mo.tallaId);
+      if (!t) continue;
+      const banda = bandaManoObra(t.codigo);
+      const actual = moPorTipo.get(mo.tipoPrendaId) || { grupo1: 0, grupo2: 0, grupo3: 0 };
+      if (banda === 1) actual.grupo1 = Number(mo.costoBs) || 0;
+      else if (banda === 2) actual.grupo2 = Number(mo.costoBs) || 0;
+      else actual.grupo3 = Number(mo.costoBs) || 0;
+      moPorTipo.set(mo.tipoPrendaId, actual);
+    }
 
-  const data = allProds.map((prod: any) => {
-    const excelMo = moExcelMap.get(prod.itemNumero) || { grupo1: 0, grupo2: 0, grupo3: 0 };
+    const data = tipos.map((t: any) => {
+      const mo = moPorTipo.get(t.id) || { grupo1: 0, grupo2: 0, grupo3: 0 };
+      return {
+        // productoId se reemplaza por tipoPrendaId para que guardarManoObraLive
+        // del dashboard siga llamando a PUT /mano-de-obra/:id con el id correcto.
+        productoId: t.id,
+        tipoPrendaId: t.id,
+        itemNumero: null,
+        descripcion: t.nombre,
+        grupo1_tallas_2_10: mo.grupo1,
+        grupo2_tallas_12_S: mo.grupo2,
+        grupo3_tallas_M_4XL: mo.grupo3,
+      };
+    });
 
-    // Las tres bandas salen de services/tallas.ts y la comparacion NORMALIZA el
-    // codigo. Antes estaban escritas a mano aca, asi que renombrar `2` a `02` habria
-    // hecho que `find` no encontrara ninguna talla del grupo 1 y la pantalla cayera
-    // al valor del Excel en vez del de la base, sin avisar.
-    const tGroup1 = allTallas.find((t: any) => esDeBanda(t.codigo, 1));
-    const tGroup2 = allTallas.find((t: any) => esDeBanda(t.codigo, 2));
-    const tGroup3 = allTallas.find((t: any) => esDeBanda(t.codigo, 3));
-
-    const g1 = tGroup1 ? (moDbMap.get(`${prod.id}_${tGroup1.id}`) ?? excelMo.grupo1) : excelMo.grupo1;
-    const g2 = tGroup2 ? (moDbMap.get(`${prod.id}_${tGroup2.id}`) ?? excelMo.grupo2) : excelMo.grupo2;
-    const g3 = tGroup3 ? (moDbMap.get(`${prod.id}_${tGroup3.id}`) ?? excelMo.grupo3) : excelMo.grupo3;
-
-    return {
-      productoId: prod.id,
-      itemNumero: prod.itemNumero,
-      descripcion: prod.descripcion,
-      grupo1_tallas_2_10: g1,
-      grupo2_tallas_12_S: g2,
-      grupo3_tallas_M_4XL: g3,
-    };
-  });
-
-  // La referencia `CC-01` de cada fila. Ver `agregarReferencias`: existe para que los seis
-  // endpoints por prenda no aprendan esto por separado.
-  const conRef = await agregarReferencias(db, data as any[]);
-  return c.json({
-    success: true,
-    gruposTallas: ['Tallas 2 - 10', 'Tallas 12 - S', 'Tallas M - 4XL'],
-    data: conRef,
-  });
+    return c.json({
+      success: true,
+      gruposTallas: ['Tallas 2 - 10', 'Tallas 12 - S', 'Tallas M - 4XL'],
+      data,
+    });
+  } catch (e) {
+    console.error('Error leyendo mano de obra por tipos:', e);
+    return c.json({ success: false, error: String(e) }, 500);
+  }
 });
+
 
 // GET /api/inputs/fijos-x-prenda - Factor de complejidad y fijos por prenda dinámicos integrados con indirectos
 api.get('/fijos-x-prenda', async (c) => {
@@ -794,47 +798,53 @@ api.get('/fijos-x-prenda', async (c) => {
   });
 });
 
-// PUT /api/inputs/mano-de-obra/:productoId - Actualizar tarifas de Mano de Obra por prenda en tiempo real
-api.put('/mano-de-obra/:productoId', async (c) => {
+// PUT /api/inputs/mano-de-obra/:tipoPrendaId - Actualizar MO de un tipo de prenda
+//
+// Desde Fase 6, el id en la ruta es el tipoPrendaId. El frontend sigue llamando igual
+// porque GET /mano-de-obra expone `productoId: t.id` donde t.id es el tipoPrendaId.
+api.put('/mano-de-obra/:tipoPrendaId', async (c) => {
   const db = (c as any).db;
-  const productoId = c.req.param('productoId');
+  const tipoPrendaId = c.req.param('tipoPrendaId');
   const body = await c.req.json();
   const { grupo1, grupo2, grupo3 } = body;
 
   try {
-    const [prod] = await db.select().from(productos).where(eq(productos.id, productoId)).limit(1);
-    if (!prod) return c.json({ success: false, error: 'Producto no encontrado' }, 404);
+    const [tipo] = await db.select().from(tipoPrenda).where(eq(tipoPrenda.id, tipoPrendaId)).limit(1);
+    if (!tipo) return c.json({ success: false, error: 'Tipo de prenda no encontrado.' }, 404);
 
-    // FASE 5: compartidas mas las del colegio.
-    const allTallas = await db
-      .select()
-      .from(tallas)
-      .where(or(eq(tallas.colegioId, prod.colegioId), isNull(tallas.colegioId)));
+    const todasTallas = await db.select().from(tallas)
+      .where(or(eq(tallas.activo, true), isNull(tallas.activo)));
 
-    for (const tallaObj of allTallas) {
-      const code = tallaObj.codigo;
+    for (const talla of todasTallas) {
+      const banda = bandaManoObra(talla.codigo);
       let costoBs = Number(grupo3) || 0;
-      // El camino de ESCRITURA. Aca la lista a mano era mas grave que en la lectura:
-      // con los codigos renombrados, la mano de obra de las tallas chicas se habria
-      // guardado con el costo de las grandes. Sin error y con status 200.
-      const banda = bandaManoObra(code);
       if (banda === 1) costoBs = Number(grupo1) || 0;
       else if (banda === 2) costoBs = Number(grupo2) || 0;
 
-      await db.delete(manoObra).where(and(eq(manoObra.productoId, prod.id), eq(manoObra.tallaId, tallaObj.id)));
-      await db.insert(manoObra).values({
-        productoId: prod.id,
-        tallaId: tallaObj.id,
-        costoBs,
-      });
+      const existente = await db.select().from(manoObraTipo)
+        .where(and(eq(manoObraTipo.tipoPrendaId, tipoPrendaId), eq(manoObraTipo.tallaId, talla.id)))
+        .limit(1);
+
+      if (existente.length > 0) {
+        await db.update(manoObraTipo).set({ costoBs }).where(eq(manoObraTipo.id, existente[0].id));
+      } else {
+        await db.insert(manoObraTipo).values({
+          id: nuevoIdHex(),
+          tipoPrendaId,
+          tallaId: talla.id,
+          costoBs,
+        });
+      }
     }
+
     saveDbToDisk();
-    return c.json({ success: true, message: 'Tarifas de Mano de Obra actualizadas exitosamente' });
+    return c.json({ success: true, message: 'Mano de Obra del tipo actualizada exitosamente.' });
   } catch (e) {
-    console.error('Error actualizando Mano de Obra:', e);
+    console.error('Error actualizando Mano de Obra tipo:', e);
     return c.json({ success: false, error: String(e) }, 500);
   }
 });
+
 
 // PUT /api/inputs/fijos-x-prenda/:id - Actualizar factor de complejidad en tiempo real
 api.put('/fijos-x-prenda/:id', async (c) => {
@@ -943,6 +953,66 @@ api.put('/peso-mat-prima', async (c) => {
     return c.json({ success: false, error: String(e) }, 500);
   }
 });
+
+// PUT /api/inputs/peso-mat-prima-lote - Actualizar en lote múltiples pesos de materia prima
+api.put('/peso-mat-prima-lote', async (c) => {
+  const db = (c as any).db;
+  const body = await c.req.json();
+  const { items, mermaPorcentaje } = body;
+
+  if (!Array.isArray(items)) {
+    return c.json({ success: false, error: 'Se requiere un arreglo "items"' }, 400);
+  }
+
+  try {
+    const mermaPct = typeof mermaPorcentaje === 'number' ? Number(mermaPorcentaje) : 8;
+    let actualizados = 0;
+
+    // Cargar tallas y productos en memoria para acelerar la asignacion por lotes
+    const todosProductos = await db.select().from(productos);
+    const prodMap = new Map(todosProductos.map((p: any) => [p.id, p]));
+
+    const todasTallas = await db.select().from(tallas);
+
+    for (const item of items) {
+      const { productoId, tallaCodigo, pesoExacto } = item;
+      const prod = prodMap.get(productoId);
+      if (!prod) continue;
+
+      const candidatasTalla = todasTallas.filter(
+        (t: any) => t.colegioId === prod.colegioId || t.colegioId === null
+      );
+      const tallaObj = buscarTallaPorCodigo(candidatasTalla as any[], tallaCodigo);
+      if (!tallaObj) continue;
+
+      const pExacto = Math.max(0, Math.round(Number(pesoExacto) || 0));
+      const pConMerma = pExacto > 0 ? parseFloat((pExacto * (1 + mermaPct / 100)).toFixed(2)) : 0;
+
+      await db.delete(pesoMateriaPrima).where(
+        and(eq(pesoMateriaPrima.productoId, prod.id), eq(pesoMateriaPrima.tallaId, tallaObj.id))
+      );
+
+      if (pExacto > 0) {
+        await db.insert(pesoMateriaPrima).values({
+          productoId: prod.id,
+          tallaId: tallaObj.id,
+          pesoExactoGramos: pExacto,
+          pesoGramos: pConMerma,
+          mermaPorcentaje: mermaPct,
+          pesoConMerma: pConMerma,
+        });
+      }
+      actualizados++;
+    }
+
+    saveDbToDisk();
+    return c.json({ success: true, message: `${actualizados} pesos actualizados en lote`, count: actualizados });
+  } catch (e) {
+    console.error('Error actualizando lote de pesos materia prima:', e);
+    return c.json({ success: false, error: String(e) }, 500);
+  }
+});
+
 
 // GET /api/inputs/desglose-inteligente-producto - Desglose de costos por producto+talla
 //
