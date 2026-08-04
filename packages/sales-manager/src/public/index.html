@@ -27,20 +27,21 @@
           <h1>Sales Projections</h1>
           <span class="subtitle">Mayaki Intelligence</span>
         </div>
+        <button class="sidebar-toggle-btn" id="btn-toggle-sidebar" title="Ocultar Menú">✕</button>
       </div>
 
       <nav class="nav-menu">
-        <button class="nav-btn active" data-tab="tab-importar">
-          <span class="icon">📁</span> Importar Reportes
+        <button class="nav-btn" data-tab="tab-importar" title="Importar Reportes">
+          <span class="icon">📁</span> <span class="nav-label">Importar Reportes</span>
         </button>
-        <button class="nav-btn" data-tab="tab-analisis">
-          <span class="icon">📈</span> Análisis Histórico
+        <button class="nav-btn active" data-tab="tab-analisis" title="Análisis Histórico">
+          <span class="icon">📈</span> <span class="nav-label">Análisis Histórico</span>
         </button>
-        <button class="nav-btn" data-tab="tab-proyeccion">
-          <span class="icon">🔮</span> Proyección Inteligente
+        <button class="nav-btn" data-tab="tab-proyeccion" title="Proyección Inteligente">
+          <span class="icon">🔮</span> <span class="nav-label">Proyección Inteligente</span>
         </button>
-        <button class="nav-btn" data-tab="tab-simulador">
-          <span class="icon">⚡</span> Simulador & Excel
+        <button class="nav-btn" data-tab="tab-simulador" title="Simulador & Excel">
+          <span class="icon">⚡</span> <span class="nav-label">Simulador & Excel</span>
         </button>
       </nav>
 
@@ -57,9 +58,14 @@
     <main class="main-content">
       <!-- Header -->
       <header class="top-header">
-        <div class="page-title">
-          <h2 id="current-tab-title">Importador de Ventas & Productos</h2>
-          <p id="current-tab-subtitle">Carga los archivos Excel exportados del POS para alimentar las métricas</p>
+        <div class="header-left">
+          <button class="btn btn-burger" id="btn-toggle-sidebar-top" title="Abrir / Ocultar Menú">
+            ☰ <span class="burger-text">Menú</span>
+          </button>
+          <div class="page-title">
+            <h2 id="current-tab-title">Análisis Histórico de Ventas</h2>
+            <p id="current-tab-subtitle">Métricas mensuales y trimestrales desglosadas por colegio, prenda y talla</p>
+          </div>
         </div>
 
         <div class="header-actions">
@@ -69,7 +75,7 @@
       </header>
 
       <!-- TAB 1: IMPORTAR -->
-      <section id="tab-importar" class="tab-pane active">
+      <section id="tab-importar" class="tab-pane">
         <div class="grid-cards">
           <div class="glass-card import-card">
             <h3>📥 Carga de Reportes de Ventas (.xlsx)</h3>
@@ -94,7 +100,7 @@
       </section>
 
       <!-- TAB 2: ANÁLISIS HISTÓRICO -->
-      <section id="tab-analisis" class="tab-pane">
+      <section id="tab-analisis" class="tab-pane active">
         <div class="filter-bar glass-card">
           <div class="filter-group">
             <label>Agrupación:</label>
@@ -149,7 +155,10 @@
         <div class="top-tables-grid margin-top">
           <!-- Columna 1: Ventas por Colegio -->
           <div class="glass-card table-card">
-            <h3>🏫 Ventas Totales por Colegio</h3>
+            <div class="card-header-flex">
+              <h3>🏫 Ventas Totales por Colegio</h3>
+              <button class="btn btn-secondary btn-sm" id="btn-pdf-colegios" title="Generar e imprimir Reporte PDF de Ventas por Colegio">📄 Reporte PDF</button>
+            </div>
             <div class="table-container compact-scroll">
               <table class="data-table" id="table-montos-colegios">
                 <thead>
@@ -165,13 +174,19 @@
                 <tbody>
                   <tr><td colspan="6" class="text-center">Cargando datos de colegios...</td></tr>
                 </tbody>
+                <tfoot>
+                  <!-- Inyectado dinámicamente por JS -->
+                </tfoot>
               </table>
             </div>
           </div>
 
           <!-- Columna 2: Desglose por Prenda y Tallas -->
           <div class="glass-card table-card">
-            <h3>👗 Desglose por Prenda y Tallas Vendidas</h3>
+            <div class="card-header-flex">
+              <h3>👗 Desglose por Prenda y Tallas Vendidas</h3>
+              <button class="btn btn-secondary btn-sm" id="btn-pdf-prendas" title="Generar e imprimir Reporte PDF de Desglose por Prenda">📄 Reporte PDF</button>
+            </div>
             <div class="table-container compact-scroll">
               <table class="data-table" id="table-ventas-prenda">
                 <thead>
@@ -186,6 +201,9 @@
                 <tbody>
                   <tr><td colspan="5" class="text-center">Cargando desglose de prendas...</td></tr>
                 </tbody>
+                <tfoot>
+                  <!-- Inyectado dinámicamente por JS -->
+                </tfoot>
               </table>
             </div>
           </div>
@@ -219,20 +237,28 @@
             <div class="form-group">
               <label>Colegio Origen (Patrón Histórico Base):</label>
               <select id="proj-colegio-origen" class="select-input">
-                <option value="Inf SM">Infantil San Marcos (Inf SM)</option>
-                <option value="Col SM">Colegio San Marcos (Col SM)</option>
+                <option value="Cambridge">Cambridge</option>
                 <option value="Intl S Marcos">Intl San Marcos</option>
+                <option value="Empresas y General">Empresas y General</option>
                 <option value="Edad de Oro">Edad de Oro</option>
+                <option value="Saint Jude">Saint Jude</option>
+                <option value="Inf S Marcos">Infantil San Marcos (Inf SM)</option>
+                <option value="Col S Marcos">Colegio San Marcos (Col SM)</option>
+                <option value="Saco y Pantalón">Saco y Pantalón</option>
               </select>
             </div>
 
             <div class="form-group">
               <label>Colegio Destino (Proyectar Ventas):</label>
               <select id="proj-colegio-destino" class="select-input">
-                <option value="Cambridge">Cambridge</option>
                 <option value="Saint Jude">Saint Jude</option>
+                <option value="Cambridge">Cambridge</option>
                 <option value="Intl S Marcos">Intl San Marcos</option>
+                <option value="Empresas y General">Empresas y General</option>
                 <option value="Edad de Oro">Edad de Oro</option>
+                <option value="Inf S Marcos">Infantil San Marcos (Inf SM)</option>
+                <option value="Col S Marcos">Colegio San Marcos (Col SM)</option>
+                <option value="Saco y Pantalón">Saco y Pantalón</option>
               </select>
             </div>
 
@@ -290,7 +316,10 @@
           </div>
 
           <div class="glass-card table-card margin-top">
-            <h3>🧩 Mapeo Inteligente de Prendas y Tallas Proyectadas</h3>
+            <div class="card-header-flex">
+              <h3>🧩 Mapeo Inteligente de Prendas y Tallas Proyectadas</h3>
+              <button class="btn btn-primary" id="btn-exportar-proyeccion-excel">📥 Exportar esta Simulación a Excel (.xlsx)</button>
+            </div>
             <div class="table-container">
               <table class="data-table" id="table-proyeccion-mapeos">
                 <thead>
@@ -318,25 +347,31 @@
           <h3>⚡ Generador y Exportador de Ventas Simuladas en Excel (.xlsx)</h3>
           <p>Exporta un reporte de ventas simulado en el formato oficial de 38 columnas de <code>sales_export_*.xlsx</code> para alimentarlo a otros sistemas o simular vendedor y sucursal.</p>
 
-          <div class="grid-form">
+          <div id="sim-proyeccion-info" class="margin-top" style="padding: 10px 14px; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 8px; font-size: 13px; color: var(--text-color);">
+            <span>💡 <strong>Tip:</strong> Puedes calcular una proyección en la pestaña <em>"Proyección Inteligente"</em> para usar sus prendas, cantidades y precios reales en esta simulación.</span>
+          </div>
+
+          <div class="grid-form margin-top">
             <div class="form-group">
               <label>Nombre del Vendedor / Usuario:</label>
-              <input type="text" id="sim-vendedor" class="text-input" value="Sara Limachi SM" placeholder="Ej. Sara Limachi SM" />
+              <input type="text" id="sim-vendedor" class="text-input" value="Gardenia Limachi" placeholder="Ej. Gardenia Limachi" />
             </div>
 
             <div class="form-group">
-              <label>Número Inicial de Pedido:</label>
-              <input type="number" id="sim-npedido" class="text-input" value="3000" />
+              <label>Número Inicial de Pedido (n_pedido):</label>
+              <input type="number" id="sim-npedido" class="text-input" value="581" min="1" />
+              <small>Inicia desde el 581 o desde el número que desees para no chocar con pedidos existentes</small>
             </div>
 
             <div class="form-group">
               <label>Fecha Inicio Simulación:</label>
-              <input type="date" id="sim-fecha-inicio" class="text-input" value="2026-01-15" />
+              <input type="date" id="sim-fecha-inicio" class="text-input" value="2026-02-15" />
             </div>
 
             <div class="form-group">
               <label>Fecha Fin Simulación:</label>
-              <input type="date" id="sim-fecha-fin" class="text-input" value="2026-03-31" />
+              <input type="date" id="sim-fecha-fin" class="text-input" value="2026-04-30" />
+              <small>Distribución con pico de alta demanda en febrero y reducción paulatina</small>
             </div>
           </div>
 
@@ -349,6 +384,9 @@
       </section>
     </main>
   </div>
+
+  <!-- Hidden Iframe para Impresión Directa sin Popups ni Pestañas -->
+  <iframe id="hidden-print-iframe" style="display: none; width: 0; height: 0; border: 0;" src="about:blank"></iframe>
 
   <script src="app.js"></script>
 </body>

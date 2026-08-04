@@ -1,5 +1,4 @@
 import { Hono } from 'hono';
-import { serveStatic } from '@hono/node-server/serve-static';
 import { getDb } from '../../api/src/database/sqljs.ts';
 import posRoutes from './routes/pos';
 import path from 'path';
@@ -26,14 +25,47 @@ app.get('/styles.css', (c) => {
 // Montar API del POS
 app.route('/api/pos', posRoutes);
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicDir = path.resolve(__dirname, 'public');
+
+// Servir index.html en la raíz '/'
+app.get('/', (c) => {
+  const indexPath = path.join(publicDir, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return c.html(fs.readFileSync(indexPath, 'utf-8'));
+  }
+  return c.text('Error: index.html no encontrado', 404);
+});
+
 // Servir frontend Vanilla POS
-try {
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const publicDir = path.resolve(__dirname, 'public');
-  app.use('/*', serveStatic({ root: publicDir }));
-} catch (e) {
-  app.use('/*', serveStatic({ root: './src/public' }));
-}
+app.use('/*', async (c, next) => {
+  const reqPath = c.req.path;
+  if (reqPath.startsWith('/api') || reqPath === '/styles.css') {
+    return next();
+  }
+  const fileName = reqPath.replace(/^\//, '');
+  const filePath = path.join(publicDir, fileName);
+
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    const ext = path.extname(filePath).toLowerCase();
+    const contentTypes: Record<string, string> = {
+      '.html': 'text/html; charset=utf-8',
+      '.css': 'text/css; charset=utf-8',
+      '.js': 'text/javascript; charset=utf-8',
+      '.json': 'application/json; charset=utf-8',
+      '.svg': 'image/svg+xml',
+      '.ico': 'image/x-icon',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.webp': 'image/webp',
+    };
+    const contentType = contentTypes[ext] || 'application/octet-stream';
+    const data = fs.readFileSync(filePath);
+    return c.body(data, 200, { 'Content-Type': contentType });
+  }
+  return next();
+});
 
 export default app;
 

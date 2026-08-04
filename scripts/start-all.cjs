@@ -39,10 +39,10 @@ function runService(name, color, cmd, args, cwd) {
 }
 
 // 1. API Backend (3000)
-runService('API-3000', '\x1b[36m', 'npx', ['tsx', 'src/server.ts'], 'packages/api');
+runService('API-3000', '\x1b[36m', 'npx', ['tsx', 'watch', 'src/server.ts'], 'packages/api');
 
 // 2. POS Manager (3001)
-runService('POS-3001', '\x1b[33m', 'npx', ['tsx', 'src/server.ts'], 'packages/pos-manager');
+runService('POS-3001', '\x1b[33m', 'npx', ['tsx', 'watch', 'src/server.ts'], 'packages/pos-manager');
 
 // 3. Sales Manager (3002)
-runService('SALES-3002', '\x1b[35m', 'npx', ['tsx', 'src/server.ts'], 'packages/sales-manager');
+runService('SALES-3002', '\x1b[35m', 'npx', ['tsx', 'watch', 'src/server.ts'], 'packages/sales-manager');
