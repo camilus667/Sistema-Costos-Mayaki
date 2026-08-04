@@ -1,47 +1,56 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gestor de Ventas y Proyecciones Inteligentes - Mayaki</title>
+  <title>Gestor de Ventas - Mayaki</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="shortcut icon" href="favicon.svg">
 
   <!-- Google Fonts: Inter & Outfit -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap"
+    rel="stylesheet">
 
   <!-- Chart.js para visualización de gráficos -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <link rel="stylesheet" href="styles.css" />
 </head>
+
 <body class="dark-theme">
   <div class="app-container">
     <!-- Sidebar Navigation -->
     <aside class="sidebar">
       <div class="brand">
-        <div class="logo-icon">📊</div>
         <div class="brand-text">
-          <h1>Sales Projections</h1>
-          <span class="subtitle">Mayaki Intelligence</span>
+          <h1>Gestión de Ventas</h1>
+          <span class="subtitle">Sistema Mayaki</span>
         </div>
         <button class="sidebar-toggle-btn" id="btn-toggle-sidebar" title="Ocultar Menú">✕</button>
       </div>
 
       <nav class="nav-menu">
         <button class="nav-btn" data-tab="tab-importar" title="Importar Reportes">
-          <span class="icon">📁</span> <span class="nav-label">Importar Reportes</span>
+          <span class="nav-label">Importar Reportes</span>
         </button>
         <button class="nav-btn active" data-tab="tab-analisis" title="Análisis Histórico">
-          <span class="icon">📈</span> <span class="nav-label">Análisis Histórico</span>
+          <span class="nav-label">Análisis Histórico</span>
         </button>
-        <button class="nav-btn" data-tab="tab-proyeccion" title="Proyección Inteligente">
-          <span class="icon">🔮</span> <span class="nav-label">Proyección Inteligente</span>
+        <button class="nav-btn" data-tab="tab-consolidado" title="Registro Consolidado">
+          <span class="nav-label">Registro Consolidado</span>
         </button>
-        <button class="nav-btn" data-tab="tab-simulador" title="Simulador & Excel">
-          <span class="icon">⚡</span> <span class="nav-label">Simulador & Excel</span>
+        <button class="nav-btn" data-tab="tab-proyeccion" title="Análisis de Tendencias">
+          <span class="nav-label">Análisis de Tendencias</span>
+        </button>
+        <button class="nav-btn" data-tab="tab-simulador" title="Exportación Excel">
+          <span class="nav-label">Exportación Excel</span>
+        </button>
+        <button class="nav-btn" data-tab="tab-talleristas" title="Pagos a Confeccionistas">
+          <span class="nav-label">Pagos a Confeccionistas</span>
         </button>
       </nav>
 
@@ -69,8 +78,8 @@
         </div>
 
         <div class="header-actions">
-          <button class="btn btn-secondary" id="btn-refresh-stats">🔄 Actualizar</button>
-          <button class="btn btn-danger" id="btn-vaciar-datos">🗑️ Vaciar Datos de Ventas</button>
+          <button class="btn btn-secondary" id="btn-refresh-stats">Actualizar</button>
+          <button class="btn btn-danger" id="btn-vaciar-datos">Vaciar Datos de Ventas</button>
         </div>
       </header>
 
@@ -78,11 +87,10 @@
       <section id="tab-importar" class="tab-pane">
         <div class="grid-cards">
           <div class="glass-card import-card">
-            <h3>📥 Carga de Reportes de Ventas (.xlsx)</h3>
+            <h3>Carga de Reportes de Ventas (.xlsx)</h3>
             <p>Selecciona tu archivo <code>sales_export_*.xlsx</code> para procesar pedidos, cantidades y totales.</p>
 
             <div class="dropzone" id="dropzone-sales">
-              <div class="dropzone-icon">📄</div>
               <p>Arrastra tu archivo Excel aquí o <strong>haz clic para seleccionar</strong></p>
               <input type="file" id="input-file-sales" accept=".xlsx, .xls" hidden />
             </div>
@@ -91,7 +99,7 @@
           </div>
 
           <div class="glass-card summary-card">
-            <h3>📊 Colegios e Historial Detectado</h3>
+            <h3>Colegios e Historial Detectado</h3>
             <div id="colegios-list" class="summary-list">
               <div class="skeleton-loader">Cargando datos históricos...</div>
             </div>
@@ -105,8 +113,9 @@
           <div class="filter-group">
             <label>Agrupación:</label>
             <select id="filter-agrupacion" class="select-input">
-              <option value="trimestral">Trimestral (Q1, Q2, Q3, Q4)</option>
+
               <option value="mensual">Mensual (Ene - Dic)</option>
+              <option value="trimestral">Trimestral (Q1, Q2, Q3, Q4)</option>
             </select>
           </div>
 
@@ -126,9 +135,10 @@
           <div class="filter-group">
             <label>Año:</label>
             <select id="filter-anio-analisis" class="select-input">
+              <option value="2026">2026</option>
               <option value="">Todos los Años</option>
               <option value="2025">2025</option>
-              <option value="2026">2026</option>
+
             </select>
           </div>
 
@@ -138,15 +148,15 @@
         <!-- KPI Cards de Montos por Colegio -->
         <div class="metrics-grid margin-top">
           <div class="metric-card glass-card highlight-blue">
-            <span class="metric-title">💰 Recaudación Total Histórica</span>
+            <span class="metric-title">Recaudación Total Histórica</span>
             <span class="metric-value" id="kpi-total-monto">Bs. 0</span>
           </div>
           <div class="metric-card glass-card highlight-green">
-            <span class="metric-title">🏆 Colegio con Mayor Venta</span>
+            <span class="metric-title">Colegio con Mayor Venta</span>
             <span class="metric-value" id="kpi-top-colegio">-</span>
           </div>
           <div class="metric-card glass-card">
-            <span class="metric-title">📦 Total Unidades Vendidas</span>
+            <span class="metric-title">Total Unidades Vendidas</span>
             <span class="metric-value" id="kpi-total-unidades">0 u.</span>
           </div>
         </div>
@@ -156,23 +166,24 @@
           <!-- Columna 1: Ventas por Colegio -->
           <div class="glass-card table-card">
             <div class="card-header-flex">
-              <h3>🏫 Ventas Totales por Colegio</h3>
-              <button class="btn btn-secondary btn-sm" id="btn-pdf-colegios" title="Generar e imprimir Reporte PDF de Ventas por Colegio">📄 Reporte PDF</button>
+              <h3>Ventas por Colegio</h3>
+              <button class="btn btn-secondary btn-sm" id="btn-pdf-colegios"
+                title="Generar e imprimir Reporte PDF de Ventas por Colegio">Reporte PDF</button>
             </div>
             <div class="table-container compact-scroll">
               <table class="data-table" id="table-montos-colegios">
                 <thead>
                   <tr>
-                    <th>Colegio</th>
+                    <th>Colegio / Grupo</th>
                     <th>Venta Total (Bs.)</th>
                     <th>% Total</th>
-                    <th>Unidades</th>
-                    <th>Precio Prom.</th>
-                    <th>Trans.</th>
+                    <th>Unidades (u.)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr><td colspan="6" class="text-center">Cargando datos de colegios...</td></tr>
+                  <tr>
+                    <td colspan="4" class="text-center">Cargando datos de colegios...</td>
+                  </tr>
                 </tbody>
                 <tfoot>
                   <!-- Inyectado dinámicamente por JS -->
@@ -184,8 +195,9 @@
           <!-- Columna 2: Desglose por Prenda y Tallas -->
           <div class="glass-card table-card">
             <div class="card-header-flex">
-              <h3>👗 Desglose por Prenda y Tallas Vendidas</h3>
-              <button class="btn btn-secondary btn-sm" id="btn-pdf-prendas" title="Generar e imprimir Reporte PDF de Desglose por Prenda">📄 Reporte PDF</button>
+              <h3>Desglose por Prenda y Tallas Vendidas</h3>
+              <button class="btn btn-secondary btn-sm" id="btn-pdf-prendas"
+                title="Generar e imprimir Reporte PDF de Desglose por Prenda">Reporte PDF</button>
             </div>
             <div class="table-container compact-scroll">
               <table class="data-table" id="table-ventas-prenda">
@@ -199,7 +211,9 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr><td colspan="5" class="text-center">Cargando desglose de prendas...</td></tr>
+                  <tr>
+                    <td colspan="5" class="text-center">Cargando desglose de prendas...</td>
+                  </tr>
                 </tbody>
                 <tfoot>
                   <!-- Inyectado dinámicamente por JS -->
@@ -227,11 +241,97 @@
         </div>
       </section>
 
+      <!-- TAB: REGISTRO CONSOLIDADO -->
+      <section id="tab-consolidado" class="tab-pane">
+        <div class="filter-bar glass-card">
+          <div class="filter-group">
+            <label>Colegio / Grupo:</label>
+            <select id="filter-colegio-consolidado" class="select-input">
+              <option value="">Todos los Colegios</option>
+              <option value="Inf S Marcos">Infantil San Marcos (Inf SM)</option>
+              <option value="Col S Marcos">Colegio San Marcos (Col SM)</option>
+              <option value="Intl S Marcos">Intl San Marcos</option>
+              <option value="Cambridge">Cambridge</option>
+              <option value="Edad de Oro">Edad de Oro</option>
+              <option value="Saint Jude">Saint Jude</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label>Año:</label>
+            <select id="filter-anio-consolidado" class="select-input">
+              <option value="2026">2026</option>
+              <option value="">Todos los Años</option>
+              <option value="2025">2025</option>
+            </select>
+          </div>
+
+          <button class="btn btn-primary" id="btn-aplicar-filtros-consolidado">Filtrar</button>
+
+          <div style="margin-left: auto; display: flex; gap: 8px;">
+            <button class="btn btn-secondary" id="btn-excel-consolidado" title="Exportar Registro Consolidado a Excel">Exportar Excel (.xlsx)</button>
+            <button class="btn btn-secondary" id="btn-pdf-consolidado" title="Generar e Imprimir Reporte PDF">Reporte PDF</button>
+            <button class="btn btn-secondary" id="btn-pdf-resumen-mensual" title="Generar e Imprimir Resumen Mensual de Ventas por Colegio">Resumen Mensual PDF</button>
+          </div>
+        </div>
+
+        <div class="glass-card table-card margin-top">
+          <div class="card-header-flex">
+            <h3>Registro Consolidado de Ventas (Cronológico: Antigua a Nueva)</h3>
+            <span class="badge badge-blue" id="lbl-total-filas-consolidado">0 registros</span>
+          </div>
+          <div class="table-container compact-scroll" style="max-height: 680px;">
+            <table class="data-table" id="table-registro-consolidado">
+              <thead>
+                <tr>
+                  <th style="text-align: center; width: 65px;">pedido</th>
+                  <th style="width: 75px;">estado</th>
+                  <th style="width: 140px;">fecha</th>
+                  <th style="width: 110px;">usuario</th>
+                  <th style="width: 70px;">cliente</th>
+                  <th style="width: 70px;">nro_doc</th>
+                  <th>nombre_del_producto</th>
+                  <th class="text-right" style="width: 60px;">cantidad</th>
+                  <th class="text-right" style="width: 75px;">precio_unit</th>
+                  <th class="text-right" style="width: 85px;">total_descuento</th>
+                  <th class="text-right" style="width: 90px;">total_cobrado</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td colspan="11" class="text-center">Cargando registro consolidado de ventas...</td></tr>
+              </tbody>
+              <tfoot>
+                <!-- Inyectado dinámicamente por JS -->
+              </tfoot>
+            </table>
+          </div>
+
+          <!-- Barra de Paginación -->
+          <div class="pagination-bar" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <label style="font-size: 13px; font-weight: 600; color: var(--text-secondary);">Filas por página:</label>
+              <select id="select-limit-consolidado" class="select-input" style="padding: 4px 8px; width: 85px; font-size: 13px;">
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="250">250</option>
+                <option value="500">500</option>
+              </select>
+            </div>
+
+            <div id="pagination-controls-consolidado" style="display: flex; align-items: center; gap: 8px;">
+              <!-- Inyectado dinámicamente -->
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- TAB 3: PROYECCIÓN INTELIGENTE -->
       <section id="tab-proyeccion" class="tab-pane">
         <div class="glass-card projection-control-card">
           <h3>🔮 Configuración de Proyección Comparativa entre Colegios</h3>
-          <p>Utiliza patrones de ventas históricas de un colegio modelo para proyectar las ventas de otro colegio mediante similitud de prendas.</p>
+          <p>Utiliza patrones de ventas históricas de un colegio modelo para proyectar las ventas de otro colegio
+            mediante similitud de prendas.</p>
 
           <div class="grid-form">
             <div class="form-group">
@@ -295,7 +395,8 @@
           </div>
 
           <div class="form-actions margin-top">
-            <button class="btn btn-accent btn-lg" id="btn-calcular-proyeccion">🚀 Calcular Proyección Inteligente</button>
+            <button class="btn btn-accent btn-lg" id="btn-calcular-proyeccion">🚀 Calcular Proyección
+              Inteligente</button>
           </div>
         </div>
 
@@ -318,7 +419,8 @@
           <div class="glass-card table-card margin-top">
             <div class="card-header-flex">
               <h3>🧩 Mapeo Inteligente de Prendas y Tallas Proyectadas</h3>
-              <button class="btn btn-primary" id="btn-exportar-proyeccion-excel">📥 Exportar esta Simulación a Excel (.xlsx)</button>
+              <button class="btn btn-primary" id="btn-exportar-proyeccion-excel">📥 Exportar esta Simulación a Excel
+                (.xlsx)</button>
             </div>
             <div class="table-container">
               <table class="data-table" id="table-proyeccion-mapeos">
@@ -345,16 +447,20 @@
       <section id="tab-simulador" class="tab-pane">
         <div class="glass-card simulator-card">
           <h3>⚡ Generador y Exportador de Ventas Simuladas en Excel (.xlsx)</h3>
-          <p>Exporta un reporte de ventas simulado en el formato oficial de 38 columnas de <code>sales_export_*.xlsx</code> para alimentarlo a otros sistemas o simular vendedor y sucursal.</p>
+          <p>Exporta un reporte de ventas simulado en el formato oficial de 38 columnas de
+            <code>sales_export_*.xlsx</code> para alimentarlo a otros sistemas o simular vendedor y sucursal.</p>
 
-          <div id="sim-proyeccion-info" class="margin-top" style="padding: 10px 14px; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 8px; font-size: 13px; color: var(--text-color);">
-            <span>💡 <strong>Tip:</strong> Puedes calcular una proyección en la pestaña <em>"Proyección Inteligente"</em> para usar sus prendas, cantidades y precios reales en esta simulación.</span>
+          <div id="sim-proyeccion-info" class="margin-top"
+            style="padding: 10px 14px; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 8px; font-size: 13px; color: var(--text-color);">
+            <span>💡 <strong>Tip:</strong> Puedes calcular una proyección en la pestaña <em>"Proyección
+                Inteligente"</em> para usar sus prendas, cantidades y precios reales en esta simulación.</span>
           </div>
 
           <div class="grid-form margin-top">
             <div class="form-group">
               <label>Nombre del Vendedor / Usuario:</label>
-              <input type="text" id="sim-vendedor" class="text-input" value="Gardenia Limachi" placeholder="Ej. Gardenia Limachi" />
+              <input type="text" id="sim-vendedor" class="text-input" value="Gardenia Limachi"
+                placeholder="Ej. Gardenia Limachi" />
             </div>
 
             <div class="form-group">
@@ -382,6 +488,96 @@
           </div>
         </div>
       </section>
+
+      <!-- TAB 6: LIQUIDACIÓN DE COSTURA EXTERNA / PAGOS A CONFECCIONISTAS -->
+      <section id="tab-talleristas" class="tab-pane">
+        <!-- KPIs -->
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-icon">🧵</div>
+            <div class="metric-data">
+              <span class="metric-title">Unidades Fabricadas</span>
+              <span class="metric-val" id="lbl-talleristas-unidades">0 u.</span>
+              <span class="metric-sub" id="lbl-talleristas-criterio-sub">Total (Ventas + Stock)</span>
+            </div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-icon">💵</div>
+            <div class="metric-data">
+              <span class="metric-title">Total a Pagar en Costura</span>
+              <span class="metric-val text-success" id="lbl-talleristas-monto-bs">Bs. 0.00</span>
+              <span class="metric-sub">monto total a cancelar</span>
+            </div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-icon">👥</div>
+            <div class="metric-data">
+              <span class="metric-title">Confeccionistas Activos</span>
+              <span class="metric-val" id="lbl-talleristas-count">0</span>
+              <span class="metric-sub">talleres registrados</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-card margin-top">
+          <!-- Filtros de Talleristas -->
+          <div class="filters-bar" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <label style="font-size: 13px; font-weight: 600; color: var(--text-secondary);">Confeccionista / Especialidad:</label>
+              <select id="filter-tallerista" class="select-input" style="padding: 6px 12px; min-width: 200px;">
+                <option value="todos">Todos los Confeccionistas</option>
+                <option value="Camisero">Camisero (Blusas y Camisas)</option>
+                <option value="Polerero / Deportivo">Polerero / Deportivo (Poleras, Camisetas, Calzas)</option>
+                <option value="Chamarrero">Chamarrero (Chamarras, Buzos, Parkas)</option>
+                <option value="Pantalonero">Pantalonero (Pantalones, Bermudas, Shorts)</option>
+                <option value="Otros Confeccionistas">Otros Confeccionistas</option>
+              </select>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <label style="font-size: 13px; font-weight: 600; color: var(--text-secondary);">Criterio de Cálculo:</label>
+              <select id="filter-tallerista-origen" class="select-input" style="padding: 6px 12px; min-width: 220px;">
+                <option value="total" selected>Total Fabricado (Ventas + Stock)</option>
+                <option value="ventas">Solo Unidades Vendidas (POS)</option>
+                <option value="stock">Solo Stock Actual (Almacén)</option>
+              </select>
+            </div>
+
+            <div style="margin-left: auto; display: flex; gap: 8px;">
+              <button class="btn btn-primary" id="btn-imprimir-talleristas">
+                🖨️ Imprimir Liquidación PDF
+              </button>
+            </div>
+          </div>
+
+          <!-- Tabla de Liquidación y Asignación -->
+          <div class="table-responsive" style="max-height: 680px; overflow-y: auto;">
+            <table class="data-table" id="table-talleristas">
+              <thead>
+                <tr>
+                  <th style="width: 40px; text-align: center;">#</th>
+                  <th>Prenda / Producto</th>
+                  <th>Colegio</th>
+                  <th style="width: 190px;">Confeccionista Asignado</th>
+                  <th class="text-right" style="width: 100px;">T2-10</th>
+                  <th class="text-right" style="width: 100px;">T12-S</th>
+                  <th class="text-right" style="width: 100px;">TM-4XL</th>
+                  <th class="text-right" style="width: 90px;">Total U.</th>
+                  <th class="text-right" style="width: 130px;">Total Bs.</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Inyectado dinámicamente -->
+              </tbody>
+              <tfoot>
+                <!-- Inyectado dinámicamente -->
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -390,4 +586,5 @@
 
   <script src="app.js"></script>
 </body>
+
 </html>

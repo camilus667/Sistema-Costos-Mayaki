@@ -148,6 +148,7 @@ export const productos = sqliteTable('producto', {
    * `mano_obra` queda vacía.
    */
   tipoPrendaId: text('tipo_prenda_id').references(() => tipoPrenda.id),
+  confeccionista: text('confeccionista'),
 });
 
 // ============================================

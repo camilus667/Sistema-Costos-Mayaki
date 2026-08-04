@@ -385,6 +385,178 @@ api.get('/matriz-consolidada', async (c) => {
 });
 
 /**
+ * GET /api/calculo/matriz-telas
+ * Reporte de Costeo e Inversión Total en Telas para el Stock Físico Actual.
+ */
+api.get('/matriz-telas', async (c) => {
+  try {
+    const db = (c as any).db;
+    const colegioIdRaw = c.req.query('colegioId');
+    const colegioId = colegioIdRaw && colegioIdRaw !== 'all' ? colegioIdRaw : undefined;
+    const snapshotId = c.req.query('snapshotId');
+    const { ctx, filas } = await costearLote(db, { colegioId, snapshotId });
+
+    let invList: any[] = [];
+    try {
+      invList = await db.select().from(inventario);
+    } catch (e) {}
+    const invMap = new Map<string, number>();
+    invList.forEach((i: any) => invMap.set(`${i.productoId}_${i.tallaId}`, i.cantidad));
+
+    const colegiosEnAmbito = new Set(
+      ctx.productos.map((p: any) => String(p.colegioId)).filter((x: string) => x && x !== 'null')
+    );
+    const idsActivos = new Set<string>();
+    for (const cid of colegiosEnAmbito) {
+      for (const t of (ctx.tallasPorColegio.get(cid) || [])) idsActivos.add(String(t.id));
+    }
+    const mapTallasActivas = await obtenerMapTallasActivasPorColegio(db);
+    const tallasGlobales = await obtenerTallasActivasPorColegio(db, colegioId);
+    const allTallas = idsActivos.size > 0
+      ? tallasGlobales.filter((t: any) => idsActivos.has(String(t.id)))
+      : tallasGlobales;
+
+    const porProducto = new Map<string, any[]>();
+    for (const f of filas) {
+      const arr = porProducto.get(f.meta.productoId) || [];
+      arr.push(f);
+      porProducto.set(f.meta.productoId, arr);
+    }
+
+    const mapaTelasResumen = new Map<string, {
+      telaNombre: string;
+      prendasSet: Set<string>;
+      stockTotal: number;
+      kilosTotales: number;
+      costoTotalBs: number;
+    }>();
+
+    let inversionTotalTelasBs = 0;
+    let kilosTotalesTelas = 0;
+    let stockTotalConTela = 0;
+
+    const gridData = ctx.productos.map((prod: any) => {
+      const rowObj: any = {
+        productoId: prod.id,
+        itemNumero: prod.itemNumero,
+        descripcion: prod.descripcion,
+        colegioId: prod.colegioId ?? null,
+        colegioNombre: prod.colegioNombre || 'Sin Colegio',
+        telaNombre: prod.telaId ? (ctx.telasPorId.get(prod.telaId)?.descripcion || 'Sin Nombre') : 'Sin Tela Vinculada',
+        orden: prod.orden ?? null,
+        subtotalStock: 0,
+        subtotalCostoTelaBs: 0,
+        subtotalKilosTela: 0,
+        tallas: {},
+      };
+
+      const porTalla = new Map<string, any>();
+      for (const f of porProducto.get(prod.id) || []) porTalla.set(f.meta.tallaId, f);
+
+      for (const talla of allTallas) {
+        const cid = String(prod.colegioId);
+        const activasSet = mapTallasActivas.get(cid);
+        if (activasSet && !activasSet.has(String(talla.id))) {
+          rowObj.tallas[talla.codigo] = { stock: 0, costoTelaUnidad: 0, costoTelaStock: 0, pesoKilosStock: 0, seOfrece: false };
+          continue;
+        }
+
+        const inv = invMap.get(`${prod.id}_${talla.id}`) ?? 0;
+        const f = porTalla.get(talla.id);
+
+        if (!f || !f.meta.seOfrece) {
+          rowObj.tallas[talla.codigo] = { stock: inv, costoTelaUnidad: 0, costoTelaStock: 0, pesoKilosStock: 0, seOfrece: false };
+          rowObj.subtotalStock += inv;
+          continue;
+        }
+
+        const r = f.resultado;
+        const costoTelaUnidad = r.costoTela || 0;
+        const costoTelaStock = r2(inv * costoTelaUnidad);
+        const pesoKilosStock = r2((inv * (r.pesoConMerma || 0)) / 1000);
+
+        rowObj.tallas[talla.codigo] = {
+          stock: inv,
+          costoTelaUnidad: r2(costoTelaUnidad),
+          costoTelaStock,
+          pesoKilosStock,
+          seOfrece: true,
+        };
+
+        rowObj.subtotalStock += inv;
+        rowObj.subtotalCostoTelaBs = r2(rowObj.subtotalCostoTelaBs + costoTelaStock);
+        rowObj.subtotalKilosTela = r2(rowObj.subtotalKilosTela + pesoKilosStock);
+
+        if (inv > 0 || f.meta.seOfrece) {
+          const tNombre = f.meta.telaNombre || rowObj.telaNombre || 'Sin Tela Vinculada';
+          if (!mapaTelasResumen.has(tNombre)) {
+            mapaTelasResumen.set(tNombre, {
+              telaNombre: tNombre,
+              prendasSet: new Set(),
+              stockTotal: 0,
+              kilosTotales: 0,
+              costoTotalBs: 0,
+            });
+          }
+          const tEntry = mapaTelasResumen.get(tNombre)!;
+          tEntry.prendasSet.add(prod.id);
+          tEntry.stockTotal += inv;
+          tEntry.kilosTotales = r2(tEntry.kilosTotales + pesoKilosStock);
+          tEntry.costoTotalBs = r2(tEntry.costoTotalBs + costoTelaStock);
+        }
+      }
+
+      inversionTotalTelasBs = r2(inversionTotalTelasBs + rowObj.subtotalCostoTelaBs);
+      kilosTotalesTelas = r2(kilosTotalesTelas + rowObj.subtotalKilosTela);
+      stockTotalConTela += rowObj.subtotalStock;
+
+      return rowObj;
+    });
+
+    const resumenTiposTela = Array.from(mapaTelasResumen.values()).map((t) => ({
+      telaNombre: t.telaNombre,
+      prendasConteo: t.prendasSet.size,
+      stockTotal: t.stockTotal,
+      kilosTotales: r2(t.kilosTotales),
+      costoTotalBs: r2(t.costoTotalBs),
+      pctInversion: inversionTotalTelasBs > 0 ? r2((t.costoTotalBs / inversionTotalTelasBs) * 100) : 0,
+    })).sort((a, b) => b.costoTotalBs - a.costoTotalBs);
+
+    const colegiosParaOrden = await db
+      .select({ id: colegios.id, nombre: colegios.nombre, orden: colegios.orden, creadoEn: colegios.creadoEn })
+      .from(colegios);
+    const posiciones = posicionesDeColegios(colegiosParaOrden as any);
+    const nombrePorColegio = new Map<string, string>(
+      colegiosParaOrden.map((c: any) => [String(c.id), String(c.nombre)])
+    );
+
+    const referencias = await referenciasDesdeBase(db);
+    for (const fila of gridData) {
+      fila.colegioNombre = nombrePorColegio.get(String(fila.colegioId)) ?? null;
+      fila.prod = referencias.get(String(fila.productoId)) ?? null;
+    }
+
+    const ordenadas = ordenarPrendas(gridData as any, 'defecto', posiciones, { agruparPorColegio: true });
+
+    return c.json({
+      success: true,
+      tallas: allTallas.map((t: any) => ({ id: t.id, codigo: t.codigo, orden: t.orden })),
+      data: ordenadas,
+      resumenTiposTela,
+      totalesGlobales: {
+        inversionTotalTelasBs,
+        kilosTotalesTelas,
+        stockTotalConTela,
+        variedadTelas: resumenTiposTela.length,
+      },
+    });
+  } catch (e: any) {
+    console.error('matriz-telas:', e);
+    return c.json({ success: false, error: e?.message || String(e) }, 500);
+  }
+});
+
+/**
  * Resuelve prenda y talla para los dos PUT de la matriz.
  *
  * PREFIERE LAS CLAVES PRIMARIAS. La pantalla ya tiene productoId y tallaId en cada

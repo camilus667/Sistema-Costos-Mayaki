@@ -874,15 +874,94 @@ api.put('/fij-var/:id', async (c) => {
   const { montoMensual, concepto } = body;
 
   try {
-    await db.update(costosIndirectos).set({
-      montoMensual: Number(montoMensual) || 0,
-      ...(concepto ? { concepto: String(concepto).trim() } : {})
-    }).where(eq(costosIndirectos.id, id));
+    const updateData: any = {};
+    if (typeof montoMensual === 'number' || typeof montoMensual === 'string') {
+      updateData.montoMensual = Number(montoMensual) || 0;
+    }
+    if (concepto !== undefined) {
+      updateData.concepto = String(concepto).trim();
+    }
+
+    await db.update(costosIndirectos).set(updateData).where(eq(costosIndirectos.id, id));
 
     saveDbToDisk();
     return c.json({ success: true, message: 'Costo indirecto actualizado' });
   } catch (e) {
     console.error('Error actualizando costo indirecto:', e);
+    return c.json({ success: false, error: String(e) }, 500);
+  }
+});
+
+// POST /api/inputs/fij-var - Crear un nuevo costo indirecto
+api.post('/fij-var', async (c) => {
+  const db = (c as any).db;
+  const body = await c.req.json();
+  const { concepto, montoMensual } = body;
+
+  try {
+    const newId = nuevoIdHex();
+    await db.insert(costosIndirectos).values({
+      id: newId,
+      concepto: String(concepto || 'Nuevo Concepto').trim(),
+      montoMensual: Number(montoMensual) || 0,
+    });
+
+    saveDbToDisk();
+    return c.json({ success: true, id: newId, message: 'Costo indirecto creado' });
+  } catch (e) {
+    console.error('Error creando costo indirecto:', e);
+    return c.json({ success: false, error: String(e) }, 500);
+  }
+});
+
+// DELETE /api/inputs/fij-var/:id - Eliminar costo indirecto
+api.delete('/fij-var/:id', async (c) => {
+  const db = (c as any).db;
+  const id = c.req.param('id');
+
+  try {
+    await db.delete(costosIndirectos).where(eq(costosIndirectos.id, id));
+    saveDbToDisk();
+    return c.json({ success: true, message: 'Costo indirecto eliminado' });
+  } catch (e) {
+    console.error('Error eliminando costo indirecto:', e);
+    return c.json({ success: false, error: String(e) }, 500);
+  }
+});
+
+// POST /api/inputs/reordenar-fij-var - Reordenar (subir/bajar) concepto indirecto
+api.post('/reordenar-fij-var', async (c) => {
+  const db = (c as any).db;
+  const body = await c.req.json();
+  const { id, direccion } = body;
+
+  try {
+    const list = await db.select().from(costosIndirectos);
+    const index = list.findIndex((item: any) => item.id === id);
+    if (index === -1) return c.json({ success: false, error: 'Concepto no encontrado' }, 404);
+
+    const targetIndex = direccion === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= list.length) {
+      return c.json({ success: true, message: 'Ya está en la posición límite' });
+    }
+
+    const curr = list[index];
+    const target = list[targetIndex];
+
+    await db.update(costosIndirectos).set({
+      concepto: target.concepto,
+      montoMensual: target.montoMensual,
+    }).where(eq(costosIndirectos.id, curr.id));
+
+    await db.update(costosIndirectos).set({
+      concepto: curr.concepto,
+      montoMensual: curr.montoMensual,
+    }).where(eq(costosIndirectos.id, target.id));
+
+    saveDbToDisk();
+    return c.json({ success: true, message: 'Concepto reordenado exitosamente' });
+  } catch (e) {
+    console.error('Error reordenando costo indirecto:', e);
     return c.json({ success: false, error: String(e) }, 500);
   }
 });

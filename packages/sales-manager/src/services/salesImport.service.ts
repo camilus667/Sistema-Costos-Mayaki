@@ -127,9 +127,17 @@ export async function importarVentasPos(buffer: Buffer): Promise<SalesImportResu
   const idxFecha = cabecera.indexOf('fecha');
   const idxSucursal = cabecera.indexOf('sucursal');
   const idxUsuario = cabecera.indexOf('usuario');
+  const idxCliente = cabecera.indexOf('razon_social') !== -1
+    ? cabecera.indexOf('razon_social')
+    : (cabecera.indexOf('cliente') !== -1 ? cabecera.indexOf('cliente') : cabecera.indexOf('nombre_cliente'));
+
+  const idxNroDoc = cabecera.indexOf('numero_documento') !== -1
+    ? cabecera.indexOf('numero_documento')
+    : (cabecera.indexOf('nro_doc') !== -1 ? cabecera.indexOf('nro_doc') : cabecera.indexOf('nro_doc_c'));
   const idxProducto = cabecera.indexOf('nombre_del_producto');
   const idxCantidad = cabecera.indexOf('cantidad');
   const idxPrecioUnit = cabecera.indexOf('precio_unit');
+  const idxTotalDescuento = cabecera.indexOf('total_descuento');
   const idxSubtotal = cabecera.indexOf('subtotal');
   const idxTotalCobrado = cabecera.indexOf('total_cobrado');
   const idxCostoUnit = cabecera.indexOf('costo_unit');
@@ -158,11 +166,16 @@ export async function importarVentasPos(buffer: Buffer): Promise<SalesImportResu
     const fechaRaw = idxFecha !== -1 ? String(row[idxFecha] || '') : '';
     const sucursal = idxSucursal !== -1 ? String(row[idxSucursal] || '') : 'Central';
     const usuario = idxUsuario !== -1 ? String(row[idxUsuario] || '') : '';
+    const cliente = idxCliente !== -1 ? String(row[idxCliente] || '').trim() : '';
+    const nroDoc = idxNroDoc !== -1 ? String(row[idxNroDoc] || '').trim() : '';
 
     const cantidad = parseFloat(row[idxCantidad]) || 1;
     const precioUnitario = parseFloat(row[idxPrecioUnit]) || 0;
     const subtotal = parseFloat(row[idxSubtotal]) || cantidad * precioUnitario;
     const totalCobrado = idxTotalCobrado !== -1 ? (parseFloat(row[idxTotalCobrado]) || subtotal) : subtotal;
+    const totalDescuento = idxTotalDescuento !== -1
+      ? (parseFloat(row[idxTotalDescuento]) || 0)
+      : Math.max(0, subtotal - totalCobrado);
     const costoUnitario = idxCostoUnit !== -1 ? (parseFloat(row[idxCostoUnit]) || 0) : 0;
     const costoTotal = idxCostoTotal !== -1 ? (parseFloat(row[idxCostoTotal]) || 0) : 0;
 
@@ -193,7 +206,7 @@ export async function importarVentasPos(buffer: Buffer): Promise<SalesImportResu
       costoTotal,
       usuario,
       sucursal,
-      datosOriginales: JSON.stringify(row),
+      datosOriginales: JSON.stringify({ cliente, nroDoc, totalDescuento, row }),
     });
   }
 

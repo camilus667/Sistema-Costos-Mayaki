@@ -197,3 +197,305 @@ export async function obtenerVentasPorPrendaYTalla(
     };
   }).sort((a, b) => b.totalUnidades - a.totalUnidades);
 }
+
+export async function obtenerRangoFechasVentas(
+  colegioFiltro?: string,
+  anioFiltro?: number
+): Promise<{ fechaInicio: string; fechaFin: string }> {
+  const db = await getDb();
+  let todas: any[] = db.select().from(posVentas).all();
+
+  if (colegioFiltro && colegioFiltro.trim() !== '') {
+    const targetNorm = normalizarColegioNombre(colegioFiltro);
+    todas = todas.filter((v) => {
+      const cgNorm = normalizarColegioNombre(v.colegioGrupo || '');
+      return cgNorm.includes(targetNorm) || targetNorm.includes(cgNorm);
+    });
+  }
+
+  if (anioFiltro) {
+    const anioNum = parseInt(String(anioFiltro), 10);
+    todas = todas.filter((v) => parseInt(String(v.anio), 10) === anioNum);
+  }
+
+  if (todas.length === 0) {
+    return { fechaInicio: '01/01/2025', fechaFin: '31/12/2026' };
+  }
+
+  let minIso = todas[0].fechaIso || '2025-01-01';
+  let maxIso = todas[0].fechaIso || '2026-12-31';
+
+  todas.forEach((v) => {
+    if (v.fechaIso && v.fechaIso < minIso) minIso = v.fechaIso;
+    if (v.fechaIso && v.fechaIso > maxIso) maxIso = v.fechaIso;
+  });
+
+  const fmtFecha = (iso: string) => {
+    const partes = (iso || '').split('-');
+    if (partes.length === 3) return `${partes[2]}/${partes[1]}/${partes[0]}`;
+    return iso;
+  };
+
+  return {
+    fechaInicio: fmtFecha(minIso),
+    fechaFin: fmtFecha(maxIso),
+  };
+}
+
+export interface VentaConsolidadaItem {
+  id: string;
+  nPedido: string;
+  estado: string;
+  fecha: string;
+  fechaIso: string;
+  usuario: string;
+  cliente: string;
+  nroDoc: string;
+  nombreProducto: string;
+  cantidad: number;
+  precioUnitario: number;
+  totalDescuento: number;
+  totalCobrado: number;
+  colegioGrupo: string;
+}
+
+export async function obtenerVentasConsolidadas(
+  colegioFiltro?: string,
+  anioFiltro?: number
+): Promise<VentaConsolidadaItem[]> {
+  const db = await getDb();
+  let todas: any[] = db.select().from(posVentas).all();
+
+  // 1. Filtrar por colegio si se especifica
+  if (colegioFiltro && colegioFiltro.trim() !== '') {
+    const targetNorm = normalizarColegioNombre(colegioFiltro);
+    todas = todas.filter((v) => {
+      const cgNorm = normalizarColegioNombre(v.colegioGrupo || '');
+      return cgNorm.includes(targetNorm) || targetNorm.includes(cgNorm);
+    });
+  }
+
+  // 2. Filtrar por año (por defecto 2026 si no se pasa anioFiltro)
+  const anioTarget = anioFiltro !== undefined ? anioFiltro : 2026;
+  if (anioTarget) {
+    todas = todas.filter((v) => parseInt(String(v.anio), 10) === anioTarget);
+  }
+
+  // 3. Ordenar desde la más antigua a la más nueva (cronológico ascendente)
+  todas.sort((a, b) => {
+    const fA = a.fechaIso || a.fecha || '';
+    const fB = b.fechaIso || b.fecha || '';
+    if (fA !== fB) return fA.localeCompare(fB);
+    return (parseInt(a.nPedido, 10) || 0) - (parseInt(b.nPedido, 10) || 0);
+  });
+
+  // 4. Identificar pedidos distintos en orden de aparición
+  const distintosPedidos: string[] = [];
+  let maxPedidoNum = 0;
+
+  todas.forEach((v) => {
+    const p = String(v.nPedido || '').trim();
+    if (p && !distintosPedidos.includes(p)) {
+      distintosPedidos.push(p);
+    }
+    const num = parseInt(p.replace(/\D/g, ''), 10);
+    if (!isNaN(num) && num > maxPedidoNum) maxPedidoNum = num;
+  });
+
+  if (maxPedidoNum === 0) maxPedidoNum = 2000 + distintosPedidos.length;
+
+  const totalDistintos = distintosPedidos.length;
+  const baseInicial = maxPedidoNum - (totalDistintos - 1);
+
+  const mapaRenumerado: Record<string, string> = {};
+  distintosPedidos.forEach((p, idx) => {
+    mapaRenumerado[p] = String(baseInicial + idx);
+  });
+
+  return todas.map((v) => {
+    let cliente = '';
+    let nroDoc = '';
+    let totalDescuento = Math.max(0, (v.subtotal || 0) - (v.totalCobrado || 0));
+
+    if (v.datosOriginales) {
+      try {
+        const parsed = JSON.parse(v.datosOriginales);
+        if (parsed && typeof parsed === 'object') {
+          if (parsed.cliente || parsed.razonSocial) cliente = parsed.cliente || parsed.razonSocial;
+          if (parsed.nroDoc || parsed.numeroDocumento) nroDoc = parsed.nroDoc || parsed.numeroDocumento;
+          if (typeof parsed.totalDescuento === 'number') totalDescuento = parsed.totalDescuento;
+        }
+      } catch (e) {
+        // Fallback
+      }
+    }
+
+    const origP = String(v.nPedido || '').trim();
+    const pedidoRenumerado = mapaRenumerado[origP] || origP;
+
+    return {
+      id: v.id,
+      nPedido: pedidoRenumerado,
+      estado: v.estado || 'Completado',
+      fecha: v.fecha || '',
+      fechaIso: v.fechaIso || '',
+      usuario: v.usuario || '',
+      cliente,
+      nroDoc,
+      nombreProducto: v.nombreProductoRaw || v.nombreLimpio || '',
+      cantidad: v.cantidad || 0,
+      precioUnitario: v.precioUnitario || 0,
+      totalDescuento: Math.round(totalDescuento * 100) / 100,
+      totalCobrado: v.totalCobrado || 0,
+      colegioGrupo: v.colegioGrupo || '',
+    };
+  });
+}
+
+export interface ResumenMensualColegioGroup {
+  colegioGrupo: string;
+  totalUnidadesAnual: number;
+  totalVentaBsAnual: number;
+  meses: Array<{
+    mesNum: number;
+    mesNombre: string;
+    unidades: number;
+    montoBs: number;
+  }>;
+}
+
+const NOMBRE_MESES: Record<number, string> = {
+  1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
+  5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
+  9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre',
+};
+
+export async function obtenerResumenMensualPorColegio(
+  anioFiltro: number = 2026
+): Promise<ResumenMensualColegioGroup[]> {
+  const db = await getDb();
+  let ventas: any[] = db.select().from(posVentas).all();
+
+  if (anioFiltro) {
+    ventas = ventas.filter((v) => parseInt(String(v.anio), 10) === parseInt(String(anioFiltro), 10));
+  }
+
+  // Agrupar por colegio -> mes
+  const mapa: Record<string, Record<number, { unidades: number; montoBs: number }>> = {};
+
+  ventas.forEach((v) => {
+    const cg = v.colegioGrupo || 'General';
+    const mes = v.mes || 1;
+    if (!mapa[cg]) mapa[cg] = {};
+    if (!mapa[cg][mes]) mapa[cg][mes] = { unidades: 0, montoBs: 0 };
+    mapa[cg][mes].unidades += v.cantidad || 0;
+    mapa[cg][mes].montoBs += v.totalCobrado || v.subtotal || 0;
+  });
+
+  const colegiosOrdenados = Object.keys(mapa).sort();
+
+  return colegiosOrdenados.map((cg) => {
+    let totalUnidadesAnual = 0;
+    let totalVentaBsAnual = 0;
+
+    const mesesArr = Object.keys(mapa[cg])
+      .map(Number)
+      .sort((a, b) => a - b)
+      .map((mesNum) => {
+        const u = Math.round(mapa[cg][mesNum].unidades * 100) / 100;
+        const m = Math.round(mapa[cg][mesNum].montoBs * 100) / 100;
+        totalUnidadesAnual += u;
+        totalVentaBsAnual += m;
+        return {
+          mesNum,
+          mesNombre: NOMBRE_MESES[mesNum] || `Mes ${mesNum}`,
+          unidades: u,
+          montoBs: m,
+        };
+      });
+
+    return {
+      colegioGrupo: cg,
+      totalUnidadesAnual: Math.round(totalUnidadesAnual * 100) / 100,
+      totalVentaBsAnual: Math.round(totalVentaBsAnual * 100) / 100,
+      meses: mesesArr,
+    };
+  });
+}
+
+export interface ResumenPorMesGroup {
+  mesNum: number;
+  mesNombre: string;
+  totalUnidadesMes: number;
+  totalVentaBsMes: number;
+  colegios: Array<{
+    colegioGrupo: string;
+    unidades: number;
+    montoBs: number;
+  }>;
+}
+
+function obtenerOrdenPrioridadColegio(colegio: string): number {
+  const cNorm = String(colegio || '').toLowerCase().trim();
+  if (cNorm.includes('cambridge')) return 1;
+  if (cNorm.includes('intl')) return 2;
+  if (cNorm.includes('edad')) return 3;
+  if (cNorm.includes('empresa') || cNorm.includes('general')) return 4;
+  if (cNorm.includes('saint') || cNorm.includes('jude')) return 5;
+  if (cNorm.includes('inf')) return 6;
+  if (cNorm.includes('col')) return 7;
+  return 8;
+}
+
+export async function obtenerResumenPorMesDetalleColegios(
+  anioFiltro: number = 2026
+): Promise<ResumenPorMesGroup[]> {
+  const db = await getDb();
+  let ventas: any[] = db.select().from(posVentas).all();
+
+  if (anioFiltro) {
+    ventas = ventas.filter((v) => parseInt(String(v.anio), 10) === parseInt(String(anioFiltro), 10));
+  }
+
+  // Agrupar por mes -> colegio
+  const mapa: Record<number, Record<string, { unidades: number; montoBs: number }>> = {};
+
+  ventas.forEach((v) => {
+    const mes = v.mes || 1;
+    const cg = v.colegioGrupo || 'Empresas y General';
+    if (!mapa[mes]) mapa[mes] = {};
+    if (!mapa[mes][cg]) mapa[mes][cg] = { unidades: 0, montoBs: 0 };
+    mapa[mes][cg].unidades += v.cantidad || 0;
+    mapa[mes][cg].montoBs += v.totalCobrado || v.subtotal || 0;
+  });
+
+  const mesesOrdenados = Object.keys(mapa).map(Number).sort((a, b) => a - b);
+
+  return mesesOrdenados.map((mesNum) => {
+    let totalUnidadesMes = 0;
+    let totalVentaBsMes = 0;
+
+    const colegiosArr = Object.keys(mapa[mesNum])
+      .map((cg) => {
+        const u = Math.round(mapa[mesNum][cg].unidades * 100) / 100;
+        const m = Math.round(mapa[mesNum][cg].montoBs * 100) / 100;
+        totalUnidadesMes += u;
+        totalVentaBsMes += m;
+        return {
+          colegioGrupo: cg,
+          unidades: u,
+          montoBs: m,
+        };
+      });
+
+    colegiosArr.sort((a, b) => obtenerOrdenPrioridadColegio(a.colegioGrupo) - obtenerOrdenPrioridadColegio(b.colegioGrupo));
+
+    return {
+      mesNum,
+      mesNombre: NOMBRE_MESES[mesNum] || `Mes ${mesNum}`,
+      totalUnidadesMes: Math.round(totalUnidadesMes * 100) / 100,
+      totalVentaBsMes: Math.round(totalVentaBsMes * 100) / 100,
+      colegios: colegiosArr,
+    };
+  });
+}

@@ -78,6 +78,7 @@
     <button class="tab-btn" onclick="switchTab('costeo-individual')">Costeo Individual</button>
     <button class="tab-btn" onclick="switchTab('matriz-tallas')">Costeo Multitalla</button>
     <button class="tab-btn" onclick="switchTab('inventario')">Inventario</button>
+    <button class="tab-btn" onclick="switchTab('costeo-telas')">Costeo Total de Telas</button>
     <button class="tab-btn" onclick="switchTab('admin-colegio')">⚙️ Configuración</button>
   </nav>
 
@@ -500,6 +501,110 @@
             <tbody id="tb-inventario">
               <tr>
                 <td colspan="7" style="text-align:center; padding: 1.5rem;">Cargando inventario con stock físico...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: COSTEO TOTAL DE TELAS -->
+    <div id="tab-costeo-telas" class="tab-content">
+      <div
+        style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+        <div>
+          <h2 style="font-size:1.15rem; font-weight:700; color:var(--text-main); margin:0;">🧵 Costeo e Inversión Total
+            en Telas</h2>
+          <p style="font-size:0.8rem; color:var(--text-muted); margin:0.2rem 0 0 0;">Costo e inversión requerida en
+            telas (insumos) para cubrir todo el stock físico actual en almacén.</p>
+        </div>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+          <input type="text" id="telas-search" placeholder="🔍 Buscar prenda o tela..." onkeyup="filtrarMatrizTelas()"
+            style="padding:0.35rem 0.65rem; font-size:0.8rem; border-radius:6px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-main); width:220px;">
+          <button class="btn btn-primary" onclick="exportarTelasExcel()"
+            style="font-size:0.8rem; padding:0.35rem 0.75rem;">📊 Exportar Reporte</button>
+        </div>
+      </div>
+
+      <!-- KPIS TELAS -->
+      <div class="grid-stats"
+        style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom:1.25rem;">
+        <div class="stat-card stat-card-warning">
+          <span class="stat-title">INVERSIÓN TOTAL EN TELAS</span>
+          <span class="stat-value" id="kpi-telas-inversion-bs">Bs. 0.00</span>
+          <span class="stat-subtext">costo de telas para el stock físico</span>
+        </div>
+        <div class="stat-card stat-card-info">
+          <span class="stat-title">PESO TOTAL DE TELAS</span>
+          <span class="stat-value" id="kpi-telas-peso-kg">0.00 kg</span>
+          <span class="stat-subtext">kilos totales de tela requeridos</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-title">PRENDAS EN STOCK CON TELA</span>
+          <span class="stat-value" id="kpi-telas-stock-prendas">0 u.</span>
+          <span class="stat-subtext">unidades físicas registradas</span>
+        </div>
+        <div class="stat-card stat-card-success">
+          <span class="stat-title">VARIEDAD DE TELAS</span>
+          <span class="stat-value" id="kpi-telas-variedad">0 tipos</span>
+          <span class="stat-subtext">insumos de tela en catálogo</span>
+        </div>
+      </div>
+
+      <!-- SECCIÓN 1: RESUMEN POR TIPO DE TELA -->
+      <div class="card-section"
+        style="margin-bottom:1.5rem; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+          <h3 style="font-size:0.95rem; font-weight:700; color:var(--text-main); margin:0;">📋 Resumen de Requerimiento
+            e Inversión por Tipo de Tela</h3>
+          <span style="font-size:0.75rem; color:var(--text-muted);" id="telas-tipos-conteo">0 telas encontradas</span>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="data-table" id="tb-resumen-telas" style="width:100%; font-size:0.8rem;">
+            <thead>
+              <tr style="background:#0f172a; color:#93c5fd;">
+                <th>Tipo de Tela (Insumo)</th>
+                <th style="text-align:center;">Prendas que la usan</th>
+                <th style="text-align:right;">Stock en Almacén (u)</th>
+                <th style="text-align:right;">Peso Requerido (kg)</th>
+                <th style="text-align:right;">Costo Inversión Telas (Bs)</th>
+                <th style="text-align:right;">% Inversión</th>
+              </tr>
+            </thead>
+            <tbody id="tb-resumen-telas-body">
+              <tr>
+                <td colspan="6" style="text-align:center; padding:1rem; color:var(--text-muted);">Cargando resumen por
+                  tipo de tela...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- SECCIÓN 2: MATRIZ CONSOLIDADA POR PRENDAS Y TALLAS (COSTO TELAS BS) -->
+      <div class="card-section"
+        style="background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:1rem;">
+        <div
+          style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; flex-wrap:wrap; gap:0.5rem;">
+          <h3 style="font-size:0.95rem; font-weight:700; color:var(--text-main); margin:0;">📐 Matriz Consolidada de
+            Costeo de Telas (Por Prendas y Tallas)</h3>
+          <span style="font-size:0.75rem; color:#fbbf24;" id="telas-aviso-info">Muestra el costo total de tela en Bs.
+            para las prendas en stock</span>
+        </div>
+        <div style="overflow-x:auto; max-height:550px;">
+          <table class="data-table" id="tb-matriz-telas" style="width:100%; font-size:0.75rem;">
+            <thead>
+              <tr id="tr-telas-head" style="background:#0f172a; color:#93c5fd;">
+                <th style="width:65px;">Prod</th>
+                <th>Prenda</th>
+                <th style="min-width:140px;">Tela Principal</th>
+                <th class="col-subtotal" style="text-align:right;">SUBTOTAL TELAS Bs</th>
+              </tr>
+            </thead>
+            <tbody id="tb-matriz-telas-body">
+              <tr>
+                <td colspan="4" style="text-align:center; padding:1rem; color:var(--text-muted);">Cargando matriz de
+                  costeo de telas...</td>
               </tr>
             </tbody>
           </table>
@@ -1359,7 +1464,8 @@
                 <button class="btn" id="btn-guardar-datos-colegio" onclick="actualizarColegioActualAdmin()"
                   style="font-size:0.78rem; padding:0.45rem 0.9rem;">Guardar Datos del Colegio</button>
                 <button class="btn" id="btn-eliminar-colegio" onclick="eliminarColegioActualAdmin()"
-                  style="font-size:0.78rem; padding:0.45rem 0.9rem; background:#dc2626; color:#ffffff; border:1px solid #ef4444;">🗑️ Eliminar Colegio</button>
+                  style="font-size:0.78rem; padding:0.45rem 0.9rem; background:#dc2626; color:#ffffff; border:1px solid #ef4444;">🗑️
+                  Eliminar Colegio</button>
                 <span id="col-edit-estado" style="font-size:0.74rem;"></span>
               </div>
             </div>
@@ -1969,6 +2075,7 @@
       cargarResumen();
       cargarInventario();
       cargarMatrizConsolidada();
+      cargarMatrizTelas();
       cargarInputConcept(currentInputConcept);
       generarMatrizPrenda();
       generarDesgloseProducto();
@@ -2137,6 +2244,8 @@
         cargarConfigAdminColegio();
       } else if (tabId === 'inventario') {
         cargarInventario();
+      } else if (tabId === 'costeo-telas') {
+        cargarMatrizTelas();
       } else if (tabId === 'snapshots-historico') {
         cargarSnapshotsLista();
       }
@@ -2718,6 +2827,7 @@
           fijosContainer.id = 'fijos-split-wrapper';
           tableElem.parentNode.appendChild(fijosContainer);
         }
+        fijosContainer.innerHTML = '';
         tableElem.style.display = 'none';
         fijosContainer.style.display = 'grid';
         fijosContainer.style.gridTemplateColumns = '1.3fr 1fr';
@@ -2730,23 +2840,25 @@
         fijosContainer.innerHTML = `
           <div style="background:#0f172a; padding:1.25rem; border-radius:10px; border:1px solid #1e293b; box-shadow:0 4px 12px rgba(0,0,0,0.25);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; border-bottom:1px solid #334155; padding-bottom:0.5rem;">
-              <h4 style="margin:0; color:#f8fafc; font-size:1.05rem; font-weight:700;">1. Factor de Complejidad por Prenda</h4>
-              <span style="font-size:0.75rem; color:var(--text-muted);">Tarifa: <strong style="color:var(--warning);">Bs. ${tarifaPunto.toFixed(4)}</strong>/pt</span>
+              <h4 style="margin:0; color:#f8fafc; font-size:1.05rem; font-weight:700;">1. Factores de Complejidad y Costo Fijo por Prenda</h4>
             </div>
             <table class="table-compact-auto" style="width:100%;">
               <thead>
                 <tr>
-                  <th style="width:78px;">Prod</th><th>Prenda</th>
-                  <th style="text-align:center;">Factor Complejidad</th>
-                  <th style="text-align:right;">Costo Fijo Base (Bs.)</th>
+                  <th style="width:35px; text-align:center;">#</th>
+                  <th>Prenda / Producto</th>
+                  <th style="text-align:center; width:150px;">Factor Complejidad</th>
+                  <th style="text-align:right; width:150px;">Costo Fijo / Prenda (Bs.)</th>
                 </tr>
               </thead>
               <tbody>
-                ${json.data.map(p => `
+                ${(json.data || []).map(p => `
                   <tr>
-                    <td><span class="col-item">${p.prod || p.itemNumero}</span></td>
-                    <td><strong>${p.descripcion}</strong></td>
-                    <td style="text-align:center;">${getInputHtml(p.factorComplejidad, '0.5', `id="comp-${p.id}" onchange="guardarFijoLive('${p.id}')"`)}</td>
+                    <td style="text-align:center;"><span class="col-item">${p.itemNumero}</span></td>
+                    <td><strong style="font-size:0.82rem;">${p.descripcion}</strong></td>
+                    <td style="text-align:center;">
+                      ${getInputHtml(p.factorComplejidad, '8', `id="comp-${p.id}" style="text-align:center; font-weight:700;" onchange="guardarFijoLive('${p.id}')"`)}
+                    </td>
                     <td style="text-align:right;"><strong style="color:var(--warning);">Bs. ${p.costoFijo.toFixed(2)}</strong></td>
                   </tr>
                 `).join('')}
@@ -2756,12 +2868,69 @@
 
           <div style="background:#0f172a; padding:1.25rem; border-radius:10px; border:1px solid #1e293b; box-shadow:0 4px 12px rgba(0,0,0,0.25);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; border-bottom:1px solid #334155; padding-bottom:0.5rem;">
-              <h4 style="margin:0; color:#f8fafc; font-size:1.05rem; font-weight:700;">2. Costos Indirectos de Producción (Fij&Var)</h4>
+              <h4 style="margin:0; color:#f8fafc; font-size:1.05rem; font-weight:700;">2. Salarios Fijos y Gastos Operativos Mensuales</h4>
+              <button class="btn btn-sm btn-primary" onclick="agregarFilaCostosIndirectos()" style="font-size:0.78rem; padding:0.35rem 0.75rem; font-weight:700;">➕ Agregar Fila / Concepto</button>
             </div>
             <table class="table-compact-auto" style="width:100%;">
               <thead>
                 <tr>
-                  <th>#</th><th>Concepto Indirecto</th>
+                  <th style="width:30px; text-align:center;">#</th>
+                  <th>Concepto</th>
+                  <th style="text-align:right; width:140px;">Monto Mensual (Bs.)</th>
+                  <th style="width:50px; text-align:center;">Orden</th>
+                  <th style="width:45px; text-align:center;">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(json.indirectos || []).map(item => `
+                  <tr>
+                    <td style="text-align:center;"><span class="col-item">${item.prod || item.itemNumero}</span></td>
+                    <td>
+                      <input type="text" id="concepto-${item.id}" value="${(item.concepto || '').replace(/"/g, '&quot;')}"
+                        style="width:100%; background:transparent; border:1px solid rgba(255,255,255,0.15); border-radius:4px; color:#f8fafc; padding:4px 8px; font-size:0.82rem; font-weight:600;"
+                        onchange="guardarFijVarConceptoLive('${item.id}')" placeholder="Nombre del concepto..." />
+                    </td>
+                    <td style="text-align:right;">
+                      ${getInputHtml(item.montoMensual, '10', `id="fjv-${item.id}" style="text-align:right; font-weight:700;" onchange="guardarFijVarLive('${item.id}')"`)}
+                    </td>
+                    <td style="text-align:center; white-space:nowrap;">
+                      <button onclick="moverFilaCostosIndirectos('${item.id}', 'up')" title="Subir renglón" style="cursor:pointer; background:transparent; border:none; color:#38bdf8; font-size:0.85rem; padding:1px 3px;">⬆️</button>
+                      <button onclick="moverFilaCostosIndirectos('${item.id}', 'down')" title="Bajar renglón" style="cursor:pointer; background:transparent; border:none; color:#38bdf8; font-size:0.85rem; padding:1px 3px;">⬇️</button>
+                    </td>
+                    <td style="text-align:center;">
+                      <button onclick="eliminarFilaCostosIndirectos('${item.id}')" title="Eliminar este concepto" style="cursor:pointer; background:transparent; border:none; color:#ef4444; font-size:1rem; padding:2px 5px;">🗑️</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+              <tfoot>
+                <tr style="border-top:2px solid #334155;">
+                  <td colspan="2"><strong style="font-size:0.85rem;">TOTAL AL MES</strong></td>
+                  <td style="text-align:right;"><strong style="color:var(--success); font-size:0.95rem;">Bs. ${totalIndirectos.toFixed(2)}</strong></td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="font-size:0.75rem; color:var(--text-muted);">Volumen Mensual Estimado</td>
+                  <td style="text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600;">1,800 prendas</td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="font-size:0.75rem; color:var(--text-muted);">Tarifa por Punto Complejidad</td>
+                  <td style="text-align:right; font-size:0.85rem; color:var(--warning); font-weight:800;">Bs. ${tarifaPunto.toFixed(4)}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div style="background:#0f172a; padding:1.25rem; border-radius:10px; border:1px solid #1e293b; box-shadow:0 4px 12px rgba(0,0,0,0.25);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; border-bottom:1px solid #334155; padding-bottom:0.5rem;">
+              <h4 style="margin:0; color:#f8fafc; font-size:1.05rem; font-weight:700;">2. Salarios Fijos y Gastos Operativos Mensuales</h4>
+            </div>
+            <table class="table-compact-auto" style="width:100%;">
+              <thead>
+                <tr>
+                  <th>#</th><th>Concepto</th>
                   <th style="text-align:right;">Monto Mensual (Bs.)</th>
                 </tr>
               </thead>
@@ -2776,7 +2945,7 @@
               </tbody>
               <tfoot>
                 <tr style="border-top:2px solid #334155;">
-                  <td colspan="2"><strong style="font-size:0.85rem;">TOTAL INDIRECTOS MES</strong></td>
+                  <td colspan="2"><strong style="font-size:0.85rem;">TOTAL AL MES</strong></td>
                   <td style="text-align:right;"><strong style="color:var(--success); font-size:0.95rem;">Bs. ${totalIndirectos.toFixed(2)}</strong></td>
                 </tr>
                 <tr>
@@ -3855,6 +4024,88 @@
       } catch (e) { console.error('Error al actualizar Fij&Var en BD:', e); }
     }
 
+    async function guardarFijVarConceptoLive(id) {
+      const elem = document.getElementById('concepto-' + id);
+      const concepto = (elem ? elem.value : '').trim();
+      const body = { concepto };
+      try {
+        const res = await fetch('/api/inputs/fij-var/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const json = await res.json();
+        if (json.success) {
+          cargarInputConcept('fijosXprenda');
+          await cargarMatrizConsolidada();
+          generarMatrizPrenda();
+          cargarResumen();
+        }
+      } catch (e) { console.error('Error al actualizar concepto en BD:', e); }
+    }
+
+    async function agregarFilaCostosIndirectos() {
+      const concepto = prompt('Ingrese el nombre del nuevo concepto:', 'Nuevo Concepto');
+      if (!concepto || !concepto.trim()) return;
+
+      const montoStr = prompt(`Ingrese el monto mensual en Bs. para "${concepto.trim()}":`, '0');
+      if (montoStr === null) return;
+      const montoMensual = parseFloat(montoStr) || 0;
+
+      try {
+        const res = await fetch('/api/inputs/fij-var', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ concepto: concepto.trim(), montoMensual })
+        });
+        const json = await res.json();
+        if (json.success) {
+          cargarInputConcept('fijosXprenda');
+          await cargarMatrizConsolidada();
+          generarMatrizPrenda();
+          cargarResumen();
+        } else {
+          alert('Error al agregar concepto: ' + (json.error || 'Desconocido'));
+        }
+      } catch (e) { console.error('Error al agregar concepto:', e); alert('Error al agregar concepto: ' + e.message); }
+    }
+
+    async function moverFilaCostosIndirectos(id, direccion) {
+      try {
+        const res = await fetch('/api/inputs/reordenar-fij-var', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, direccion })
+        });
+        const json = await res.json();
+        if (json.success) {
+          cargarInputConcept('fijosXprenda');
+          await cargarMatrizConsolidada();
+          generarMatrizPrenda();
+          cargarResumen();
+        }
+      } catch (e) { console.error('Error al reordenar concepto:', e); }
+    }
+
+    async function eliminarFilaCostosIndirectos(id) {
+      if (!confirm('¿Está seguro de que desea eliminar este concepto de costo indirecto?')) return;
+
+      try {
+        const res = await fetch('/api/inputs/fij-var/' + id, {
+          method: 'DELETE'
+        });
+        const json = await res.json();
+        if (json.success) {
+          cargarInputConcept('fijosXprenda');
+          await cargarMatrizConsolidada();
+          generarMatrizPrenda();
+          cargarResumen();
+        } else {
+          alert('Error al eliminar concepto: ' + (json.error || 'Desconocido'));
+        }
+      } catch (e) { console.error('Error al eliminar concepto:', e); alert('Error al eliminar concepto: ' + e.message); }
+    }
+
     async function guardarManoObraLive(productoId) {
       const grupo1 = parseFloat(document.getElementById('mo1-' + productoId).value) || 0;
       const grupo2 = parseFloat(document.getElementById('mo2-' + productoId).value) || 0;
@@ -4511,6 +4762,179 @@
      * filtrar en el navegador es instantaneo, y un viaje al servidor por cada tecla seria mas lento
      * y ademas haria perder el foco del campo entre respuestas.
      */
+    /* =========================================================================
+       COSTEO TOTAL DE TELAS — PESTAÑA DEDICADA
+       ========================================================================= */
+    let rawMatrizTelasData = null;
+
+    async function cargarMatrizTelas() {
+      try {
+        const res = await fetch('/api/calculo/matriz-telas?colegioId=' + colegioFiltroActual + getSnapshotQueryParam());
+        const json = await res.json();
+        if (json.success) {
+          rawMatrizTelasData = json;
+          renderMatrizTelas();
+        }
+      } catch (e) {
+        console.error('Error al cargar matriz de telas:', e);
+      }
+    }
+
+    function renderMatrizTelas() {
+      if (!rawMatrizTelasData) return;
+      const { tallas, data: prods, resumenTiposTela, totalesGlobales } = rawMatrizTelasData;
+
+      // 1. KPIs
+      document.getElementById('kpi-telas-inversion-bs').textContent = 'Bs. ' + (totalesGlobales.inversionTotalTelasBs || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      document.getElementById('kpi-telas-peso-kg').textContent = (totalesGlobales.kilosTotalesTelas || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg';
+      document.getElementById('kpi-telas-stock-prendas').textContent = (totalesGlobales.stockTotalConTela || 0).toLocaleString() + ' u.';
+      document.getElementById('kpi-telas-variedad').textContent = (totalesGlobales.variedadTelas || 0) + ' tipos';
+
+      // 2. Resumen por tipo de tela
+      const tbResumen = document.getElementById('tb-resumen-telas-body');
+      document.getElementById('telas-tipos-conteo').textContent = `${resumenTiposTela.length} tipo(s) de tela registrado(s)`;
+
+      if (resumenTiposTela.length === 0) {
+        tbResumen.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:1rem; color:var(--text-muted);">No hay telas registradas.</td></tr>';
+      } else {
+        const totalStockResumen = resumenTiposTela.reduce((acc, t) => acc + t.stockTotal, 0);
+        const totalKilosResumen = resumenTiposTela.reduce((acc, t) => acc + t.kilosTotales, 0);
+        const totalBsResumen = resumenTiposTela.reduce((acc, t) => acc + t.costoTotalBs, 0);
+
+        const filasResumen = resumenTiposTela.map(t => `
+          <tr>
+            <td><strong style="color:#93c5fd;">${t.telaNombre}</strong></td>
+            <td style="text-align:center;"><span class="badge" style="background:#1e293b; color:#cbd5e1;">${t.prendasConteo} prendas</span></td>
+            <td style="text-align:right;"><span class="badge badge-blue">${t.stockTotal.toLocaleString()} u</span></td>
+            <td style="text-align:right;"><strong>${t.kilosTotales.toLocaleString('es-BO', { minimumFractionDigits: 2 })} kg</strong></td>
+            <td style="text-align:right;"><strong style="color:#fbbf24; font-size:0.85rem;">Bs. ${t.costoTotalBs.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></td>
+            <td style="text-align:right;"><span class="badge badge-green">${t.pctInversion}%</span></td>
+          </tr>
+        `).join('');
+
+        const filaTotalResumen = `
+          <tr style="background:#0f172a; border-top:2px solid #3b82f6; font-weight:800; font-size:0.82rem;">
+            <td style="color:#fbbf24;">TOTAL GENERAL EN TELAS</td>
+            <td style="text-align:center; color:#94a3b8;">${resumenTiposTela.length} tipos</td>
+            <td style="text-align:right; color:#60a5fa;">${totalStockResumen.toLocaleString()} u</td>
+            <td style="text-align:right; color:#38bdf8;">${totalKilosResumen.toLocaleString('es-BO', { minimumFractionDigits: 2 })} kg</td>
+            <td style="text-align:right; color:#fbbf24; font-size:0.9rem;">Bs. ${totalBsResumen.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td style="text-align:right; color:#34d399;">100%</td>
+          </tr>
+        `;
+
+        tbResumen.innerHTML = filasResumen + filaTotalResumen;
+      }
+
+      // 3. Matriz Consolidada de Telas (Prendas x Tallas)
+      const trHead = document.getElementById('tr-telas-head');
+      trHead.innerHTML = `
+        <th style="width:55px; padding:0.3rem 0.2rem;">Prod</th>
+        <th style="padding:0.3rem 0.2rem;">Prenda</th>
+        <th style="min-width:120px; padding:0.3rem 0.2rem;">Tela Principal</th>
+        ${tallas.map(t => `<th style="text-align:center; padding:0.3rem 0.1rem; min-width:48px;">${fmtTalla(t.codigo)}</th>`).join('')}
+        <th class="col-subtotal" style="text-align:right; color:#fbbf24; border-left:2px solid var(--border); padding-right:0.3rem; min-width:100px;">SUBTOTAL TELAS Bs</th>
+        <th class="col-subtotal" style="text-align:right; color:#60a5fa; border-left:1px solid var(--border); padding-right:0.3rem; min-width:65px;">STOCK</th>
+      `;
+
+      const tbody = document.getElementById('tb-matriz-telas-body');
+      const busqueda = (document.getElementById('telas-search')?.value || '').toLowerCase().trim();
+
+      const prodsFiltrados = busqueda
+        ? prods.filter(p => p.descripcion.toLowerCase().includes(busqueda) || p.telaNombre.toLowerCase().includes(busqueda) || (p.colegioNombre && p.colegioNombre.toLowerCase().includes(busqueda)))
+        : prods;
+
+      const colegiosVisibles = [...new Set(prodsFiltrados.map(x => String(x.colegioId ?? '')))].filter(Boolean);
+      const mostrarSeparador = colegiosVisibles.length > 1;
+      let colegioAnterior = null;
+      const anchoTotal = 3 + tallas.length + 2;
+
+      const colTotalsBs = {};
+      tallas.forEach(t => colTotalsBs[t.codigo] = 0);
+      let grandTotalBs = 0;
+      let grandTotalStock = 0;
+
+      const filasMatrizHtml = prodsFiltrados.map(p => {
+        let filaSeparadora = '';
+        if (mostrarSeparador && String(p.colegioId ?? '') !== colegioAnterior) {
+          colegioAnterior = String(p.colegioId ?? '');
+          const cuantas = prodsFiltrados.filter(x => String(x.colegioId ?? '') === colegioAnterior).length;
+          filaSeparadora = `<tr><td colspan="${anchoTotal}" style="background:#0f172a; border-top:2px solid #475569; border-bottom:1px solid #334155; padding:0.25rem 0.4rem; font-size:0.7rem; font-weight:800; letter-spacing:0.5px; color:#93c5fd;">` +
+            `${(p.colegioNombre || 'Sin colegio')}` +
+            `<span style="color:#64748b; font-weight:600; margin-left:0.5rem;">${cuantas} prenda(s)</span></td></tr>`;
+        }
+
+        let rowCostoBs = p.subtotalCostoTelaBs || 0;
+        let rowStock = p.subtotalStock || 0;
+        grandTotalBs += rowCostoBs;
+        grandTotalStock += rowStock;
+
+        const cellsHtml = tallas.map(t => {
+          const cell = p.tallas[t.codigo];
+          if (!cell || (!cell.seOfrece && cell.stock === 0)) return '<td style="text-align:center; color:#475569; padding:0.2rem 0.1rem;">-</td>';
+
+          const stock = cell.stock || 0;
+          const costoBs = cell.costoTelaStock || 0;
+          colTotalsBs[t.codigo] = (colTotalsBs[t.codigo] || 0) + costoBs;
+
+          if (costoBs === 0 && stock === 0) return '<td style="text-align:center; color:#475569; padding:0.2rem 0.1rem;">-</td>';
+
+          // SIN EL PREFIJO 'Bs.' PARA COMPACTAR MÁXIMO LA CELDA
+          return `<td style="text-align:center; padding:0.2rem 0.1rem; line-height:1.15;">` +
+            (costoBs > 0 ? `<div style="color:#fbbf24; font-weight:700; font-size:0.72rem;">${costoBs.toLocaleString('es-BO', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</div>` : `<div style="color:#475569; font-size:0.68rem;">-</div>`) +
+            (stock > 0 ? `<div style="color:#94a3b8; font-size:0.62rem;">(${stock}u)</div>` : '') +
+            `</td>`;
+        }).join('');
+
+        return filaSeparadora + `
+          <tr>
+            <td style="font-family:monospace; font-size:0.68rem; color:#93c5fd; padding:0.25rem 0.2rem;">${p.prod || p.itemNumero}</td>
+            <td style="padding:0.25rem 0.2rem;"><strong>${p.descripcion}</strong></td>
+            <td style="font-size:0.68rem; color:#cbd5e1; padding:0.25rem 0.2rem;">${p.telaNombre}</td>
+            ${cellsHtml}
+            <td class="col-subtotal" style="text-align:right; border-left:2px solid var(--border); padding:0.25rem 0.3rem;">` +
+          (rowCostoBs > 0 ? `<strong style="color:#fbbf24; font-size:0.75rem;">Bs. ${rowCostoBs.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>` : '-') +
+          `</td>
+            <td class="col-subtotal" style="text-align:right; border-left:1px solid var(--border); padding:0.25rem 0.3rem;">` +
+          (rowStock > 0 ? `<strong style="color:#60a5fa; font-size:0.75rem;">${rowStock.toLocaleString()}u</strong>` : '-') +
+          `</td>
+          </tr>
+        `;
+      }).join('');
+
+      // FILA FINAL DE TOTALES GENERALES EN LA MATRIZ DE TELAS
+      const celdasTotalesTallas = tallas.map(t => {
+        const totTalla = colTotalsBs[t.codigo] || 0;
+        return `<td style="text-align:center; padding:0.3rem 0.1rem; color:#fbbf24; font-weight:800; font-size:0.72rem;">` +
+          (totTalla > 0 ? totTalla.toLocaleString('es-BO', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '-') +
+          `</td>`;
+      }).join('');
+
+      const filaTotalMatriz = `
+        <tr style="background:#0f172a; border-top:2px solid #3b82f6; border-bottom:2px solid #3b82f6; font-weight:800; font-size:0.75rem;">
+          <td colspan="3" style="color:#fbbf24; padding:0.35rem 0.4rem; letter-spacing:0.5px;">TOTAL GENERAL INVERSIÓN TELAS</td>
+          ${celdasTotalesTallas}
+          <td class="col-subtotal" style="text-align:right; border-left:2px solid #3b82f6; padding:0.35rem 0.3rem; color:#fbbf24; font-size:0.82rem;">
+            Bs. ${grandTotalBs.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </td>
+          <td class="col-subtotal" style="text-align:right; border-left:1px solid var(--border); padding:0.35rem 0.3rem; color:#60a5fa; font-size:0.82rem;">
+            ${grandTotalStock.toLocaleString()}u
+          </td>
+        </tr>
+      `;
+
+      tbody.innerHTML = filasMatrizHtml + filaTotalMatriz;
+    }
+
+    function filtrarMatrizTelas() {
+      renderMatrizTelas();
+    }
+
+    function exportarTelasExcel() {
+      if (!rawMatrizTelasData) return alert('No hay datos cargados para exportar.');
+      window.print();
+    }
+
     let inventarioFilas = [];
 
     async function cargarInventario() {
@@ -7508,7 +7932,7 @@
       }
       const sel = document.getElementById('global-colegio-select');
       const nombreCol = sel ? (sel.options[sel.selectedIndex]?.text || 'este colegio') : 'este colegio';
-      
+
       if (!confirm(`⚠️ ¿Estás seguro de que deseas eliminar permanentemente el colegio "${nombreCol}"? Esta acción borrará su registro.`)) {
         return;
       }
@@ -7852,7 +8276,7 @@
         <div class="rp-head">
           <div class="rp-head-top">
             <div>
-              <div class="rp-marca">MAYAKI · Sistema de Costeo de Uniformes</div>
+              <div class="rp-marca" style="display:flex; align-items:center; margin-bottom:6px;"><img src="data:image/png;base64,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" alt="mayaki Moda" style="height:38px; width:auto; object-fit:contain;" /></div>
               <h1 class="rp-titulo">${esc(titulo)}</h1>
               ${subtitulo ? `<div class="rp-sub">${esc(subtitulo)}</div>` : ''}
             </div>
@@ -7956,140 +8380,27 @@
         if (!d || !d.prendas || !d.prendas.length) return _sinDatos('Resumen General');
 
         const ctx = contextoReporte();
-        const conIva = Number(d.ivaDebitoTotalBs) > 0.005;
+        const isFijos = currentInputConcept === 'fijosXprenda';
+        const nombreHoja = isFijos ? 'Salarios Fijos y Gastos Operativos Mensuales' : (HOJAS_PRODUCCION[currentInputConcept] || currentInputConcept);
+        const sub = currentInputConcept === 'Acc'
+          ? (currentAccSubView === 'aux' ? 'Tabla auxiliar de costos' : 'Matriz de uso por prenda')
+          : null;
 
-        const kpis = [
-          { titulo: 'Stock físico', valor: nInt(d.totalStockUnidades) + ' Unid.' },
-          { titulo: 'Variaciones por talla', valor: nInt(d.variacionesCount), sub: nInt(d.productosCount) + ' prendas en catálogo' },
-          { titulo: 'Inversión en producción', valor: 'Bs. ' + nBs(d.totalValorCostoBs) },
-          { titulo: 'Venta proyectada', valor: 'Bs. ' + nBs(d.totalValorVentaBs), sub: conIva ? 'neto de IVA: Bs. ' + nBs(d.totalIngresoNetoBs) : null },
-          { titulo: 'Ganancia bruta proyectada', valor: 'Bs. ' + nBs(d.gananciaTotalBs), sub: '+' + (Number(d.margenPromedioGlobalPct) || 0).toFixed(1) + '% sobre la inversión', destacado: true },
+        const kpis = isFijos ? null : [
+          { titulo: 'Hoja', valor: nombreHoja },
+          { titulo: 'Registros', valor: nInt(totalFilas) },
+          { titulo: 'Columnas', valor: nInt(maxCols) },
         ];
 
-        const filas = d.prendas.map(p => `
-          <tr${p.sinCosteo ? ' class="rp-alerta"' : ''}>
-            <td class="rp-c">${esc(p.prod || p.itemNumero)}</td>
-            <td>${esc(p.descripcion)}</td>
-            <td class="rp-r">${nInt(p.stockTotal)} Unid.</td>
-            <td class="rp-r">Bs. ${nBs(p.costoMin)} - ${nBs(p.costoMax)}</td>
-            <td class="rp-r">Bs. ${nBs(p.precioMin)} - ${nBs(p.precioMax)}</td>
-            <td class="rp-r">Bs. ${nBs(p.valorCostoTotalBs)}</td>
-            <td class="rp-r">Bs. ${nBs(p.valorVentaTotalBs)}</td>
-            <td class="rp-r rp-pos">Bs. ${nBs(p.gananciaEstimadaBs)}</td>
-            <td class="rp-r">${(Number(p.margenPromedioPct) || 0).toFixed(1)}%</td>
-          </tr>`).join('');
+        const tituloReporte = isFijos ? nombreHoja : ('Costos de Producción · ' + nombreHoja);
 
         const html = `
-          ${encabezadoReporte('Resumen Ejecutivo de Costeo y Valorización', `${esc(ctx.ambito)} · Gestión ${esc(d.anio || '')}`, ctx, kpis)}
-          <table class="rp-tabla">
-            <thead><tr>
-              <th class="rp-c" style="width: 7%;">Prod</th>
-              <th style="width: 25%;">Prenda</th>
-              <th class="rp-r" style="width: 8%;">Stock</th>
-              <th class="rp-r" style="width: 12%;">Costo Prod. (Bs.)</th>
-              <th class="rp-r" style="width: 12%;">Precio Venta (Bs.)</th>
-              <th class="rp-r" style="width: 12%;">Valor Costo (Bs.)</th>
-              <th class="rp-r" style="width: 12%;">Valor Venta (Bs.)</th>
-              <th class="rp-r" style="width: 12%;">Ganancia (Bs.)</th>
-              <th class="rp-r" style="width: 8%;">Margen</th>
-            </tr></thead>
-            <tbody>${filas}</tbody>
-            <tfoot><tr>
-              <td colspan="2">TOTAL · ${nInt(d.productosCount)} prendas</td>
-              <td class="rp-r">${nInt(d.totalStockUnidades)} Unid.</td>
-              <td colspan="2"></td>
-              <td class="rp-r">Bs. ${nBs(d.totalValorCostoBs)}</td>
-              <td class="rp-r">Bs. ${nBs(d.totalValorVentaBs)}</td>
-              <td class="rp-r rp-pos">Bs. ${nBs(d.gananciaTotalBs)}</td>
-              <td class="rp-r">${(Number(d.margenPromedioGlobalPct) || 0).toFixed(1)}%</td>
-            </tr></tfoot>
-          </table>
-          ${(d.avisos && d.avisos.length) ? `<div class="rp-avisos"><strong>Observaciones:</strong> ${d.avisos.map(esc).join(' · ')}</div>` : ''}
-          ${pieReporte(ctx.escenario === 'descuento'
-          ? `Precios netos de un descuento comercial del ${(Number(d.descuentoSinFacturaPct) || 10).toFixed(0)}%.`
-          : 'Precios de lista.')}`;
+          ${encabezadoReporte(tituloReporte,
+          sub || (isFijos ? 'Desglose mensual de salarios fijos y gastos de operación' : 'Insumos y parámetros que alimentan el motor de costeo'), ctx, kpis)}
+          ${partes.map((p) => p.html).join('')}
+          ${pieReporte(isFijos ? 'Detalle de salarios y gastos operativos.' : 'Datos de entrada del motor de costeo.')}`;
 
-        emitirReporte('horizontal', html, { multipagina: true });
-      } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
-    }
-
-    /* ---------------- REPORTE 2 · COSTEO MULTITALLA ---------------- */
-    async function reporteMultitalla() {
-      try {
-        const sel = document.getElementById('select-matriz-producto');
-        const productoId = sel ? sel.value : null;
-        if (!productoId) return _sinDatos('Costeo Multitalla');
-
-        const res = await fetch('/api/calculo/matriz-prenda/' + productoId + '?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam());
-        const j = await res.json();
-        if (!j.success || !j.data || !j.data.length) return _sinDatos('Costeo Multitalla');
-
-        const t = j.data;
-        const ctx = contextoReporte();
-        const conF = modalidadFActual;
-        const descPct = typeof j.descuentoSinFacturaPct === 'number' ? j.descuentoSinFacturaPct : 10;
-
-        const ofrecidas = t.filter(x => x.seOfrece);
-        const totalIngresoRep = ofrecidas.reduce((a, b) => a + (Number(b.ingresoNetoEfectivo) || 0), 0);
-        const totalCostoRep = ofrecidas.reduce((a, b) => a + (Number(b.costoUnitarioNeto) || 0), 0);
-        const margenProm = totalIngresoRep > 0
-          ? ((totalIngresoRep - totalCostoRep) / totalIngresoRep) * 100
-          : (ofrecidas.length ? ofrecidas.reduce((a, b) => a + (conF ? (b.margenConFactura || 0) : (b.margenSinFactura || 0)), 0) / ofrecidas.length : 0);
-        const costos = ofrecidas.map(x => Number(x.costoUnitarioNeto) || 0).filter(Boolean);
-
-        const kpis = [
-          { titulo: 'Tallas ofrecidas', valor: ofrecidas.length + ' de ' + t.length },
-          { titulo: 'Costo unitario neto', valor: costos.length ? 'Bs. ' + nBs(Math.min(...costos)) + ' – ' + nBs(Math.max(...costos)) : '—' },
-          { titulo: 'Factor de complejidad', valor: String(j.producto.factorComplejidad ?? 1) },
-          { titulo: 'Margen promedio', valor: margenProm.toFixed(1) + '%', destacado: true },
-        ];
-
-        // Dos digitos, igual que en la pantalla: 02 y no 2. El reporte decia 2 y la pantalla 02.
-        const cols = t.map(x => `<th class="rp-r">${esc(fmtTalla(x.tallaCodigo))}</th>`).join('');
-        const fila = (etiqueta, get, clase) => `
-          <tr class="${clase || ''}">
-            <td class="rp-concepto">${esc(etiqueta)}</td>
-            ${t.map(x => `<td class="rp-r">${get(x)}</td>`).join('')}
-          </tr>`;
-        const num = (v) => (v === null || v === undefined || v === 0) ? '—' : nBs(v);
-        const pct = (v) => (v === null || v === undefined || v === 0) ? '—' : (Number(v)).toFixed(1) + '%';
-
-        const seccion = (titulo) => `<tr class="rp-seccion"><td colspan="${t.length + 1}">${esc(titulo)}</td></tr>`;
-
-        const html = `
-          ${encabezadoReporte(
-          'Costeo Multitalla · ' + j.producto.descripcion,
-          (j.producto.prod || ('Ítem #' + j.producto.itemNumero)) + ' · ' + (j.producto.modoCosteo === 'adquirido' ? 'Prenda adquirida / semiterminada' : 'Confección propia'),
-          ctx, kpis)}
-          <table class="rp-tabla rp-matriz">
-            <thead><tr><th class="rp-concepto">Concepto / Talla</th>${cols}</tr></thead>
-            <tbody>
-              <!-- LA FILA Cod. POS, que la pantalla muestra primera y el reporte no traia. Es el
-                   dato con el que se vuelve al punto de venta, y era exactamente el tipo de dato de
-                   pantalla que no se estaba exportando. -->
-              ${fila('Cod. POS', x => x.codigoPos ? esc(x.codigoPos) : '—', 'rp-tenue')}
-              ${seccion('Estructura del Costo Unitario de Producción (Neto)')}
-              ${fila('Peso con merma (g)', x => x.pesoConMerma ? (Number(x.pesoConMerma)).toFixed(1) : '—')}
-              ${fila('Costo de tela', x => num(x.costoTela))}
-              ${fila('Costo accesorios', x => num(x.costoAccesorios))}
-              ${fila('Mano de Obra Directa', x => num(x.costoManoObra))}
-              ${fila('Costos Indirectos Prorrateados', x => num(x.costoIndirecto))}
-              ${fila('Costo Unitario Neto', x => num(x.costoUnitarioNeto), 'rp-total')}
-              ${seccion(conF ? 'Precio al Público (precio de lista)' : 'Precio al Público (lista − ' + descPct.toFixed(0) + '% descuento comercial)')}
-              ${fila('Precio de Venta al Público (Bs.)', x => num(x.precioVenta), 'rp-precio')}
-              ${conF ? '' : fila('Precio de Lista (referencia)', x => num(x.precioLista), 'rp-tenue')}
-              ${seccion('Resultado Comercial Efectivo')}
-              ${fila('Ingreso Neto Efectivo', x => num(x.ingresoNetoEfectivo))}
-              ${conF ? fila('Utilidad Neta (Bs.)', x => num(x.utilidadConFactura)) : fila('Utilidad Neta (Bs.)', x => num(x.utilidadSinFactura))}
-              ${conF ? fila('Margen de Ganancia (%)', x => pct(x.margenConFactura), 'rp-total') : fila('Margen de Ganancia (%)', x => pct(x.margenSinFactura), 'rp-total')}
-              ${seccion('Existencias')}
-              ${fila('Se ofrece en esta talla', x => x.seOfrece ? 'Sí' : '—', 'rp-tenue')}
-            </tbody>
-          </table>
-          ${pieReporte((conF ? '' : `Precios netos de un descuento comercial del ${descPct.toFixed(0)}%. `) + 'Las tallas sin precio vigente no se ofrecen y se muestran sin costo prorrateado.')}`;
-
-        // `auto`: el ancho es una columna por talla, o sea que lo decide el colegio.
-        emitirReporte('auto', html);
+        emitirReporte(isFijos ? 'vertical' : 'auto', html);
       } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
     }
 
@@ -8358,13 +8669,14 @@
      * El costo aceptado es que el reporte depende del estado de la pantalla. Por eso
      * avisa si la hoja todavia no cargo, en vez de emitir una hoja vacia.
      */
+    const LOGO_MAYAKI_BASE64 = "data:image/png;base64,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";
     const HOJAS_PRODUCCION = {
       Tela: 'Telas y Precio por Gramo',
       PesoMatPrima: 'Peso de Materia Prima por Talla',
       Acc: 'Accesorios e Insumos',
       PreciosAdquisicion: 'Precios de Adquisición · Semiterminados',
       ManoDeObra: 'Mano de Obra por Prenda y Talla',
-      fijosXprenda: 'Costos Fijos por Prenda e Indirectos',
+      fijosXprenda: 'Salarios Fijos y Gastos Operativos Mensuales',
     };
 
     /** Texto imprimible de una celda: si tiene control de edicion, vale su valor. */
@@ -8384,27 +8696,41 @@
     }
 
     function _tablaAReporte(tabla) {
+      const clon = tabla.cloneNode(true);
+      clon.querySelectorAll('th, td').forEach((c) => {
+        if (c.textContent.trim() === 'Acción' || c.textContent.trim() === 'Orden' || c.querySelector('button')) {
+          c.remove();
+        }
+      });
+
       const filaCeldas = (tr, etiqueta) =>
         [...tr.children].map((c) => {
           const span = Number(c.getAttribute('colspan') || 1);
-          const alineaDer = /^[\s\-—]*[\d.,()%-]+[\s%]*$/.test(_textoCelda(c)) && _textoCelda(c) !== '';
-          return `<${etiqueta}${span > 1 ? ` colspan="${span}"` : ''} class="${alineaDer ? 'rp-r' : ''}">${esc(_textoCelda(c))}</${etiqueta}>`;
+          const txt = _textoCelda(c);
+          const alineaDer = /^[\s\-—]*[\d.,()%-]+[\s%]*$/.test(txt) && txt !== '';
+          return `<${etiqueta}${span > 1 ? ` colspan="${span}"` : ''} class="${alineaDer ? 'rp-r' : ''}">${esc(txt)}</${etiqueta}>`;
         }).join('');
 
-      const cab = [...tabla.querySelectorAll('thead tr')]
+      const cab = [...clon.querySelectorAll('thead tr')]
         .map((tr) => `<tr>${filaCeldas(tr, 'th')}</tr>`).join('');
-      const cuerpo = [...tabla.querySelectorAll('tbody tr')]
-        .filter((tr) => tr.offsetParent !== null || tr.getClientRects().length > 0)
+      const cuerpo = [...clon.querySelectorAll('tbody tr')]
         .map((tr) => `<tr>${filaCeldas(tr, 'td')}</tr>`).join('');
-      const pie = [...tabla.querySelectorAll('tfoot tr')]
-        .map((tr) => `<tr>${filaCeldas(tr, 'td')}</tr>`).join('');
+
+      let pieRows = [...clon.querySelectorAll('tfoot tr')];
+      if (typeof currentInputConcept !== 'undefined' && currentInputConcept === 'fijosXprenda') {
+        pieRows = pieRows.filter(tr => {
+          const txt = tr.textContent.toLowerCase();
+          return !txt.includes('volumen mensual') && !txt.includes('tarifa por punto');
+        });
+      }
+      const pie = pieRows.map((tr) => `<tr>${filaCeldas(tr, 'td')}</tr>`).join('');
 
       const cols = Math.max(
         0,
-        ...[...tabla.querySelectorAll('tr')].map((tr) =>
+        ...[...clon.querySelectorAll('tr')].map((tr) =>
           [...tr.children].reduce((n, c) => n + Number(c.getAttribute('colspan') || 1), 0))
       );
-      const filas = tabla.querySelectorAll('tbody tr').length;
+      const filas = clon.querySelectorAll('tbody tr').length;
 
       return {
         cols,
@@ -8422,12 +8748,23 @@
         const tab = document.getElementById('tab-inputs-excel');
         if (!tab) return _sinDatos('Costos de Producción');
 
-        // Solo lo que esta a la vista: en fijosXprenda la tabla principal se oculta
-        // y el contenido vive en otro contenedor.
-        const tablas = [...tab.querySelectorAll('table')].filter((t) => {
+        let tablas = [...tab.querySelectorAll('table')].filter((t) => {
           const r = t.getBoundingClientRect();
           return r.width > 0 && r.height > 0 && t.querySelectorAll('tbody tr').length > 0;
         });
+
+        if (currentInputConcept === 'fijosXprenda') {
+          const fijosWrapper = document.getElementById('fijos-split-wrapper');
+          if (fijosWrapper) {
+            const allInWrapper = [...fijosWrapper.querySelectorAll('table')];
+            if (allInWrapper.length >= 2) {
+              tablas = [allInWrapper[1]];
+            } else if (allInWrapper.length === 1) {
+              tablas = [allInWrapper[0]];
+            }
+          }
+        }
+
         if (!tablas.length) {
           return alert('La hoja todavía no terminó de cargar.\n\nEsperá a que aparezcan los datos y volvé a intentar.');
         }
@@ -8439,30 +8776,26 @@
         const totalFilas = partes.reduce((s, p) => s + p.filas, 0);
 
         const ctx = contextoReporte();
-        const nombreHoja = HOJAS_PRODUCCION[currentInputConcept] || currentInputConcept;
-        const sub = currentInputConcept === 'Acc'
+        const isFijos = currentInputConcept === 'fijosXprenda';
+        const nombreHoja = isFijos ? 'Salarios Fijos y Gastos Operativos Mensuales' : (HOJAS_PRODUCCION[currentInputConcept] || currentInputConcept);
+        const sub = isFijos ? null : (currentInputConcept === 'Acc'
           ? (currentAccSubView === 'aux' ? 'Tabla auxiliar de costos' : 'Matriz de uso por prenda')
-          : null;
+          : 'Insumos y parámetros que alimentan el motor de costeo');
 
-        const kpis = [
+        const kpis = isFijos ? null : [
           { titulo: 'Hoja', valor: nombreHoja },
           { titulo: 'Registros', valor: nInt(totalFilas) },
           { titulo: 'Columnas', valor: nInt(maxCols) },
         ];
 
-        const html = `
-          ${encabezadoReporte('Costos de Producción · ' + nombreHoja,
-          sub || 'Insumos y parámetros que alimentan el motor de costeo', ctx, kpis)}
-          ${partes.map((p) => p.html).join('')}
-          ${pieReporte('Datos de entrada del motor de costeo.')}`;
+        const tituloReporte = isFijos ? nombreHoja : ('Costos de Producción · ' + nombreHoja);
 
-        // `auto` en vez del recuento de columnas.
-        //
-        // La regla anterior era "mas de ocho columnas, horizontal". Acertaba, pero contaba columnas
-        // en vez de medir: ocho columnas de texto largo pueden no entrar y doce de dos digitos si.
-        // Medido en esta hoja: 10 columnas, 0,83 en vertical contra 1,00 en horizontal. La medicion
-        // llega a la misma conclusion y encima sigue valiendo cuando cambien los datos.
-        emitirReporte('auto', html);
+        const html = `
+          ${encabezadoReporte(tituloReporte, sub, ctx, kpis)}
+          ${partes.map((p) => p.html).join('')}
+          ${pieReporte(isFijos ? 'Detalle de salarios fijos y gastos operativos.' : 'Datos de entrada del motor de costeo.')}`;
+
+        emitirReporte(isFijos ? 'vertical' : 'auto', html);
       } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
     }
 

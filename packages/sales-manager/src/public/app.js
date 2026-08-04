@@ -34,8 +34,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const tabInfo = {
     'tab-importar': { title: 'Importador de Ventas & Productos', sub: 'Carga los archivos Excel exportados del POS para alimentar las métricas' },
     'tab-analisis': { title: 'Análisis Histórico de Ventas', sub: 'Métricas mensuales y trimestrales desglosadas por colegio, prenda y talla' },
-    'tab-proyeccion': { title: 'Proyección Inteligente entre Colegios', sub: 'Simulación de ventas cruzadas (ej. San Marcos → Cambridge)' },
-    'tab-simulador': { title: 'Simulador & Exportación en Excel', sub: 'Generador de reportes de ventas simuladas en formato idéntico a sales_export_*.xlsx' },
+    'tab-consolidado': { title: 'Registro Consolidado de Ventas', sub: 'Listado completo de ventas ordenado cronológicamente (de la más antigua a la más nueva)' },
+    'tab-proyeccion': { title: 'Análisis de Tendencias', sub: 'Comparativa de ventas cruzadas entre colegios' },
+    'tab-simulador': { title: 'Exportación de Datos en Excel', sub: 'Generador de reportes en formato compatible con Excel' },
   };
 
   navBtns.forEach((btn) => {
@@ -54,6 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (tabId === 'tab-analisis') cargarAnalytics();
+      if (tabId === 'tab-consolidado') cargarRegistroConsolidado();
       if (tabId === 'tab-importar') cargarResumenColegios();
     });
   });
@@ -169,7 +171,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tableBody) {
           tableBody.innerHTML = colegios.map((c) => {
             const pct = montoTotalGlobal > 0 ? Math.round((c.totalVentaBs / montoTotalGlobal) * 1000) / 10 : 0;
-            const precioProm = c.totalUnidades > 0 ? Math.round((c.totalVentaBs / c.totalUnidades) * 100) / 100 : 0;
 
             return `
               <tr>
@@ -177,8 +178,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td><strong style="color: var(--accent-green); font-size: 13px;">Bs. ${c.totalVentaBs.toLocaleString()}</strong></td>
                 <td><span class="badge badge-blue">${pct}%</span></td>
                 <td><span class="badge badge-green">${c.totalUnidades} u.</span></td>
-                <td>Bs. ${precioProm}</td>
-                <td>${c.totalFilas} registros</td>
               </tr>
             `;
           }).join('');
@@ -186,21 +185,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Renderizar Totalizados en tfoot
         if (tableFoot) {
-          const promGlobal = unidadesTotalGlobal > 0 ? (montoTotalGlobal / unidadesTotalGlobal) : 0;
           tableFoot.innerHTML = `
             <tr class="totals-row">
-              <td><span class="totals-label-badge">∑ TOTALES GLOBAL</span></td>
+              <td><span class="totals-label-badge">TOTAL GENERAL</span></td>
               <td><strong style="color: var(--accent-green); font-size: 13.5px;">Bs. ${montoTotalGlobal.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</strong></td>
               <td><span class="badge badge-blue" style="font-size: 11px; font-weight: 700;">100%</span></td>
               <td><span class="badge badge-green" style="font-size: 11px; font-weight: 700;">${unidadesTotalGlobal.toLocaleString()} u.</span></td>
-              <td><strong style="color: #60a5fa;">Bs. ${promGlobal.toFixed(2)}</strong></td>
-              <td><span style="color: #cbd5e1; font-weight: 600;">${filasTotalGlobal.toLocaleString()} registros</span></td>
             </tr>
           `;
         }
       } else {
         if (container) container.innerHTML = '<p class="text-muted">No hay ventas cargadas aún. Sube tu archivo sales_export_*.xlsx arriba.</p>';
-        if (tableBody) tableBody.innerHTML = '<tr><td colspan="6" class="text-center">No hay datos de ventas registrados para los filtros seleccionados</td></tr>';
+        if (tableBody) tableBody.innerHTML = '<tr><td colspan="4" class="text-center">No hay datos de ventas registrados para los filtros seleccionados</td></tr>';
         if (tableFoot) tableFoot.innerHTML = '';
         document.getElementById('kpi-total-monto').textContent = 'Bs. 0';
         document.getElementById('kpi-top-colegio').textContent = '-';
@@ -639,13 +635,304 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // 4. REGISTRO CONSOLIDADO DE VENTAS
+  let paginaActualConsolidado = 1;
+
+  async function cargarRegistroConsolidado(colegioFiltro, anioFiltro, page = 1) {
+    paginaActualConsolidado = page;
+    const tableBody = document.querySelector('#table-registro-consolidado tbody');
+    const tableFoot = document.querySelector('#table-registro-consolidado tfoot');
+    const lblTotal = document.getElementById('lbl-total-filas-consolidado');
+    const paginationControls = document.getElementById('pagination-controls-consolidado');
+    const limitSelect = document.getElementById('select-limit-consolidado');
+
+    const colegio = colegioFiltro !== undefined ? colegioFiltro : (document.getElementById('filter-colegio-consolidado')?.value || '');
+    const anio = anioFiltro !== undefined ? anioFiltro : (document.getElementById('filter-anio-consolidado')?.value || '2026');
+    const limit = limitSelect ? parseInt(limitSelect.value, 10) : 25;
+
+    if (!tableBody) return;
+    tableBody.innerHTML = '<tr><td colspan="11" class="text-center">Cargando página...</td></tr>';
+
+    try {
+      let url = `${API_BASE}/consolidado?colegio=${encodeURIComponent(colegio)}&page=${page}&limit=${limit}`;
+      if (anio) url += `&anio=${anio}`;
+
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (data.success && data.data && data.data.length > 0) {
+        if (lblTotal) lblTotal.textContent = `${data.count} registros (Página ${data.page} de ${data.totalPages})`;
+
+        tableBody.innerHTML = data.data.map((v) => `
+          <tr>
+            <td class="text-center"><strong>${v.nPedido}</strong></td>
+            <td><span class="badge badge-green">${v.estado}</span></td>
+            <td style="white-space: nowrap;">${v.fecha}</td>
+            <td>${v.usuario}</td>
+            <td>${v.cliente}</td>
+            <td>${v.nroDoc}</td>
+            <td><strong>${v.nombreProducto}</strong></td>
+            <td class="text-right">${String(Math.round(v.cantidad)).padStart(2, '0')}</td>
+            <td class="text-right">Bs. ${v.precioUnitario.toFixed(1)}</td>
+            <td class="text-right">Bs. ${v.totalDescuento.toFixed(1)}</td>
+            <td class="text-right"><strong style="color: var(--accent-green);">Bs. ${v.totalCobrado.toFixed(1)}</strong></td>
+          </tr>
+        `).join('');
+
+        if (tableFoot) {
+          tableFoot.innerHTML = `
+            <tr class="totals-row">
+              <td colspan="7"><strong>TOTAL GENERAL (${data.count} registros)</strong></td>
+              <td class="text-right"><strong>${data.totales.totalUnidades} u.</strong></td>
+              <td class="text-right">-</td>
+              <td class="text-right"><strong>Bs. ${data.totales.totalDescuento.toFixed(1)}</strong></td>
+              <td class="text-right"><strong style="color: var(--accent-green); font-size: 13.5px;">Bs. ${data.totales.totalCobrado.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</strong></td>
+            </tr>
+          `;
+        }
+
+        // Renderizar controles de paginación
+        if (paginationControls) {
+          const prevDisabled = data.page <= 1 ? 'disabled' : '';
+          const nextDisabled = data.page >= data.totalPages ? 'disabled' : '';
+
+          paginationControls.innerHTML = `
+            <button class="btn btn-sm btn-secondary" id="btn-prev-consolidado" ${prevDisabled}>◀ Anterior</button>
+            <span style="font-size: 13px; font-weight: 600; padding: 0 8px; color: var(--text-primary);">Página ${data.page} de ${data.totalPages}</span>
+            <button class="btn btn-sm btn-secondary" id="btn-next-consolidado" ${nextDisabled}>Siguiente ▶</button>
+          `;
+
+          const btnPrev = document.getElementById('btn-prev-consolidado');
+          if (btnPrev && !prevDisabled) {
+            btnPrev.addEventListener('click', () => {
+              cargarRegistroConsolidado(colegio, anio, data.page - 1);
+            });
+          }
+
+          const btnNext = document.getElementById('btn-next-consolidado');
+          if (btnNext && !nextDisabled) {
+            btnNext.addEventListener('click', () => {
+              cargarRegistroConsolidado(colegio, anio, data.page + 1);
+            });
+          }
+        }
+      } else {
+        if (lblTotal) lblTotal.textContent = '0 registros';
+        tableBody.innerHTML = '<tr><td colspan="11" class="text-center">No hay registros de ventas para los filtros seleccionados</td></tr>';
+        if (tableFoot) tableFoot.innerHTML = '';
+        if (paginationControls) paginationControls.innerHTML = '';
+      }
+    } catch (e) {
+      tableBody.innerHTML = `<tr><td colspan="11" class="text-center text-muted">Error al cargar consolidado: ${e.message}</td></tr>`;
+    }
+  }
+
+  const limitSelectConsolidado = document.getElementById('select-limit-consolidado');
+  if (limitSelectConsolidado) {
+    limitSelectConsolidado.addEventListener('change', () => {
+      const colegio = document.getElementById('filter-colegio-consolidado')?.value || '';
+      const anio = document.getElementById('filter-anio-consolidado')?.value || '';
+      cargarRegistroConsolidado(colegio, anio, 1);
+    });
+  }
+
+  const btnFiltroConsolidado = document.getElementById('btn-aplicar-filtros-consolidado');
+  if (btnFiltroConsolidado) {
+    btnFiltroConsolidado.addEventListener('click', () => {
+      const colegio = document.getElementById('filter-colegio-consolidado')?.value || '';
+      const anio = document.getElementById('filter-anio-consolidado')?.value || '';
+      cargarRegistroConsolidado(colegio, anio, 1);
+    });
+  }
+
+  const btnExcelConsolidado = document.getElementById('btn-excel-consolidado');
+  if (btnExcelConsolidado) {
+    btnExcelConsolidado.addEventListener('click', () => {
+      const colegio = document.getElementById('filter-colegio-consolidado')?.value || '';
+      const anio = document.getElementById('filter-anio-consolidado')?.value || '';
+      let url = `${API_BASE}/exportar-consolidado-excel?colegio=${encodeURIComponent(colegio)}`;
+      if (anio) url += `&anio=${anio}`;
+      window.location.href = url;
+    });
+  }
+
+  const btnPdfConsolidado = document.getElementById('btn-pdf-consolidado');
+  if (btnPdfConsolidado) {
+    btnPdfConsolidado.addEventListener('click', () => {
+      const colegio = document.getElementById('filter-colegio-consolidado')?.value || '';
+      const anio = document.getElementById('filter-anio-consolidado')?.value || '';
+      let url = `${API_BASE}/imprimir-consolidado?colegio=${encodeURIComponent(colegio)}`;
+      if (anio) url += `&anio=${anio}`;
+      imprimirDirecto(url);
+    });
+  }
+
+  const btnPdfResumenMensual = document.getElementById('btn-pdf-resumen-mensual');
+  if (btnPdfResumenMensual) {
+    btnPdfResumenMensual.addEventListener('click', () => {
+      const anio = document.getElementById('filter-anio-consolidado')?.value || '2026';
+      let url = `${API_BASE}/imprimir-resumen-mensual?anio=${anio}`;
+      imprimirDirecto(url);
+    });
+  }
+
+  // Liquidación de Pagos a Confeccionistas
+  async function cargarLiquidacionTalleristas() {
+    const talleristaSelect = document.getElementById('filter-tallerista');
+    const origenSelect = document.getElementById('filter-tallerista-origen');
+    const tableBody = document.querySelector('#table-talleristas tbody');
+    const tableFoot = document.querySelector('#table-talleristas tfoot');
+    const lblUnidades = document.getElementById('lbl-talleristas-unidades');
+    const lblMontoBs = document.getElementById('lbl-talleristas-monto-bs');
+    const lblCount = document.getElementById('lbl-talleristas-count');
+    const lblCriterioSub = document.getElementById('lbl-talleristas-criterio-sub');
+
+    const tallerista = talleristaSelect ? talleristaSelect.value : 'todos';
+    const origen = origenSelect ? origenSelect.value : 'total';
+
+    if (lblCriterioSub) {
+      lblCriterioSub.textContent = origen === 'total' ? 'Total (Ventas + Stock)' : (origen === 'ventas' ? 'Solo Unidades Vendidas' : 'Solo Stock Actual');
+    }
+
+    if (!tableBody) return;
+    tableBody.innerHTML = '<tr><td colspan="9" class="text-center">Cargando liquidación de confeccionistas...</td></tr>';
+
+    try {
+      const res = await fetch(`${API_BASE}/talleristas?tallerista=${encodeURIComponent(tallerista)}&origen=${origen}&anio=2026`);
+      const json = await res.json();
+
+      if (!json.success || !json.data) {
+        tableBody.innerHTML = '<tr><td colspan="9" class="text-center text-danger">Error al cargar liquidación.</td></tr>';
+        return;
+      }
+
+      if (lblUnidades) lblUnidades.textContent = (json.kpis.totalUnidadesGlobal || 0).toLocaleString() + ' u.';
+      if (lblMontoBs) lblMontoBs.textContent = 'Bs. ' + (json.kpis.montoTotalGlobalBs || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (lblCount) lblCount.textContent = json.kpis.totalTalleristas || 0;
+
+      const grupos = json.data;
+      if (grupos.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="9" class="text-center">No se encontraron prendas para este confeccionista.</td></tr>';
+        if (tableFoot) tableFoot.innerHTML = '';
+        return;
+      }
+
+      let rowsHtml = '';
+      let globalUnidades = 0;
+      let globalMontoBs = 0;
+
+      grupos.forEach((grupo) => {
+        rowsHtml += `
+          <tr style="background: rgba(15, 76, 129, 0.25); font-weight: 800; border-top: 2px solid var(--accent-primary);">
+            <td colspan="9" style="color: var(--accent-primary); font-size: 14px; padding: 10px 12px;">
+              🧵 TALLERISTA / ESPECIALIDAD: ${grupo.confeccionista.toUpperCase()} — Total: ${grupo.totalUnidades.toLocaleString()} u. | Bs. ${grupo.montoTotalBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+            </td>
+          </tr>
+        `;
+
+        grupo.prendas.forEach((p, idx) => {
+          globalUnidades += p.unidadesTotal;
+          globalMontoBs += p.montoPagarBs;
+
+          const optionsConf = [
+            'Camisero',
+            'Polerero / Deportivo',
+            'Chamarrero',
+            'Pantalonero',
+            'Otros Confeccionistas'
+          ].map(c => `<option value="${c}" ${p.confeccionista === c ? 'selected' : ''}>${c}</option>`).join('');
+
+          rowsHtml += `
+            <tr>
+              <td class="text-center" style="font-weight:600;">${idx + 1}</td>
+              <td><strong>${p.descripcion}</strong></td>
+              <td><span class="badge" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-main); font-size: 11px;">${p.colegioGrupo}</span></td>
+              <td>
+                <select class="select-input" style="padding: 3px 6px; font-size: 12px; width: 100%; font-weight: 600;" onchange="window.reasignarConfeccionistaLive('${p.productoId}', this.value)">
+                  ${optionsConf}
+                </select>
+              </td>
+              <td class="text-right">${p.cantGrupo1} u. <small style="color:var(--text-secondary);">(Bs.${p.rateGrupo1})</small></td>
+              <td class="text-right">${p.cantGrupo2} u. <small style="color:var(--text-secondary);">(Bs.${p.rateGrupo2})</small></td>
+              <td class="text-right">${p.cantGrupo3} u. <small style="color:var(--text-secondary);">(Bs.${p.rateGrupo3})</small></td>
+              <td class="text-right"><strong>${p.unidadesTotal}</strong></td>
+              <td class="text-right text-success" style="font-weight: 800;">Bs. ${p.montoPagarBs.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            </tr>
+          `;
+        });
+      });
+
+      tableBody.innerHTML = rowsHtml;
+
+      if (tableFoot) {
+        tableFoot.innerHTML = `
+          <tr style="background: rgba(15, 76, 129, 0.35); font-weight: 800; font-size: 14px;">
+            <td colspan="3">TOTAL GENERAL A CANCELAR EN COSTURA EXTERNA</td>
+            <td colspan="4" class="text-right">${globalUnidades.toLocaleString()} u. confeccionadas</td>
+            <td colspan="2" class="text-right text-success" style="font-size: 15px;">Bs. ${globalMontoBs.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          </tr>
+        `;
+      }
+    } catch (err) {
+      console.error('Error al cargar liquidación de confeccionistas:', err);
+      tableBody.innerHTML = '<tr><td colspan="9" class="text-center text-danger">Error de conexión al obtener talleristas.</td></tr>';
+    }
+  }
+
+  window.reasignarConfeccionistaLive = async function(productoId, confeccionista) {
+    try {
+      const res = await fetch(`${API_BASE}/talleristas/asignar`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productoId, confeccionista })
+      });
+      const json = await res.json();
+      if (json.success) {
+        cargarLiquidacionTalleristas();
+      } else {
+        alert('Error al asignar confeccionista: ' + (json.error || 'Desconocido'));
+      }
+    } catch (e) {
+      console.error('Error reasignando confeccionista:', e);
+    }
+  };
+
+  const filterTallerista = document.getElementById('filter-tallerista');
+  if (filterTallerista) filterTallerista.addEventListener('change', cargarLiquidacionTalleristas);
+
+  const filterTalleristaOrigen = document.getElementById('filter-tallerista-origen');
+  if (filterTalleristaOrigen) filterTalleristaOrigen.addEventListener('change', cargarLiquidacionTalleristas);
+
+  const btnImprimirTalleristas = document.getElementById('btn-imprimir-talleristas');
+  if (btnImprimirTalleristas) {
+    btnImprimirTalleristas.addEventListener('click', () => {
+      const tallerista = document.getElementById('filter-tallerista')?.value || 'todos';
+      const origen = document.getElementById('filter-tallerista-origen')?.value || 'total';
+      let url = `${API_BASE}/imprimir-talleristas?tallerista=${encodeURIComponent(tallerista)}&origen=${origen}&anio=2026`;
+      imprimirDirecto(url);
+    });
+  }
+
+  // Hook para cargar cuando se abre la pestaña de talleristas
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.getAttribute('data-tab') === 'tab-talleristas') {
+        cargarLiquidacionTalleristas();
+      }
+    });
+  });
+
   // Botón Actualizar
   document.getElementById('btn-refresh-stats').addEventListener('click', () => {
     cargarResumenColegios();
     cargarAnalytics();
+    cargarRegistroConsolidado();
+    cargarLiquidacionTalleristas();
   });
 
   // Inicial
   cargarResumenColegios();
   cargarAnalytics();
+  cargarRegistroConsolidado();
+  cargarLiquidacionTalleristas();
 });
