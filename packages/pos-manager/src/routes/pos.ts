@@ -161,38 +161,49 @@ app.get('/exportar/pos-38', async (c) => {
 app.get('/imprimir/:grupo', async (c) => {
   try {
     const grupo = c.req.param('grupo');
+    const tipo = c.req.query('tipo') || 'precios'; // 'precios' o 'stock'
     if (grupo === POS_GRUPO_REFERENCIA) {
       return c.html('<h3>El grupo de referencia no genera vista de impresión.</h3>');
     }
     const matriz = await obtenerMatrizGrupo(grupo);
+
+    const titulo = tipo === 'precios' ? 'Matriz de Precios' : 'Matriz de Inventario';
 
     const html = `
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Matriz de Precios y Stock - ${grupo}</title>
+  <title>${titulo} - ${grupo}</title>
   <style>
-    body { font-family: system-ui, sans-serif; padding: 20px; color: #000; }
-    h1 { margin-bottom: 5px; }
-    p { color: #555; margin-top: 0; }
-    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-    th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: 12px; text-align: center; }
+    body { font-family: system-ui, sans-serif; padding: 20px; color: #000; font-size: 11px; }
+    h1 { margin-bottom: 5px; font-size: 16px; }
+    p { color: #555; margin-top: 0; font-size: 11px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; }
+    th, td { border: 1px solid #ccc; padding: 4px 6px; font-size: 10px; text-align: left; }
     th { background: #f0f0f0; }
-    th.prod, td.prod { text-align: left; font-weight: bold; }
+    th.num, td.num { width: 25px; min-width: 25px; max-width: 25px; text-align: center; }
+    th.prod, td.prod { width: 220px; min-width: 220px; max-width: 220px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     @media print {
       body { padding: 0; }
-      @page { size: landscape; margin: 10mm; }
+      @page { size: letter landscape; margin: 10mm; }
     }
   </style>
 </head>
 <body>
-  <h1>Matriz POS - ${grupo}</h1>
-  <p>Fecha de emisión: ${new Date().toLocaleDateString('es-BO')}</p>
-  <table>
+  <div style="display: flex; align-items: center; margin-bottom: 10px;">
+    <div style="margin-right: 20px;">
+      <img src="/logo.png" style="height: 40px; width: auto; object-fit: contain;" alt="MODA mayaki" />
+    </div>
+    <div>
+      <h1 style="margin-bottom: 2px;">${titulo} - ${grupo}</h1>
+      <p style="margin-top: 0; margin-bottom: 0;">Fecha de emisión: ${new Date().toLocaleDateString('es-BO')}</p>
+    </div>
+  </div>
+  <table style="margin-top: 0;">
     <thead>
       <tr>
-        <th>N°</th>
+        <th class="num">N°</th>
         <th class="prod">Producto</th>
         ${matriz.columnasTallas.map((t) => `<th>${t}</th>`).join('')}
       </tr>
@@ -202,13 +213,20 @@ app.get('/imprimir/:grupo', async (c) => {
         .map(
           (f, idx) => `
         <tr>
-          <td>${idx + 1}</td>
+          <td class="num">${idx + 1}</td>
           <td class="prod">${f.nombreLimpio}</td>
           ${matriz.columnasTallas
             .map((t) => {
               const celda = f.celdas[t];
-              if (celda && celda.precioPos !== null) {
-                return `<td><b>${celda.precioPos} Bs</b><br><small>${celda.cantInvGeneral ?? '-'} un</small></td>`;
+              if (celda) {
+                if (tipo === 'precios' && celda.precioPos !== null && celda.precioPos !== undefined) {
+                  return `<td>${celda.precioPos}</td>`;
+                } else if (tipo === 'stock' && celda.cantInvGeneral !== null && celda.cantInvGeneral !== undefined) {
+                  if (celda.tipoInventario === 'SIN INVENTARIO') {
+                    return `<td>SIN INV</td>`;
+                  }
+                  return `<td>${celda.cantInvGeneral}</td>`;
+                }
               }
               return '<td>-</td>';
             })
