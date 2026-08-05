@@ -638,6 +638,62 @@ document.addEventListener('DOMContentLoaded', () => {
   // 4. REGISTRO CONSOLIDADO DE VENTAS
   let paginaActualConsolidado = 1;
 
+  // Preset selector de rango de fechas
+  const selectPreset = document.getElementById('select-rango-preset');
+  const inputFechaInicio = document.getElementById('filter-fecha-inicio-consolidado');
+  const inputFechaFin = document.getElementById('filter-fecha-fin-consolidado');
+
+  function padZero(num) {
+    return String(num).padStart(2, '0');
+  }
+
+  function formatDDMMYYYY(date) {
+    const d = padZero(date.getDate());
+    const m = padZero(date.getMonth() + 1);
+    const y = date.getFullYear();
+    return `${d}/${m}/${y}`;
+  }
+
+  if (selectPreset) {
+    selectPreset.addEventListener('change', () => {
+      const val = selectPreset.value;
+      const hoy = new Date();
+      const year = hoy.getFullYear();
+      const month = hoy.getMonth();
+
+      if (val === 'todo') {
+        if (inputFechaInicio) inputFechaInicio.value = '';
+        if (inputFechaFin) inputFechaFin.value = '';
+      } else if (val === 'mes-actual') {
+        const inicio = new Date(year, month, 1);
+        const fin = new Date(year, month + 1, 0);
+        if (inputFechaInicio) inputFechaInicio.value = formatDDMMYYYY(inicio);
+        if (inputFechaFin) inputFechaFin.value = formatDDMMYYYY(fin);
+      } else if (val === 'ultimo-mes') {
+        const inicio = new Date(year, month - 1, 1);
+        const fin = new Date(year, month, 0);
+        if (inputFechaInicio) inputFechaInicio.value = formatDDMMYYYY(inicio);
+        if (inputFechaFin) inputFechaFin.value = formatDDMMYYYY(fin);
+      } else if (val === 'ultimos-3-meses') {
+        const inicio = new Date(year, month - 3, 1);
+        const fin = new Date(year, month, 0);
+        if (inputFechaInicio) inputFechaInicio.value = formatDDMMYYYY(inicio);
+        if (inputFechaFin) inputFechaFin.value = formatDDMMYYYY(fin);
+      } else if (val === 'ultimos-6-meses') {
+        const inicio = new Date(year, month - 6, 1);
+        const fin = new Date(year, month, 0);
+        if (inputFechaInicio) inputFechaInicio.value = formatDDMMYYYY(inicio);
+        if (inputFechaFin) inputFechaFin.value = formatDDMMYYYY(fin);
+      } else if (val === 'este-anio') {
+        const inicio = new Date(year, 0, 1);
+        const fin = new Date(year, 11, 31);
+        if (inputFechaInicio) inputFechaInicio.value = formatDDMMYYYY(inicio);
+        if (inputFechaFin) inputFechaFin.value = formatDDMMYYYY(fin);
+      }
+      cargarRegistroConsolidado(undefined, undefined, 1);
+    });
+  }
+
   async function cargarRegistroConsolidado(colegioFiltro, anioFiltro, page = 1) {
     paginaActualConsolidado = page;
     const tableBody = document.querySelector('#table-registro-consolidado tbody');
@@ -647,7 +703,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const limitSelect = document.getElementById('select-limit-consolidado');
 
     const colegio = colegioFiltro !== undefined ? colegioFiltro : (document.getElementById('filter-colegio-consolidado')?.value || '');
-    const anio = anioFiltro !== undefined ? anioFiltro : (document.getElementById('filter-anio-consolidado')?.value || '2026');
+    const anio = anioFiltro !== undefined ? anioFiltro : (document.getElementById('filter-anio-consolidado')?.value || '');
+    const fechaInicio = document.getElementById('filter-fecha-inicio-consolidado')?.value || '';
+    const fechaFin = document.getElementById('filter-fecha-fin-consolidado')?.value || '';
     const limit = limitSelect ? parseInt(limitSelect.value, 10) : 25;
 
     if (!tableBody) return;
@@ -656,6 +714,8 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       let url = `${API_BASE}/consolidado?colegio=${encodeURIComponent(colegio)}&page=${page}&limit=${limit}`;
       if (anio) url += `&anio=${anio}`;
+      if (fechaInicio) url += `&fechaInicio=${encodeURIComponent(fechaInicio)}`;
+      if (fechaFin) url += `&fechaFin=${encodeURIComponent(fechaFin)}`;
 
       const res = await fetch(url);
       const data = await res.json();
@@ -750,8 +810,12 @@ document.addEventListener('DOMContentLoaded', () => {
     btnExcelConsolidado.addEventListener('click', () => {
       const colegio = document.getElementById('filter-colegio-consolidado')?.value || '';
       const anio = document.getElementById('filter-anio-consolidado')?.value || '';
+      const fechaInicio = document.getElementById('filter-fecha-inicio-consolidado')?.value || '';
+      const fechaFin = document.getElementById('filter-fecha-fin-consolidado')?.value || '';
       let url = `${API_BASE}/exportar-consolidado-excel?colegio=${encodeURIComponent(colegio)}`;
       if (anio) url += `&anio=${anio}`;
+      if (fechaInicio) url += `&fechaInicio=${encodeURIComponent(fechaInicio)}`;
+      if (fechaFin) url += `&fechaFin=${encodeURIComponent(fechaFin)}`;
       window.location.href = url;
     });
   }
@@ -761,8 +825,12 @@ document.addEventListener('DOMContentLoaded', () => {
     btnPdfConsolidado.addEventListener('click', () => {
       const colegio = document.getElementById('filter-colegio-consolidado')?.value || '';
       const anio = document.getElementById('filter-anio-consolidado')?.value || '';
+      const fechaInicio = document.getElementById('filter-fecha-inicio-consolidado')?.value || '';
+      const fechaFin = document.getElementById('filter-fecha-fin-consolidado')?.value || '';
       let url = `${API_BASE}/imprimir-consolidado?colegio=${encodeURIComponent(colegio)}`;
       if (anio) url += `&anio=${anio}`;
+      if (fechaInicio) url += `&fechaInicio=${encodeURIComponent(fechaInicio)}`;
+      if (fechaFin) url += `&fechaFin=${encodeURIComponent(fechaFin)}`;
       imprimirDirecto(url);
     });
   }

@@ -487,12 +487,14 @@ app.post('/exportar-ventas-simuladas', async (c) => {
 app.get('/consolidado', async (c) => {
   try {
     const colegio = c.req.query('colegio');
+    const fechaInicio = c.req.query('fechaInicio');
+    const fechaFin = c.req.query('fechaFin');
     const anioStr = c.req.query('anio');
-    const anio = anioStr === '' ? undefined : (anioStr ? parseInt(anioStr, 10) : 2026);
+    const anio = (fechaInicio || fechaFin) ? (anioStr ? parseInt(anioStr, 10) : undefined) : (anioStr === '' ? undefined : (anioStr ? parseInt(anioStr, 10) : 2026));
     const page = parseInt(c.req.query('page') || '1', 10);
     const limit = parseInt(c.req.query('limit') || '25', 10);
 
-    const todas = await obtenerVentasConsolidadas(colegio, anio);
+    const todas = await obtenerVentasConsolidadas(colegio, anio, fechaInicio, fechaFin);
 
     let totalCobrado = 0;
     let totalUnidades = 0;
@@ -532,10 +534,12 @@ app.get('/consolidado', async (c) => {
 app.get('/exportar-consolidado-excel', async (c) => {
   try {
     const colegio = c.req.query('colegio');
+    const fechaInicio = c.req.query('fechaInicio');
+    const fechaFin = c.req.query('fechaFin');
     const anioStr = c.req.query('anio');
-    const anio = anioStr === '' ? undefined : (anioStr ? parseInt(anioStr, 10) : 2026);
+    const anio = (fechaInicio || fechaFin) ? (anioStr ? parseInt(anioStr, 10) : undefined) : (anioStr === '' ? undefined : (anioStr ? parseInt(anioStr, 10) : 2026));
 
-    const ventas = await obtenerVentasConsolidadas(colegio, anio);
+    const ventas = await obtenerVentasConsolidadas(colegio, anio, fechaInicio, fechaFin);
 
     const excelRows = ventas.map((v) => ({
       'pedido': v.nPedido,
@@ -569,11 +573,13 @@ app.get('/exportar-consolidado-excel', async (c) => {
 app.get('/imprimir-consolidado', async (c) => {
   try {
     const colegio = c.req.query('colegio');
+    const fechaInicio = c.req.query('fechaInicio');
+    const fechaFin = c.req.query('fechaFin');
     const anioStr = c.req.query('anio');
-    const anio = anioStr === '' ? undefined : (anioStr ? parseInt(anioStr, 10) : 2026);
+    const anio = (fechaInicio || fechaFin) ? (anioStr ? parseInt(anioStr, 10) : undefined) : (anioStr === '' ? undefined : (anioStr ? parseInt(anioStr, 10) : 2026));
 
-    const ventas = await obtenerVentasConsolidadas(colegio, anio);
-    const rango = await obtenerRangoFechasVentas(colegio, anio);
+    const ventas = await obtenerVentasConsolidadas(colegio, anio, fechaInicio, fechaFin);
+    const rango = await obtenerRangoFechasVentas(colegio, anio, fechaInicio, fechaFin);
 
     let totalVendidoSum = 0;
     ventas.forEach((v) => { totalVendidoSum += v.totalCobrado || 0; });
@@ -602,7 +608,7 @@ app.get('/imprimir-consolidado', async (c) => {
       padding: 0;
       color: #0f172a;
       background: #fff;
-      font-size: 10pt;
+      font-size: 9pt;
       line-height: 1.2;
     }
     .report-header {
@@ -617,19 +623,19 @@ app.get('/imprimir-consolidado', async (c) => {
     }
     .brand-logo-title {
       font-family: 'Outfit', sans-serif;
-      font-size: 20pt;
+      font-size: 19pt;
       font-weight: 800;
       color: #be123c;
       line-height: 0.85;
       letter-spacing: -0.5pt;
     }
     .brand-logo-sub {
-      font-size: 10.5pt;
+      font-size: 9.5pt;
       font-weight: 700;
       color: #0f172a;
     }
     .report-title-center {
-      font-size: 13pt;
+      font-size: 12pt;
       font-weight: 800;
       color: #0f172a;
       text-align: center;
@@ -639,7 +645,8 @@ app.get('/imprimir-consolidado', async (c) => {
       width: 100%;
       border-collapse: collapse;
       margin-top: 4px;
-      font-size: 10pt;
+      font-size: 9pt;
+      table-layout: fixed;
     }
     th {
       background: #0f4c81;
@@ -647,21 +654,26 @@ app.get('/imprimir-consolidado', async (c) => {
       padding: 4.5pt 4pt;
       text-align: left;
       font-weight: 700;
-      font-size: 10pt;
+      font-size: 9pt;
       border: 0.8pt solid #0f4c81;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     td {
       border: 0.8pt solid #cbd5e1;
       padding: 3.5pt 4pt;
       vertical-align: middle;
       color: #0f172a;
-      font-size: 10pt;
+      font-size: 9pt;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     tr:nth-child(even) { background: #f8fafc; }
     .num { text-align: right; font-variant-numeric: tabular-nums; }
     .center { text-align: center; }
+    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     .summary-box-wrap {
       display: flex;
@@ -717,41 +729,41 @@ app.get('/imprimir-consolidado', async (c) => {
   <table>
     <thead>
       <tr>
-        <th class="center" style="width: 6%;">pedido</th>
-        <th style="width: 7%;">estado</th>
+        <th class="center" style="width: 6.5%;">pedido</th>
+        <th style="width: 8.5%;">estado</th>
         <th style="width: 14%;">fecha</th>
-        <th style="width: 11%;">usuario</th>
-        <th style="width: 6%;">cliente</th>
-        <th style="width: 6%;">nro_doc</th>
-        <th style="width: 26%;">nombre_del_producto</th>
-        <th class="num" style="width: 6%;">cantidad</th>
-        <th class="num" style="width: 6%;">precio_unit</th>
-        <th class="num" style="width: 6%;">total_descuento</th>
-        <th class="num" style="width: 6%;">total_cobrado</th>
+        <th style="width: 12%;">usuario</th>
+        <th class="truncate" style="width: 6%;">cliente</th>
+        <th class="truncate" style="width: 6%;">nro_doc</th>
+        <th style="width: 29%;">nombre_del_producto</th>
+        <th class="num" style="width: 4.5%;">cantidad</th>
+        <th class="num" style="width: 4.5%;">precio_unit</th>
+        <th class="num" style="width: 4.5%;">total_descuento</th>
+        <th class="num" style="width: 4.5%;">total_cobrado</th>
       </tr>
     </thead>
     <tbody>
       ${ventas.map((v) => {
-        const cantStr = String(Math.round(v.cantidad)).padStart(2, '0');
-        const puStr = v.precioUnitario.toFixed(1);
-        const descStr = v.totalDescuento.toFixed(1);
-        const cobStr = v.totalCobrado.toFixed(1);
-        return `
+      const cantStr = String(Math.round(v.cantidad)).padStart(2, '0');
+      const puStr = v.precioUnitario.toFixed(1);
+      const descStr = v.totalDescuento.toFixed(1);
+      const cobStr = v.totalCobrado.toFixed(1);
+      return `
           <tr>
             <td class="center"><strong>${v.nPedido}</strong></td>
             <td>${v.estado}</td>
             <td>${v.fecha}</td>
             <td>${v.usuario}</td>
-            <td>${v.cliente}</td>
-            <td>${v.nroDoc}</td>
-            <td><strong>${v.nombreProducto}</strong></td>
+            <td class="truncate">${v.cliente}</td>
+            <td class="truncate">${v.nroDoc}</td>
+            <td class="truncate"><strong>${v.nombreProducto}</strong></td>
             <td class="num">${cantStr}</td>
             <td class="num">${puStr}</td>
             <td class="num">${descStr}</td>
             <td class="num"><strong>${cobStr}</strong></td>
           </tr>
         `;
-      }).join('')}
+    }).join('')}
     </tbody>
   </table>
 
@@ -761,15 +773,12 @@ app.get('/imprimir-consolidado', async (c) => {
         <td class="label">Total Vendido</td>
         <td class="val">${totalVendidoSum.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</td>
       </tr>
-      <tr>
-        <td class="label">Comisión</td>
-        <td class="val">${comision.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</td>
-      </tr>
+
     </table>
   </div>
 
   <div class="page-footer-html">
-    Página 1 de 1
+   
   </div>
 </body>
 </html>`;
@@ -948,8 +957,8 @@ app.get('/imprimir-resumen-mensual', async (c) => {
         </thead>
         <tbody>
           ${m.colegios.map((c) => {
-            const pct = m.totalVentaBsMes > 0 ? ((c.montoBs / m.totalVentaBsMes) * 100).toFixed(1) : '0.0';
-            return `
+      const pct = m.totalVentaBsMes > 0 ? ((c.montoBs / m.totalVentaBsMes) * 100).toFixed(1) : '0.0';
+      return `
               <tr>
                 <td><strong>${c.colegioGrupo}</strong></td>
                 <td class="num">${c.unidades.toLocaleString()} u.</td>
@@ -957,7 +966,7 @@ app.get('/imprimir-resumen-mensual', async (c) => {
                 <td class="num">${pct}%</td>
               </tr>
             `;
-          }).join('')}
+    }).join('')}
         </tbody>
         <tfoot>
           <tr>

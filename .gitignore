@@ -18,6 +18,7 @@ turbo
 paridad.csv
 catalogo.csv
 *.db.bak
+*.db.lock
 
 # RESPALDOS CON TIMESTAMP de los scripts que escriben.
 #

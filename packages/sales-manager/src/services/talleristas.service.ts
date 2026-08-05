@@ -140,6 +140,7 @@ export async function obtenerLiquidacionTalleristas(
       SELECT nombre_limpio as detalle_item, talla, SUM(cantidad) as total_unidades
       FROM pos_venta
       WHERE (? IS NULL OR anio = ?)
+        AND (LOWER(IFNULL(estado, '')) NOT LIKE '%cancelad%' AND LOWER(IFNULL(estado, '')) NOT LIKE '%anulad%')
       GROUP BY nombre_limpio, talla
     `, [anioNum, anioNum]);
 

@@ -8347,7 +8347,7 @@
         document.head.appendChild(regla);
       }
       const h = HOJA[orientacion];
-      regla.textContent = `@page { size: letter ${orientacion === 'horizontal' ? 'landscape' : 'portrait'}; margin: ${h.margenMm}mm; @bottom-right { content: "Página " counter(page) " de " counter(pages); font-size: 9pt; color: #555; } }`;
+      regla.textContent = `@page { size: letter ${orientacion === 'horizontal' ? 'landscape' : 'portrait'}; margin: ${h.margenMm}mm; @bottom-right { content: ; font-size: 9pt; color: #555; } }`;
 
       document.body.classList.add('rp-imprimiendo');
       raiz.classList.add('rp-multipagina');

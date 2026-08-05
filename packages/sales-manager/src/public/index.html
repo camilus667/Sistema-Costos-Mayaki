@@ -243,7 +243,7 @@
 
       <!-- TAB: REGISTRO CONSOLIDADO -->
       <section id="tab-consolidado" class="tab-pane">
-        <div class="filter-bar glass-card">
+        <div class="filter-bar glass-card" style="flex-wrap: wrap; gap: 12px;">
           <div class="filter-group">
             <label>Colegio / Grupo:</label>
             <select id="filter-colegio-consolidado" class="select-input">
@@ -266,9 +266,32 @@
             </select>
           </div>
 
+          <div class="filter-group">
+            <label>Rango Rápido:</label>
+            <select id="select-rango-preset" class="select-input">
+              <option value="custom" selected>Personalizado</option>
+              <option value="mes-actual">Mes Actual (01 al fin de mes)</option>
+              <option value="ultimo-mes">Último mes completo</option>
+              <option value="ultimos-3-meses">Últimos 3 meses completos</option>
+              <option value="ultimos-6-meses">Últimos 6 meses completos</option>
+              <option value="este-anio">Este Año (2026)</option>
+              <option value="todo">Todo el Historial</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label>Fecha Inicio:</label>
+            <input type="text" id="filter-fecha-inicio-consolidado" class="text-input" placeholder="DD/MM/YYYY" style="width: 110px;" />
+          </div>
+
+          <div class="filter-group">
+            <label>Fecha Fin:</label>
+            <input type="text" id="filter-fecha-fin-consolidado" class="text-input" placeholder="DD/MM/YYYY" style="width: 110px;" />
+          </div>
+
           <button class="btn btn-primary" id="btn-aplicar-filtros-consolidado">Filtrar</button>
 
-          <div style="margin-left: auto; display: flex; gap: 8px;">
+          <div style="margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap;">
             <button class="btn btn-secondary" id="btn-excel-consolidado" title="Exportar Registro Consolidado a Excel">Exportar Excel (.xlsx)</button>
             <button class="btn btn-secondary" id="btn-pdf-consolidado" title="Generar e Imprimir Reporte PDF">Reporte PDF</button>
             <button class="btn btn-secondary" id="btn-pdf-resumen-mensual" title="Generar e Imprimir Resumen Mensual de Ventas por Colegio">Resumen Mensual PDF</button>

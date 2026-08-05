@@ -52,12 +52,19 @@ export function normalizarColegioNombre(nombre: string): string {
   return norm;
 }
 
+export function esEstadoValido(estado?: string): boolean {
+  if (!estado) return true;
+  const norm = estado.toLowerCase().trim();
+  return norm !== 'cancelado' && !norm.includes('cancelad') && norm !== 'anulado' && !norm.includes('anulad');
+}
+
 export async function obtenerResumenColegios(
   colegioFiltro?: string,
   anioFiltro?: number
 ): Promise<VentaResumenColegio[]> {
   const db = await getDb();
   let todas: any[] = db.select().from(posVentas).all();
+  todas = todas.filter((v) => esEstadoValido(v.estado));
 
   if (colegioFiltro && colegioFiltro.trim() !== '') {
     const targetNorm = normalizarColegioNombre(colegioFiltro);
@@ -97,6 +104,7 @@ export async function obtenerResumenPeriodo(
 ): Promise<VentaResumenPeriodo[]> {
   const db = await getDb();
   let ventas: any[] = db.select().from(posVentas).all();
+  ventas = ventas.filter((v) => esEstadoValido(v.estado));
 
   if (colegioFiltro && colegioFiltro.trim() !== '') {
     const targetNorm = normalizarColegioNombre(colegioFiltro);
@@ -149,6 +157,7 @@ export async function obtenerVentasPorPrendaYTalla(
 ): Promise<DetallePrendaVenta[]> {
   const db = await getDb();
   let ventas: any[] = db.select().from(posVentas).all();
+  ventas = ventas.filter((v) => esEstadoValido(v.estado));
 
   if (colegioGrupo && colegioGrupo.trim() !== '') {
     const targetNorm = normalizarColegioNombre(colegioGrupo);
@@ -198,12 +207,30 @@ export async function obtenerVentasPorPrendaYTalla(
   }).sort((a, b) => b.totalUnidades - a.totalUnidades);
 }
 
+export function normalizarFechaIso(fechaStr?: string): string | undefined {
+  if (!fechaStr || !fechaStr.trim()) return undefined;
+  const str = fechaStr.trim();
+  // Formato DD/MM/YYYY
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) {
+    const [d, m, y] = str.split('/');
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  // Formato YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+  return undefined;
+}
+
 export async function obtenerRangoFechasVentas(
   colegioFiltro?: string,
-  anioFiltro?: number
+  anioFiltro?: number,
+  fechaInicioStr?: string,
+  fechaFinStr?: string
 ): Promise<{ fechaInicio: string; fechaFin: string }> {
   const db = await getDb();
   let todas: any[] = db.select().from(posVentas).all();
+  todas = todas.filter((v) => esEstadoValido(v.estado));
 
   if (colegioFiltro && colegioFiltro.trim() !== '') {
     const targetNorm = normalizarColegioNombre(colegioFiltro);
@@ -213,9 +240,31 @@ export async function obtenerRangoFechasVentas(
     });
   }
 
+  const inicioIso = normalizarFechaIso(fechaInicioStr);
+  const finIso = normalizarFechaIso(fechaFinStr);
+
   if (anioFiltro) {
     const anioNum = parseInt(String(anioFiltro), 10);
     todas = todas.filter((v) => parseInt(String(v.anio), 10) === anioNum);
+  }
+
+  if (inicioIso) {
+    todas = todas.filter((v) => v.fechaIso && v.fechaIso >= inicioIso);
+  }
+  if (finIso) {
+    todas = todas.filter((v) => v.fechaIso && v.fechaIso <= finIso);
+  }
+
+  const fmtFecha = (iso: string) => {
+    const partes = (iso || '').split('-');
+    if (partes.length === 3) return `${partes[2]}/${partes[1]}/${partes[0]}`;
+    return iso;
+  };
+
+  if (inicioIso || finIso) {
+    const inicioFmt = inicioIso ? fmtFecha(inicioIso) : (todas.length > 0 ? fmtFecha(todas[0].fechaIso || '') : '01/01/2026');
+    const finFmt = finIso ? fmtFecha(finIso) : (todas.length > 0 ? fmtFecha(todas[todas.length - 1].fechaIso || '') : '31/12/2026');
+    return { fechaInicio: inicioFmt, fechaFin: finFmt };
   }
 
   if (todas.length === 0) {
@@ -229,12 +278,6 @@ export async function obtenerRangoFechasVentas(
     if (v.fechaIso && v.fechaIso < minIso) minIso = v.fechaIso;
     if (v.fechaIso && v.fechaIso > maxIso) maxIso = v.fechaIso;
   });
-
-  const fmtFecha = (iso: string) => {
-    const partes = (iso || '').split('-');
-    if (partes.length === 3) return `${partes[2]}/${partes[1]}/${partes[0]}`;
-    return iso;
-  };
 
   return {
     fechaInicio: fmtFecha(minIso),
@@ -261,10 +304,13 @@ export interface VentaConsolidadaItem {
 
 export async function obtenerVentasConsolidadas(
   colegioFiltro?: string,
-  anioFiltro?: number
+  anioFiltro?: number,
+  fechaInicioStr?: string,
+  fechaFinStr?: string
 ): Promise<VentaConsolidadaItem[]> {
   const db = await getDb();
   let todas: any[] = db.select().from(posVentas).all();
+  todas = todas.filter((v) => esEstadoValido(v.estado));
 
   // 1. Filtrar por colegio si se especifica
   if (colegioFiltro && colegioFiltro.trim() !== '') {
@@ -275,10 +321,22 @@ export async function obtenerVentasConsolidadas(
     });
   }
 
-  // 2. Filtrar por año (por defecto 2026 si no se pasa anioFiltro)
-  const anioTarget = anioFiltro !== undefined ? anioFiltro : 2026;
-  if (anioTarget) {
-    todas = todas.filter((v) => parseInt(String(v.anio), 10) === anioTarget);
+  // 2. Filtrar por rango de fechas ISO si se especifican
+  const inicioIso = normalizarFechaIso(fechaInicioStr);
+  const finIso = normalizarFechaIso(fechaFinStr);
+
+  if (inicioIso) {
+    todas = todas.filter((v) => v.fechaIso && v.fechaIso >= inicioIso);
+  }
+  if (finIso) {
+    todas = todas.filter((v) => v.fechaIso && v.fechaIso <= finIso);
+  }
+
+  // 3. Filtrar por año si no hay rango explícito o si se pasó anioFiltro
+  if (anioFiltro) {
+    todas = todas.filter((v) => parseInt(String(v.anio), 10) === anioFiltro);
+  } else if (!inicioIso && !finIso && anioFiltro === undefined) {
+    todas = todas.filter((v) => parseInt(String(v.anio), 10) === 2026);
   }
 
   // 3. Ordenar desde la más antigua a la más nueva (cronológico ascendente)
@@ -375,6 +433,7 @@ export async function obtenerResumenMensualPorColegio(
 ): Promise<ResumenMensualColegioGroup[]> {
   const db = await getDb();
   let ventas: any[] = db.select().from(posVentas).all();
+  ventas = ventas.filter((v) => esEstadoValido(v.estado));
 
   if (anioFiltro) {
     ventas = ventas.filter((v) => parseInt(String(v.anio), 10) === parseInt(String(anioFiltro), 10));
@@ -452,6 +511,7 @@ export async function obtenerResumenPorMesDetalleColegios(
 ): Promise<ResumenPorMesGroup[]> {
   const db = await getDb();
   let ventas: any[] = db.select().from(posVentas).all();
+  ventas = ventas.filter((v) => esEstadoValido(v.estado));
 
   if (anioFiltro) {
     ventas = ventas.filter((v) => parseInt(String(v.anio), 10) === parseInt(String(anioFiltro), 10));
