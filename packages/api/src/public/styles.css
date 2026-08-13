@@ -1300,8 +1300,8 @@ footer {
     .rp-titulo { font-size: 16pt; font-weight: 800; margin: 1pt 0 0; letter-spacing: -0.015em; color: var(--rp-tinta); line-height: 1.15; }
     .rp-sub { font-size: 11pt; color: var(--rp-gris-osc); margin-top: 2pt; font-weight: 700; line-height: 1.2; }
 
-    .rp-meta { display: grid; grid-template-columns: repeat(2, auto); gap: 4pt 16pt; text-align: right; flex-shrink: 0; background: #f8fafc; padding: 6pt 10pt; border-radius: 6px; border: 1pt solid var(--rp-linea); }
-    .rp-meta-chk { flex-shrink: 0; padding-top: 1pt; padding-left: 2pt; }
+    .rp-meta { display: flex; align-items: center; gap: 12pt; text-align: right; flex-shrink: 0; background: #f8fafc; padding: 5pt 10pt; border-radius: 6px; border: 1pt solid var(--rp-linea); margin-left: auto; }
+    .rp-meta-chk { display: flex; align-items: center; justify-content: center; padding-left: 8pt; border-left: 1pt solid var(--rp-linea); margin-left: 2pt; }
     .rp-meta-item span { display: block; font-size: 10pt; text-transform: uppercase; letter-spacing: 0.07em; color: var(--rp-gris-osc); font-weight: 800; line-height: 1.1; }
     .rp-meta-item strong { display: block; font-size: 11pt; color: var(--rp-tinta); font-weight: 800; line-height: 1.2; }
 

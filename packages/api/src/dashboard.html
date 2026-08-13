@@ -8405,12 +8405,15 @@
         const ctx = contextoReporte();
         const conF = modalidadFActual;
         const tallaTxt = p.tallaActual ? p.tallaActual.codigo : '—';
+        const tallaNombre = p.tallaActual ? p.tallaActual.nombre : ('Talla ' + fmtTalla(tallaTxt));
+        const codigoUnico = (p.tallaActual && p.tallaActual.codigoPos) ? p.tallaActual.codigoPos : (p.prod || ('Ítem #' + p.itemNumero));
+        const colegioPrenda = p.colegioNombre || ctx.ambito;
 
         const utilidadUnidad = (Number(p.ingresoNetoEfectivoBs) || 0) - (Number(p.costoUnitarioNetoBs) || 0);
 
         const kpis = [
-          { titulo: 'Colegio / Ámbito', valor: ctx.ambito },
-          { titulo: 'Prenda y Talla', valor: (p.prod || ('Ítem #' + p.itemNumero)) + ' · Talla ' + fmtTalla(tallaTxt) },
+          { titulo: 'Colegio', valor: colegioPrenda },
+          { titulo: 'Prenda y Talla', valor: p.descripcion, sub: codigoUnico + ' · ' + tallaNombre },
           { titulo: 'Costo unitario neto', valor: 'Bs. ' + nBs(p.costoUnitarioNetoBs) },
           { titulo: 'Precio de venta', valor: 'Bs. ' + nBs(p.precioVentaEfectivoBs) },
           { titulo: 'Utilidad por unidad', valor: 'Bs. ' + nBs(utilidadUnidad) },
@@ -8446,7 +8449,7 @@
 
         const html = `
           ${encabezadoReporte('Costeo Individual · ' + p.descripcion,
-          ctx.ambito + ' · ' + (p.prod || ('Ítem #' + p.itemNumero)) + ' · Talla ' + fmtTalla(tallaTxt) + (conF ? '' : ' · Precios netos de descuento comercial'), ctx, kpis)}
+          colegioPrenda + ' · ' + codigoUnico + ' · ' + tallaNombre + (conF ? '' : ' · Precios netos de descuento comercial'), ctx, kpis)}
           <div class="rp-dos">
             <section>
               <h2 class="rp-h2">Composición del costo unitario</h2>

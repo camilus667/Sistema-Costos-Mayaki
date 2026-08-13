@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { eq, and, asc, or, isNull } from 'drizzle-orm';
-import { productos, tallas, pesoMateriaPrima, manoObra, manoObraTipo, tipoPrenda, telas, accesorios, detalleAccesorio, costosIndirectos, preciosAdquisicion } from '../database/schema';
+import { productos, tallas, pesoMateriaPrima, manoObra, manoObraTipo, tipoPrenda, telas, accesorios, detalleAccesorio, costosIndirectos, preciosAdquisicion, colegios } from '../database/schema';
 import { saveDbToDisk } from '../database/sqljs';
 import { getSystemConfig, setSystemConfig } from '../services/configService';
 import { costoUnitarioDeInsumo, costoUsoDeInsumo } from '../services/costoInsumo';
@@ -1137,6 +1137,7 @@ api.get('/desglose-inteligente-producto', async (c) => {
     // El codigo del POS de cada prenda+talla. Se lee una vez para todas las prendas: es la misma
     // casa que usan Inventario Real y Costeo Multitalla.
     const codigosPos = await codigosPosDesdeBase(db);
+    const mapColegios = new Map((await db.select({ id: colegios.id, nombre: colegios.nombre }).from(colegios)).map((col: any) => [col.id, col.nombre]));
 
     const data = ctx.productos.map((p: any) => {
       const tallasColegio = ctx.tallasPorColegio.get(p.colegioId) || [];
@@ -1227,6 +1228,8 @@ api.get('/desglose-inteligente-producto', async (c) => {
 
       return {
         productoId: p.id,
+        colegioId: p.colegioId,
+        colegioNombre: mapColegios.get(p.colegioId) || 'General',
         itemNumero: p.itemNumero,
         descripcion: p.descripcion,
         tallasDisponibles,
