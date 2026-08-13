@@ -1292,6 +1292,9 @@ footer {
       font-size: 10pt;
       line-height: 1.35;
     }
+    #rp-root span, #rp-root td, #rp-root th, #rp-root div, #rp-root strong, #rp-root small {
+      font-size: max(10pt, 1em);
+    }
 
     /* ---- Encabezado ejecutivo ---- */
     .rp-head { border-bottom: 2.5pt solid var(--rp-guindo); padding-bottom: 6pt; margin-bottom: 8pt; }
