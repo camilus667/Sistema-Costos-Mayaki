@@ -57,7 +57,13 @@ api.put('/configuracion', async (c) => {
   const { tasaIva, volumenMensualProduccion, mermaPorcentajeEstandar, tallaDefecto } = body;
 
   if (tasaIva !== undefined) await setSystemConfig(db, 'tasa_iva', String(tasaIva));
-  if (volumenMensualProduccion !== undefined) await setSystemConfig(db, 'volumen_mensual_produccion', String(volumenMensualProduccion));
+  if (volumenMensualProduccion !== undefined) {
+    const volMensualNum = Number(volumenMensualProduccion) || 1800;
+    await setSystemConfig(db, 'volumen_mensual_produccion', String(volMensualNum));
+    if (body.volumenAnualProduccion === undefined) {
+      await setSystemConfig(db, 'volumen_anual_produccion', String(volMensualNum * 12));
+    }
+  }
   if (mermaPorcentajeEstandar !== undefined) await setSystemConfig(db, 'merma_porcentaje_estandar', String(mermaPorcentajeEstandar));
   if (tallaDefecto !== undefined) await setSystemConfig(db, 'talla_defecto', String(tallaDefecto));
 

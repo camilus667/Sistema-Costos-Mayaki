@@ -2836,6 +2836,7 @@
 
         const tarifaPunto = json.tarifaPuntoComplejidad || 1.193333;
         const totalIndirectos = json.totalIndirectosMensual || 21480;
+        const prendasProducidasMes = json.prendasProducidasMes || 1800;
 
         fijosContainer.innerHTML = `
           <div style="background:#0f172a; padding:1.25rem; border-radius:10px; border:1px solid #1e293b; box-shadow:0 4px 12px rgba(0,0,0,0.25);">
@@ -2907,54 +2908,19 @@
                 <tr style="border-top:2px solid #334155;">
                   <td colspan="2"><strong style="font-size:0.85rem;">TOTAL AL MES</strong></td>
                   <td style="text-align:right;"><strong style="color:var(--success); font-size:0.95rem;">Bs. ${totalIndirectos.toFixed(2)}</strong></td>
-                  <td></td>
+                  <td colspan="2"></td>
                 </tr>
                 <tr>
-                  <td colspan="2" style="font-size:0.75rem; color:var(--text-muted);">Volumen Mensual Estimado</td>
-                  <td style="text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600;">1,800 prendas</td>
-                  <td></td>
-                </tr>
-                <tr>
-                  <td colspan="2" style="font-size:0.75rem; color:var(--text-muted);">Tarifa por Punto Complejidad</td>
-                  <td style="text-align:right; font-size:0.85rem; color:var(--warning); font-weight:800;">Bs. ${tarifaPunto.toFixed(4)}</td>
-                  <td></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-
-          <div style="background:#0f172a; padding:1.25rem; border-radius:10px; border:1px solid #1e293b; box-shadow:0 4px 12px rgba(0,0,0,0.25);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; border-bottom:1px solid #334155; padding-bottom:0.5rem;">
-              <h4 style="margin:0; color:#f8fafc; font-size:1.05rem; font-weight:700;">2. Salarios Fijos y Gastos Operativos Mensuales</h4>
-            </div>
-            <table class="table-compact-auto" style="width:100%;">
-              <thead>
-                <tr>
-                  <th>#</th><th>Concepto</th>
-                  <th style="text-align:right;">Monto Mensual (Bs.)</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${(json.indirectos || []).map(item => `
-                  <tr>
-                    <td><span class="col-item">${item.prod || item.itemNumero}</span></td>
-                    <td><strong style="font-size:0.8rem;">${item.concepto}</strong></td>
-                    <td style="text-align:right;">${getInputHtml(item.montoMensual, '10', `id="fjv-${item.id}" style="text-align:right; font-weight:700;" onchange="guardarFijVarLive('${item.id}')"`)}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-              <tfoot>
-                <tr style="border-top:2px solid #334155;">
-                  <td colspan="2"><strong style="font-size:0.85rem;">TOTAL AL MES</strong></td>
-                  <td style="text-align:right;"><strong style="color:var(--success); font-size:0.95rem;">Bs. ${totalIndirectos.toFixed(2)}</strong></td>
-                </tr>
-                <tr>
-                  <td colspan="2" style="font-size:0.75rem; color:var(--text-muted);">Volumen Mensual Estimado</td>
-                  <td style="text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600;">1,800 prendas</td>
+                  <td colspan="2" style="font-size:0.75rem; color:var(--text-muted);">Volumen Mensual Estimado (Prendas)</td>
+                  <td style="text-align:right;">
+                    ${getInputHtml(prendasProducidasMes, '1', `id="vol-mensual-prod" style="text-align:right; font-weight:700;" onchange="guardarVolumenMensualLive(this.value)"`)}
+                  </td>
+                  <td colspan="2" style="font-size:0.72rem; color:var(--text-muted); text-align:left; vertical-align:middle; padding-left:4px;">prendas</td>
                 </tr>
                 <tr>
                   <td colspan="2" style="font-size:0.75rem; color:var(--text-muted);">Tarifa por Punto Complejidad</td>
                   <td style="text-align:right; font-size:0.85rem; color:var(--warning); font-weight:800;">Bs. ${tarifaPunto.toFixed(4)}</td>
+                  <td colspan="2"></td>
                 </tr>
               </tfoot>
             </table>
@@ -4158,6 +4124,24 @@
           cargarResumen();
         }
       } catch (e) { console.error('Error al actualizar Costo Indirecto:', e); }
+    }
+
+    async function guardarVolumenMensualLive(val) {
+      const volumenMensualProduccion = parseInt(val) || 1800;
+      try {
+        const res = await fetch('/api/inputs/configuracion', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ volumenMensualProduccion })
+        });
+        const json = await res.json();
+        if (json.success) {
+          cargarInputConcept('fijosXprenda');
+          await cargarMatrizConsolidada();
+          generarMatrizPrenda();
+          cargarResumen();
+        }
+      } catch (e) { console.error('Error al actualizar volumen mensual en BD:', e); }
     }
 
     // ==========================================================================
