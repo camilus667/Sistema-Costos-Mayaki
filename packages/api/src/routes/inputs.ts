@@ -754,20 +754,15 @@ api.get('/fijos-x-prenda', async (c) => {
   if (colegioId && colegioId !== 'all') condsFij.push(eq(productos.colegioId, colegioId));
   const allProds = await ordenarPrendasDesdeBase(db, await db.select().from(productos).where(and(...condsFij)).orderBy(asc(productos.orden), asc(productos.itemNumero)));
 
-  const sysConfig = await getSystemConfig(db);
+  const ctx = await cargarContextoCosteo(db);
+  const totalIndirectosMensual = ctx.totalIndirectosMensual;
+  const prendasProducidasMes = ctx.sysConfig.volumenMensualProduccion || 1800;
+  const tarifaPuntoComplejidad = ctx.tasaPorPuntoFactor;
 
   let indirectosList: any[] = [];
   try {
-    let q = db.select().from(costosIndirectos);
-    // FASE 5: costo_indirecto pierde colegio_id. El pool es de la empresa, decidido
-    // el 28-jul-2026, asi que no se filtra por colegio. Era el unico lugar que lo
-    // intentaba filtrar, y ni siquiera lo hacia el motor de costeo.
-    indirectosList = await q;
+    indirectosList = await db.select().from(costosIndirectos);
   } catch (e) {}
-
-  const totalIndirectosMensual = indirectosList.reduce((acc: number, curr: any) => acc + (Number(curr.montoMensual) || 0), 0);
-  const prendasProducidasMes = sysConfig.volumenMensualProduccion;
-  const tarifaPuntoComplejidad = (prendasProducidasMes > 0) ? (totalIndirectosMensual / (prendasProducidasMes * 10)) : 0;
 
   const data = allProds.map((p: any) => {
     const factor = p.factorComplejidad || 1;
