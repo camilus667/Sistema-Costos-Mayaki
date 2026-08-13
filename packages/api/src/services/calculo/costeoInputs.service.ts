@@ -685,7 +685,24 @@ export function ensamblarInputs(
     pesoExactoGramos = pesoExacto;
     origenPeso = 'pesoExactoGramos';
   } else if (modoCosteo === 'confeccion') {
-    faltantes.push('Sin peso de tela cargado para esta talla.');
+    // FALLBACK INTELIGENTE: Si esta talla no tiene peso registrado pero la prenda tiene peso en otra talla,
+    // utilizar el peso conocido de la otra talla para no dejar el costo de tela en 0.
+    let pesoFallback: number | null = null;
+    for (const [clavePeso, fP] of ctx.pesoPorClave.entries()) {
+      if (clavePeso.startsWith(`${producto.id}_`)) {
+        const pVal = num(fP.pesoGramos) || num(fP.pesoConMerma) || num(fP.pesoExactoGramos);
+        if (pVal > 0) {
+          pesoFallback = pVal;
+          break;
+        }
+      }
+    }
+    if (pesoFallback && pesoFallback > 0) {
+      pesoConMermaGramos = pesoFallback;
+      origenPeso = 'pesoGramos';
+    } else {
+      faltantes.push('Sin peso de tela cargado para esta talla ni en otras tallas de la prenda.');
+    }
   }
 
   // ---------- tela ----------
