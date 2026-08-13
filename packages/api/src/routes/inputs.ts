@@ -1220,7 +1220,33 @@ api.get('/desglose-inteligente-producto', async (c) => {
       // El desglose tambien tiene que hablar del modo elegido, no de los dos a la
       // vez. Los campos por canal se conservan —los usa el detalle— pero ahora hay
       // un precio y un margen EFECTIVOS, que son los que la pantalla muestra.
-      const { precioLista, precioVenta, ingresoNeto } = resolverPrecios(meta.precioVentaBs, fiscal);
+      let { precioLista, precioVenta, ingresoNeto } = resolverPrecios(meta.precioVentaBs, fiscal);
+
+      // Si la talla seleccionada no tiene precio de venta asignado en la base de datos,
+      // busca si existe un precio asignado en cualquiera de las otras tallas de la misma prenda:
+      if (!precioVenta || precioVenta <= 0) {
+        for (const tOther of tallasDisponibles) {
+          const kOther = `${p.id}_${tOther.tallaId}`;
+          const fPV = ctx.precioVentaPorClave.get(kOther);
+          if (fPV && (Number(fPV.precioBs) || 0) > 0) {
+            const resFallback = resolverPrecios(Number(fPV.precioBs), fiscal);
+            precioLista = resFallback.precioLista;
+            precioVenta = resFallback.precioVenta;
+            ingresoNeto = resFallback.ingresoNeto;
+            break;
+          }
+        }
+      }
+
+      // Si aun no hay precio asignado en ninguna talla, estima el precio basándose en el costo unitario neto (margen 40%):
+      if ((!precioVenta || precioVenta <= 0) && res.costoUnitarioNeto > 0) {
+        const precioEstimado = res.costoUnitarioNeto / 0.6;
+        const resFallback = resolverPrecios(precioEstimado, fiscal);
+        precioLista = resFallback.precioLista;
+        precioVenta = resFallback.precioVenta;
+        ingresoNeto = resFallback.ingresoNeto;
+      }
+
       const margenEfectivoPct =
         ingresoNeto > 0
           ? Math.round(((ingresoNeto - res.costoUnitarioNeto) / ingresoNeto) * 10000) / 100

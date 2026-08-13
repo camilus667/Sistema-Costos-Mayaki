@@ -5973,7 +5973,7 @@
      * no significa nada.
      */
     function fmtTalla(codigo) {
-      const s = String(codigo == null ? '' : codigo).trim();
+      let s = String(codigo == null ? '' : codigo).replace(/^talla\s+/i, '').trim();
       return /^\d+$/.test(s) ? s.padStart(2, '0') : s;
     }
 
@@ -8860,7 +8860,7 @@
           { clave: 'margenPct', label: 'Margen de Ganancia (%)' }
         ];
 
-        const thTallas = tallas.map(t => `<th class="rp-r">${esc(t.nombre || ('Talla ' + fmtTalla(t.talla)))}</th>`).join('');
+        const thTallas = tallas.map(t => `<th class="rp-r">${esc(fmtTalla(t.codigo || t.talla || t.nombre))}</th>`).join('');
 
         const cuerpo = conceptosMatriz.map(c => {
           const celdas = tallas.map(t => {
