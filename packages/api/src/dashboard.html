@@ -8459,17 +8459,19 @@
 
               <hr class="rp-separador-seccion" />
 
-              <h2 class="rp-h2">Resultado comercial por unidad</h2>
-              <table class="rp-tabla">
-                <tbody>
-                  <tr><td>Precio de lista</td><td class="rp-r">${nBs(p.precioListaBs)}</td></tr>
-                  <tr class="rp-precio"><td>${conF ? 'Precio de venta' : 'Precio de venta (con descuento)'}</td><td class="rp-r">${nBs(p.precioVentaEfectivoBs)}</td></tr>
-                  <tr><td>Ingreso neto efectivo</td><td class="rp-r">${nBs(p.ingresoNetoEfectivoBs)}</td></tr>
-                  <tr><td>Costo unitario neto</td><td class="rp-r">−${nBs(p.costoUnitarioNetoBs)}</td></tr>
-                  <tr class="rp-total"><td>Utilidad por unidad</td><td class="rp-r rp-pos">${nBs((Number(p.ingresoNetoEfectivoBs) || 0) - (Number(p.costoUnitarioNetoBs) || 0))}</td></tr>
-                  <tr class="rp-total"><td>Margen sobre ingreso</td><td class="rp-r">${(Number(p.margenEfectivoPct) || 0).toFixed(2)}%</td></tr>
-                </tbody>
-              </table>
+              <div class="rp-box-resultado">
+                <h2 class="rp-h2">Resultado comercial por unidad</h2>
+                <table class="rp-tabla">
+                  <tbody>
+                    <tr><td>Precio de lista</td><td class="rp-r">${nBs(p.precioListaBs)}</td></tr>
+                    <tr class="rp-precio"><td>${conF ? 'Precio de venta' : 'Precio de venta (con descuento)'}</td><td class="rp-r">${nBs(p.precioVentaEfectivoBs)}</td></tr>
+                    <tr><td>Ingreso neto efectivo</td><td class="rp-r">${nBs(p.ingresoNetoEfectivoBs)}</td></tr>
+                    <tr><td>Costo unitario neto</td><td class="rp-r">−${nBs(p.costoUnitarioNetoBs)}</td></tr>
+                    <tr class="rp-total"><td>Utilidad por unidad</td><td class="rp-r rp-pos">${nBs((Number(p.ingresoNetoEfectivoBs) || 0) - (Number(p.costoUnitarioNetoBs) || 0))}</td></tr>
+                    <tr class="rp-total"><td>Margen sobre ingreso</td><td class="rp-r">${(Number(p.margenEfectivoPct) || 0).toFixed(2)}%</td></tr>
+                  </tbody>
+                </table>
+              </div>
             </section>
             <section>
               <h2 class="rp-h2">Insumos intervinientes</h2>
