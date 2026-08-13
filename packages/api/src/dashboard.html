@@ -8830,7 +8830,77 @@
       inventarioUnidades: { t: 'Inventario en Unidades', money: false, entero: true },
       costoInventario: { t: 'Costo del Inventario', money: true },
       precioInventario: { t: 'Precio del Inventario', money: true },
-    };
+    /* ---------------- REPORTE 2 · COSTEO MULTITALLA POR PRENDA ---------------- */
+    async function reporteMultitalla() {
+      try {
+        const selectElem = document.getElementById('select-matriz-producto');
+        let productoId = selectElem ? selectElem.value : null;
+        if (!productoId) return _sinDatos('Costeo Multitalla');
+
+        const res = await fetch('/api/calculo/matriz-prenda/' + productoId + '?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam());
+        const json = await res.json();
+        if (!json.success || !json.data || !json.data.length) return _sinDatos('Costeo Multitalla');
+
+        const ctx = contextoReporte();
+        const p = json.producto || {};
+        const tallas = json.data || [];
+        const colegioNombre = p.colegioNombre || ctx.ambito;
+        const codigoPos = p.prod || ('#' + p.itemNumero);
+
+        const conceptosMatriz = [
+          { clave: 'costoTela', label: 'Costo de Tela' },
+          { clave: 'costoAccesorios', label: 'Accesorios e Insumos' },
+          { clave: 'costoManoObra', label: 'Mano de Obra Directa' },
+          { clave: 'costoFijoPrenda', label: 'Costos Fijos por Prenda' },
+          { clave: 'costoUnitarioNeto', label: 'Costo Unitario Neto', destacado: true },
+          { clave: 'precioVentaEfectivo', label: 'Precio de Venta' },
+          { clave: 'utilidadUnidad', label: 'Utilidad por Unidad' },
+          { clave: 'margenPct', label: 'Margen de Ganancia (%)' }
+        ];
+
+        const thTallas = tallas.map(t => `<th class="rp-r">${esc(t.nombre || ('Talla ' + fmtTalla(t.talla)))}</th>`).join('');
+
+        const cuerpo = conceptosMatriz.map(c => {
+          const celdas = tallas.map(t => {
+            let val = 0;
+            if (c.clave === 'costoTela') val = t.costoTela || 0;
+            else if (c.clave === 'costoAccesorios') val = t.costoAccesorios || 0;
+            else if (c.clave === 'costoManoObra') val = t.costoManoObra || 0;
+            else if (c.clave === 'costoFijoPrenda') val = t.costoIndirectoUnitario || t.costoFijo || 0;
+            else if (c.clave === 'costoUnitarioNeto') val = t.costoUnitarioNeto || 0;
+            else if (c.clave === 'precioVentaEfectivo') val = t.precioVentaEfectivo || 0;
+            else if (c.clave === 'utilidadUnidad') val = (t.ingresoNetoEfectivo || 0) - (t.costoUnitarioNeto || 0);
+            else if (c.clave === 'margenPct') val = (t.margenEfectivoPct !== null && t.margenEfectivoPct !== undefined) ? t.margenEfectivoPct : 0;
+
+            const txt = c.clave === 'margenPct' ? (Number(val).toFixed(1) + '%') : ('Bs. ' + nBs(val));
+            return `<td class="rp-r ${c.destacado ? 'rp-total-col' : ''}">${txt}</td>`;
+          }).join('');
+
+          return `<tr ${c.destacado ? 'class="rp-total"' : ''}>
+            <td><strong>${esc(c.label)}</strong></td>
+            ${celdas}
+          </tr>`;
+        }).join('');
+
+        const html = `
+          ${encabezadoReporte('Costeo Multitalla',
+          colegioNombre + ' · ' + p.descripcion + ' · Cód. ' + codigoPos, ctx, null)}
+          <table class="rp-tabla rp-matriz rp-densa">
+            <thead>
+              <tr>
+                <th>Concepto / Talla</th>
+                ${thTallas}
+              </tr>
+            </thead>
+            <tbody>
+              ${cuerpo}
+            </tbody>
+          </table>
+          ${pieReporte()}`;
+
+        emitirReporte('auto', html);
+      } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
+    }
 
     async function reporteConsolidada() {
       try {
