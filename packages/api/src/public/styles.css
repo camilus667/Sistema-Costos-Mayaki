@@ -1294,37 +1294,37 @@ footer {
     }
 
     /* ---- Encabezado ejecutivo ---- */
-    .rp-head { border-bottom: 2.5pt solid var(--rp-guindo); padding-bottom: 5pt; margin-bottom: 6pt; }
+    .rp-head { border-bottom: 2.5pt solid var(--rp-guindo); padding-bottom: 6pt; margin-bottom: 8pt; }
     .rp-head-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16pt; }
-    .rp-marca { font-size: 10pt; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--rp-guindo); line-height: 1.1; }
+    .rp-marca { font-size: 11pt; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--rp-guindo); line-height: 1.1; }
     .rp-titulo { font-size: 16pt; font-weight: 800; margin: 1pt 0 0; letter-spacing: -0.015em; color: var(--rp-tinta); line-height: 1.15; }
-    .rp-sub { font-size: 10.5pt; color: var(--rp-gris-osc); margin-top: 1pt; font-weight: 700; line-height: 1.2; }
+    .rp-sub { font-size: 11pt; color: var(--rp-gris-osc); margin-top: 2pt; font-weight: 700; line-height: 1.2; }
 
-    .rp-meta { display: grid; grid-template-columns: repeat(2, auto); gap: 2pt 14pt; text-align: right; flex-shrink: 0; }
+    .rp-meta { display: grid; grid-template-columns: repeat(2, auto); gap: 4pt 16pt; text-align: right; flex-shrink: 0; background: #f8fafc; padding: 6pt 10pt; border-radius: 6px; border: 1pt solid var(--rp-linea); }
     .rp-meta-chk { flex-shrink: 0; padding-top: 1pt; padding-left: 2pt; }
-    .rp-meta-item span { display: block; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.07em; color: var(--rp-gris-osc); font-weight: 800; line-height: 1.1; }
-    .rp-meta-item strong { display: block; font-size: 10.5pt; color: var(--rp-tinta); font-weight: 800; line-height: 1.2; }
+    .rp-meta-item span { display: block; font-size: 10pt; text-transform: uppercase; letter-spacing: 0.07em; color: var(--rp-gris-osc); font-weight: 800; line-height: 1.1; }
+    .rp-meta-item strong { display: block; font-size: 11pt; color: var(--rp-tinta); font-weight: 800; line-height: 1.2; }
 
     /* ---- Tira de indicadores ---- */
-    .rp-kpis { display: flex; gap: 6pt; margin-top: 6pt; }
+    .rp-kpis { display: flex; gap: 6pt; margin-top: 8pt; flex-wrap: wrap; }
     .rp-kpi {
-      flex: 1; border: 0.75pt solid var(--rp-linea); border-left: 3.5pt solid var(--rp-gris-osc);
-      padding: 5pt 7pt; background: #fff;
+      flex: 1; min-width: 110pt; border: 0.75pt solid var(--rp-linea); border-left: 3.5pt solid var(--rp-gris-osc);
+      padding: 6pt 8pt; background: #fff; border-radius: 4px;
     }
     /* El indicador principal se distingue por un filete guindo mas grueso y la cifra
        en guindo, no por invertir el fondo. */
     .rp-kpi-dest { border-left: 3.5pt solid var(--rp-guindo); background: var(--rp-guindo-tenue); }
     .rp-kpi-dest .rp-kpi-v { color: var(--rp-guindo-osc); }
-    .rp-kpi-t { display: block; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--rp-gris-osc); font-weight: 800; line-height: 1.1; }
-    .rp-kpi-v { display: block; font-size: 13pt; font-weight: 800; color: var(--rp-tinta); margin-top: 1pt; letter-spacing: -0.02em; line-height: 1.15; }
-    .rp-kpi-s { display: block; font-size: 9pt; color: var(--rp-tinta); margin-top: 0.5pt; font-weight: 700; line-height: 1.15; }
+    .rp-kpi-t { display: block; font-size: 10pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--rp-gris-osc); font-weight: 800; line-height: 1.1; }
+    .rp-kpi-v { display: block; font-size: 13pt; font-weight: 800; color: var(--rp-tinta); margin-top: 2pt; letter-spacing: -0.02em; line-height: 1.15; }
+    .rp-kpi-s { display: block; font-size: 10pt; color: var(--rp-tinta); margin-top: 1pt; font-weight: 700; line-height: 1.15; }
 
     /* Indicador de escenario de precios: un cuadrito, sin leyenda. */
-    .rp-chk { display: inline-block; width: 9pt; height: 9pt; border: 0.75pt solid var(--rp-gris); background: #fff; }
+    .rp-chk { display: inline-block; width: 10pt; height: 10pt; border: 0.75pt solid var(--rp-gris); background: #fff; }
     .rp-chk-on { background: var(--rp-guindo); border-color: var(--rp-guindo); }
 
     /* ---- Tablas ---- */
-    .rp-h2 { font-size: 11pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+    .rp-h2 { font-size: 11.5pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
              color: var(--rp-guindo); margin: 9pt 0 3pt; padding-bottom: 2pt;
              border-bottom: 1.5pt solid var(--rp-guindo); }
 
@@ -1338,7 +1338,7 @@ footer {
       border-top: 0.5pt solid var(--rp-linea);
       border-bottom: 1.5pt solid var(--rp-guindo);
     }
-    .rp-tabla td { font-size: 10pt; color: var(--rp-tinta); padding: 4pt 5.5pt; border-bottom: 0.5pt solid #d1d5db; border-right: 0.5pt solid #e5e7eb; }
+    .rp-tabla td { font-size: 10pt; color: var(--rp-tinta); padding: 4.5pt 6pt; border-bottom: 0.5pt solid #d1d5db; border-right: 0.5pt solid #e5e7eb; }
     .rp-tabla tbody tr:nth-child(even) td { background: #f8fafc; }
     /* Cierre sin fondo, con doble filete arriba: la convencion contable, y no gasta
        tinta. Las cifras del cierre van en guindo. */
@@ -1350,20 +1350,20 @@ footer {
     }
     .rp-tabla tfoot td.rp-r { color: var(--rp-guindo-osc); }
     .rp-densa { font-size: 10pt; }
-    .rp-densa td { padding: 3.5pt 4.5pt; font-size: 10pt; }
-    .rp-densa th { font-size: 10pt; padding: 4pt 4.5pt; }
+    .rp-densa td { padding: 4pt 5pt; font-size: 10pt; }
+    .rp-densa th { font-size: 10pt; padding: 4.5pt 5pt; }
 
     .rp-r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .rp-c { text-align: center; white-space: nowrap; }
-    .rp-nota { font-size: 9pt; color: #374151; font-weight: 600; margin-top: 0.5pt; }
+    .rp-nota { font-size: 10pt; color: #374151; font-weight: 600; margin-top: 1pt; }
 
     /* Matriz de conceptos por talla. La primera columna se ancla porque es la
        única que dice QUÉ se está leyendo. */
     .rp-matriz .rp-concepto { width: 26%; font-weight: 700; background: #f0f2f2; }
     .rp-matriz .rp-desc { width: 22%; }
     .rp-seccion td {
-      background: #e7eaea !important; color: var(--rp-guindo) !important; font-size: 6.8pt; font-weight: 800;
-      text-transform: uppercase; letter-spacing: 0.07em; padding: 3pt 4pt;
+      background: #e7eaea !important; color: var(--rp-guindo) !important; font-size: 10pt; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.07em; padding: 4pt 5pt;
       border-top: 1pt solid var(--rp-gris) !important; border-bottom: 0.5pt solid var(--rp-gris) !important;
     }
     .rp-total td, tr.rp-total td {
@@ -1379,14 +1379,14 @@ footer {
     .rp-comparativo { margin-top: 6pt; }
 
     .rp-avisos {
-      margin-top: 5pt; padding: 4pt 6pt; border-left: 2.5pt solid var(--rp-guindo);
-      background: var(--rp-guindo-tenue); font-size: 7.5pt; color: var(--rp-guindo-osc);
+      margin-top: 5pt; padding: 5pt 7pt; border-left: 2.5pt solid var(--rp-guindo);
+      background: var(--rp-guindo-tenue); font-size: 10pt; color: var(--rp-guindo-osc);
     }
 
     .rp-pie {
       margin-top: 8pt; padding-top: 4pt; border-top: 0.75pt solid var(--rp-gris);
       display: flex; justify-content: space-between; gap: 10pt;
-      font-size: 6.8pt; color: var(--rp-gris-osc);
+      font-size: 10pt; color: var(--rp-gris-osc);
     }
     .rp-pie-d { white-space: nowrap; }
 

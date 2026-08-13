@@ -8406,11 +8406,15 @@
         const conF = modalidadFActual;
         const tallaTxt = p.tallaActual ? p.tallaActual.codigo : '—';
 
+        const utilidadUnidad = (Number(p.ingresoNetoEfectivoBs) || 0) - (Number(p.costoUnitarioNetoBs) || 0);
+
         const kpis = [
+          { titulo: 'Colegio / Ámbito', valor: ctx.ambito },
+          { titulo: 'Prenda y Talla', valor: (p.prod || ('Ítem #' + p.itemNumero)) + ' · Talla ' + fmtTalla(tallaTxt) },
           { titulo: 'Costo unitario neto', valor: 'Bs. ' + nBs(p.costoUnitarioNetoBs) },
           { titulo: 'Precio de venta', valor: 'Bs. ' + nBs(p.precioVentaEfectivoBs) },
-          { titulo: 'Ingreso neto efectivo', valor: 'Bs. ' + nBs(p.ingresoNetoEfectivoBs) },
-          { titulo: 'Margen efectivo', valor: (Number(p.margenEfectivoPct) || 0).toFixed(1) + '%', destacado: true },
+          { titulo: 'Utilidad por unidad', valor: 'Bs. ' + nBs(utilidadUnidad) },
+          { titulo: 'Margen de ganancia', valor: (Number(p.margenEfectivoPct) || 0).toFixed(1) + '%', destacado: true },
         ];
 
         const acc = (p.accesoriosIntervinientes || []);
@@ -8442,7 +8446,7 @@
 
         const html = `
           ${encabezadoReporte('Costeo Individual · ' + p.descripcion,
-          (p.prod || ('Ítem #' + p.itemNumero)) + ' · Talla ' + fmtTalla(tallaTxt) + (conF ? '' : ' · precios netos de descuento comercial'), ctx, kpis)}
+          ctx.ambito + ' · ' + (p.prod || ('Ítem #' + p.itemNumero)) + ' · Talla ' + fmtTalla(tallaTxt) + (conF ? '' : ' · Precios netos de descuento comercial'), ctx, kpis)}
           <div class="rp-dos">
             <section>
               <h2 class="rp-h2">Composición del costo unitario</h2>
@@ -8461,13 +8465,6 @@
                   <tr><td>Costo unitario neto</td><td class="rp-r">−${nBs(p.costoUnitarioNetoBs)}</td></tr>
                   <tr class="rp-total"><td>Utilidad por unidad</td><td class="rp-r rp-pos">${nBs((Number(p.ingresoNetoEfectivoBs) || 0) - (Number(p.costoUnitarioNetoBs) || 0))}</td></tr>
                   <tr class="rp-total"><td>Margen sobre ingreso</td><td class="rp-r">${(Number(p.margenEfectivoPct) || 0).toFixed(2)}%</td></tr>
-                </tbody>
-              </table>
-              <table class="rp-tabla rp-comparativo">
-                <thead><tr><th>Comparativo de escenarios</th><th class="rp-r">Ingreso</th><th class="rp-r">Margen</th></tr></thead>
-                <tbody>
-                  <tr><td>A precio de lista</td><td class="rp-r">${nBs(p.ingresoNetoConFacturaBs)}</td><td class="rp-r">${(Number(p.margenConFacturaPct) || 0).toFixed(2)}%</td></tr>
-                  <tr><td>Con descuento comercial</td><td class="rp-r">${nBs(p.ingresoNetoSinFacturaBs)}</td><td class="rp-r">${(Number(p.margenSinFacturaPct) || 0).toFixed(2)}%</td></tr>
                 </tbody>
               </table>
             </section>
