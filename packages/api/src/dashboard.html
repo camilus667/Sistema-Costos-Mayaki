@@ -8243,7 +8243,6 @@
     function encabezadoReporte(titulo, subtitulo, ctx, kpis) {
       const meta = [
         ['Ámbito', ctx.ambito],
-        ['Escenario', ctx.snapshot],
         ['Emitido', ctx.emitido],
       ].map(([k, v]) => `<div class="rp-meta-item"><span>${esc(k)}</span><strong>${esc(v)}</strong></div>`).join('');
 
@@ -8424,12 +8423,11 @@
         const filasAcc = acc.length ? acc.map(a => `
           <tr>
             <td>${esc(a.nombre)}</td>
-            <td class="rp-c">${esc(a.unidadCompra || '—')}</td>
             <td class="rp-r">${a.cantidad}</td>
             <td class="rp-r">Bs. ${nBs(a.costoUnitarioBs)}</td>
             <td class="rp-r">Bs. ${nBs(a.costoTotalBs)}</td>
           </tr>`).join('')
-          : '<tr><td colspan="5" class="rp-c rp-tenue">Sin insumos cargados en la receta.</td></tr>';
+          : '<tr><td colspan="4" class="rp-c rp-tenue">Sin insumos cargados en la receta.</td></tr>';
 
         const fx = p.fijosEIndirectos || {};
         const composicion = [
@@ -8459,6 +8457,8 @@
                 <tfoot><tr><td>Costo unitario neto</td><td class="rp-r">${nBs(p.costoUnitarioNetoBs)}</td><td class="rp-r">100%</td></tr></tfoot>
               </table>
 
+              <div style="border-top: 1.5pt solid var(--rp-linea); margin: 18pt 0 10pt;"></div>
+
               <h2 class="rp-h2">Resultado comercial por unidad</h2>
               <table class="rp-tabla">
                 <tbody>
@@ -8474,14 +8474,9 @@
             <section>
               <h2 class="rp-h2">Insumos intervinientes</h2>
               <table class="rp-tabla">
-                <!-- Los mismos rotulos y el mismo ORDEN que la pantalla. Decia
-                     Insumo / Unidad / Costo un. / Cant. / Total contra
-                     Accesorio / Unidad / Cantidad / Costo Unit. / Subtotal: cinco nombres distintos
-                     y dos columnas cruzadas de lugar, que es peor que un nombre distinto porque se
-                     lee la cantidad creyendo que es el costo. -->
-                <thead><tr><th>Accesorio</th><th class="rp-c">Unidad</th><th class="rp-r">Cantidad</th><th class="rp-r">Costo Unit.</th><th class="rp-r">Subtotal</th></tr></thead>
+                <thead><tr><th>Accesorio</th><th class="rp-r">Cantidad</th><th class="rp-r">Costo Unit.</th><th class="rp-r">Subtotal</th></tr></thead>
                 <tbody>${filasAcc}</tbody>
-                <tfoot><tr><td colspan="4">Subtotal insumos</td><td class="rp-r">${nBs(p.subtotalAccesoriosBs)}</td></tr></tfoot>
+                <tfoot><tr><td colspan="3">Subtotal insumos</td><td class="rp-r">${nBs(p.subtotalAccesoriosBs)}</td></tr></tfoot>
               </table>
               ${(p.diagnostico && p.diagnostico.faltantes && p.diagnostico.faltantes.length)
             ? `<div class="rp-avisos"><strong>Datos faltantes:</strong> ${p.diagnostico.faltantes.map(esc).join(' · ')}</div>` : ''}
