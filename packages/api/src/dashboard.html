@@ -8431,8 +8431,7 @@
           ['Tela', p.tela ? p.tela.costoTelaBs : 0, p.tela ? `${esc(p.tela.nombre)} · ${(Number(p.tela.pesoGramos) || 0).toFixed(1)} g × Bs. ${(Number(p.tela.precioBsGramo) || 0).toFixed(4)}/g` : ''],
           ['Accesorios e insumos', p.subtotalAccesoriosBs, acc.length + ' insumo(s) en la receta'],
           ['Mano de obra directa', p.manoDeObra ? p.manoDeObra.totalManoObraBs : 0, 'Corte, confección y armado'],
-          ['Costos fijos por prenda', fx.fijosXprenda, 'Factor de complejidad ' + (fx.factorComplejidad ?? 1)],
-          ['Costos indirectos prorrateados', fx.indirectosXprenda, 'Pool anual · tarifa Bs. ' + (Number(fx.tarifaPuntoComplejidad) || 0).toFixed(4) + ' por punto'],
+          ['Costos fijos por prenda', fx.indirectosXprenda || fx.totalFijosBs || 0, 'Factor de complejidad ' + (fx.factorComplejidad ?? 1) + ' · tarifa Bs. ' + (Number(fx.tarifaPuntoComplejidad) || 0).toFixed(4) + ' por punto'],
         ];
         const totalComp = composicion.reduce((s, r) => s + (Number(r[1]) || 0), 0) || 1;
         const filasComp = composicion.map(([n, v, d]) => `

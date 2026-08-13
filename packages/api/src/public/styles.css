@@ -1359,7 +1359,7 @@ footer {
 
     .rp-r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .rp-c { text-align: center; white-space: nowrap; }
-    .rp-nota { font-size: 10pt; color: #374151; font-weight: 600; margin-top: 1pt; }
+    .rp-nota { font-size: 10pt !important; color: #1e293b !important; font-weight: 600; margin-top: 1pt; display: block; }
 
     /* Matriz de conceptos por talla. La primera columna se ancla porque es la
        única que dice QUÉ se está leyendo. */
