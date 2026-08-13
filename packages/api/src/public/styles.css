@@ -1301,7 +1301,7 @@ footer {
     .rp-head-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16pt; }
     .rp-marca { font-size: 11pt; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--rp-guindo); line-height: 1.1; }
     .rp-titulo { font-size: 16pt; font-weight: 800; margin: 1pt 0 0; letter-spacing: -0.015em; color: var(--rp-tinta); line-height: 1.15; }
-    .rp-sub { font-size: 11pt; color: var(--rp-gris-osc); margin-top: 2pt; font-weight: 700; line-height: 1.2; }
+    .rp-sub { font-size: 15pt !important; color: var(--rp-tinta) !important; margin-top: 3pt; font-weight: 700; line-height: 1.25; }
 
     .rp-meta { display: flex; align-items: center; gap: 12pt; text-align: right; flex-shrink: 0; background: #f8fafc; padding: 5pt 10pt; border-radius: 6px; border: 1pt solid var(--rp-linea); margin-left: auto; }
     .rp-meta-chk { display: flex; align-items: center; justify-content: center; padding-left: 8pt; border-left: 1pt solid var(--rp-linea); margin-left: 2pt; }
