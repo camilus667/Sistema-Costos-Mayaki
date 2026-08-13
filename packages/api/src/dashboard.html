@@ -8242,7 +8242,6 @@
 
     function encabezadoReporte(titulo, subtitulo, ctx, kpis) {
       const meta = [
-        ['Ámbito', ctx.ambito],
         ['Emitido', ctx.emitido],
       ].map(([k, v]) => `<div class="rp-meta-item"><span>${esc(k)}</span><strong>${esc(v)}</strong></div>`).join('');
 
@@ -8408,8 +8407,6 @@
         const utilidadUnidad = (Number(p.ingresoNetoEfectivoBs) || 0) - (Number(p.costoUnitarioNetoBs) || 0);
 
         const kpis = [
-          { titulo: 'Colegio', valor: colegioPrenda },
-          { titulo: 'Prenda y Talla', valor: p.descripcion, sub: codigoUnico + ' · ' + tallaNombre },
           { titulo: 'Costo unitario neto', valor: 'Bs. ' + nBs(p.costoUnitarioNetoBs) },
           { titulo: 'Precio de venta', valor: 'Bs. ' + nBs(p.precioVentaEfectivoBs) },
           { titulo: 'Utilidad por unidad', valor: 'Bs. ' + nBs(utilidadUnidad) },
@@ -8442,8 +8439,8 @@
           </tr>`).join('');
 
         const html = `
-          ${encabezadoReporte('Costeo Individual · ' + p.descripcion,
-          colegioPrenda + ' · ' + codigoUnico + ' · ' + tallaNombre + (conF ? '' : ''), ctx, kpis)}
+          ${encabezadoReporte('Costeo Individual',
+          colegioPrenda + ' · ' + p.descripcion + ' · ' + codigoUnico + ' · ' + tallaNombre, ctx, kpis)}
           <div class="rp-dos">
             <section>
               <h2 class="rp-h2">Composición del costo unitario</h2>
