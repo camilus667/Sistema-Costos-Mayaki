@@ -8456,9 +8456,23 @@
                 <tbody>${filasComp}</tbody>
                 <tfoot><tr><td>Costo unitario neto</td><td class="rp-r">${nBs(p.costoUnitarioNetoBs)}</td><td class="rp-r">100%</td></tr></tfoot>
               </table>
+            </section>
+            <section>
+              <h2 class="rp-h2">Insumos intervinientes</h2>
+              <table class="rp-tabla">
+                <thead><tr><th>Accesorio</th><th class="rp-r">Cantidad</th><th class="rp-r">Costo Unit.</th><th class="rp-r">Subtotal</th></tr></thead>
+                <tbody>${filasAcc}</tbody>
+                <tfoot><tr><td colspan="3">Subtotal insumos</td><td class="rp-r">${nBs(p.subtotalAccesoriosBs)}</td></tr></tfoot>
+              </table>
+              ${(p.diagnostico && p.diagnostico.faltantes && p.diagnostico.faltantes.length)
+            ? `<div class="rp-avisos"><strong>Datos faltantes:</strong> ${p.diagnostico.faltantes.map(esc).join(' · ')}</div>` : ''}
+            </section>
+          </div>
 
-              <hr class="rp-separador-seccion" />
+          <hr class="rp-separador-seccion" />
 
+          <div class="rp-dos">
+            <section>
               <div class="rp-box-resultado">
                 <h2 class="rp-h2">Resultado comercial por unidad</h2>
                 <table class="rp-tabla">
@@ -8472,16 +8486,6 @@
                   </tbody>
                 </table>
               </div>
-            </section>
-            <section>
-              <h2 class="rp-h2">Insumos intervinientes</h2>
-              <table class="rp-tabla">
-                <thead><tr><th>Accesorio</th><th class="rp-r">Cantidad</th><th class="rp-r">Costo Unit.</th><th class="rp-r">Subtotal</th></tr></thead>
-                <tbody>${filasAcc}</tbody>
-                <tfoot><tr><td colspan="3">Subtotal insumos</td><td class="rp-r">${nBs(p.subtotalAccesoriosBs)}</td></tr></tfoot>
-              </table>
-              ${(p.diagnostico && p.diagnostico.faltantes && p.diagnostico.faltantes.length)
-            ? `<div class="rp-avisos"><strong>Datos faltantes:</strong> ${p.diagnostico.faltantes.map(esc).join(' · ')}</div>` : ''}
             </section>
           </div>
           ${pieReporte()}`;
