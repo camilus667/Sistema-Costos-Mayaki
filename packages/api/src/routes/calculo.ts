@@ -836,11 +836,15 @@ api.get('/matriz-prenda/:productoId', async (c) => {
       };
     });
 
+    const [colObj] = prod.colegioId ? await db.select({ nombre: colegios.nombre }).from(colegios).where(eq(colegios.id, prod.colegioId)).limit(1) : [null];
+
     return c.json({
       success: true,
       producto: {
         id: prod.id,
         itemNumero: prod.itemNumero,
+        colegioId: prod.colegioId,
+        colegioNombre: colObj ? colObj.nombre : null,
         prod: referencias.get(String(prod.id)) ?? null,
         descripcion: prod.descripcion,
         factorComplejidad: prod.factorComplejidad,

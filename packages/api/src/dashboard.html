@@ -72,7 +72,7 @@
   </div>
 
   <nav class="tabs">
-    <button class="tab-btn active" onclick="switchTab('resumen')">Resumen General</button>
+    <button class="tab-btn active" onclick="switchTab('resumen')">Inventario General</button>
     <button class="tab-btn" onclick="switchTab('inputs-excel')">Costos de Producción</button>
     <button class="tab-btn" onclick="switchTab('matriz-excel')">Matrices Consolidadas</button>
     <button class="tab-btn" onclick="switchTab('costeo-individual')">Costeo Individual</button>
@@ -97,12 +97,12 @@
         <!-- La cifra grande pasa a ser la de variaciones por talla, que es el tamaño
              real del catalogo costeado; el conteo de prendas queda de apoyo. -->
         <div class="stat-card">
-          <span class="stat-title">VARIACIONES POR TALLA</span>
+          <span class="stat-title">VARIACIONES DE TALLAS</span>
           <span class="stat-value" id="st-variaciones-kpi">-</span>
           <span class="stat-subtext" id="st-prendas-sub">- prendas en catálogo</span>
         </div>
         <div class="stat-card stat-card-warning">
-          <span class="stat-title">INVERSIÓN TOTAL EN PRODUCCIÓN</span>
+          <span class="stat-title">INVERSIÓN TOTAL EN PRODUCTOS</span>
           <span class="stat-value" id="st-costo-inv-kpi">Bs. 0.00</span>
           <span class="stat-subtext">costo total de fabricación</span>
         </div>
@@ -210,6 +210,21 @@
             (Costos)</button>
           <button class="subview-btn" id="btn-acc-matriz" onclick="toggleAccSubView('matriz')">2. Matriz por Prenda
             (Uso)</button>
+        </div>
+
+        <div id="mo-actions-bar"
+          style="display:none; margin-bottom:1rem; align-items:center; justify-space-between; flex-wrap:wrap; gap:0.5rem; background:#0f172a; padding:0.6rem 1rem; border-radius:8px; border:1px solid #1e293b;">
+          <div style="font-size:0.85rem; color:#f8fafc; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
+            <span>🔨 Ítems y Tarifas de Mano de Obra por Tipo de Prenda</span>
+          </div>
+          <button class="btn-primary" onclick="abrirModalNuevoManoObra()"
+            style="display:inline-flex; align-items:center; gap:0.4rem; padding:0.45rem 0.9rem; font-size:0.8rem; font-weight:700; background:#3b82f6; color:#ffffff; border:none; border-radius:6px; cursor:pointer;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Agregar Nuevo Ítem de Mano de Obra
+          </button>
         </div>
 
         <div class="table-container" id="inputs-table-container">
@@ -1937,6 +1952,61 @@
       </div>
     </div>
 
+    <!-- MODAL: AGREGAR NUEVO ÍTEM DE MANO DE OBRA -->
+    <div id="modal-nuevo-mano-obra"
+      style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.75); backdrop-filter:blur(4px); z-index:9999; align-items:center; justify-content:center;">
+      <div
+        style="background:#1e293b; border:1px solid #334155; border-radius:12px; padding:1.5rem; width:90%; max-width:440px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);">
+        <div
+          style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; border-bottom:1px solid #334155; padding-bottom:0.75rem;">
+          <h3 style="margin:0; font-size:1.1rem; color:#f8fafc; font-weight:700;">➕ Agregar Nuevo Ítem de Mano de Obra
+          </h3>
+          <button onclick="cerrarModalNuevoManoObra()"
+            style="background:none; border:none; color:#94a3b8; font-size:1.4rem; cursor:pointer; line-height:1;">&times;</button>
+        </div>
+        <form onsubmit="crearNuevoManoObra(event)">
+          <div style="margin-bottom:1rem;">
+            <label
+              style="display:block; font-size:0.8rem; color:#cbd5e1; margin-bottom:0.35rem; font-weight:600;">Nombre del
+              Ítem / Prenda *</label>
+            <input type="text" id="mo-nuevo-nombre" required placeholder="Ej: Chaqueta Térmica, Bermuda, Gorra..."
+              style="width:100%; padding:0.55rem; background:#0f172a; border:1px solid #334155; border-radius:6px; color:#f8fafc; font-size:0.85rem; box-sizing:border-box;" />
+          </div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:0.75rem; margin-bottom:1.25rem;">
+            <div>
+              <label
+                style="display:block; font-size:0.75rem; color:#94a3b8; margin-bottom:0.25rem; text-align:center;">Tallas
+                2 - 10</label>
+              <input type="number" step="0.5" min="0" id="mo-nuevo-g1" value="0" placeholder="0.00"
+                style="width:100%; padding:0.45rem; background:#0f172a; border:1px solid #334155; border-radius:6px; color:#f8fafc; font-size:0.85rem; text-align:center; box-sizing:border-box;" />
+            </div>
+            <div>
+              <label
+                style="display:block; font-size:0.75rem; color:#94a3b8; margin-bottom:0.25rem; text-align:center;">Tallas
+                12 - S</label>
+              <input type="number" step="0.5" min="0" id="mo-nuevo-g2" value="0" placeholder="0.00"
+                style="width:100%; padding:0.45rem; background:#0f172a; border:1px solid #334155; border-radius:6px; color:#f8fafc; font-size:0.85rem; text-align:center; box-sizing:border-box;" />
+            </div>
+            <div>
+              <label
+                style="display:block; font-size:0.75rem; color:#94a3b8; margin-bottom:0.25rem; text-align:center;">Tallas
+                M - 4XL</label>
+              <input type="number" step="0.5" min="0" id="mo-nuevo-g3" value="0" placeholder="0.00"
+                style="width:100%; padding:0.45rem; background:#0f172a; border:1px solid #334155; border-radius:6px; color:#f8fafc; font-size:0.85rem; text-align:center; box-sizing:border-box;" />
+            </div>
+          </div>
+          <div
+            style="display:flex; justify-content:flex-end; gap:0.5rem; border-top:1px solid #334155; padding-top:0.75rem;">
+            <button type="button" onclick="cerrarModalNuevoManoObra()"
+              style="padding:0.45rem 0.9rem; background:#334155; color:#cbd5e1; border:none; border-radius:6px; font-size:0.8rem; font-weight:600; cursor:pointer;">Cancelar</button>
+            <button type="submit"
+              style="padding:0.45rem 1.1rem; background:#3b82f6; color:#ffffff; border:none; border-radius:6px; font-size:0.8rem; font-weight:700; cursor:pointer;">Guardar
+              Ítem</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
   </main>
 
   <footer>
@@ -2693,6 +2763,11 @@
         accSelector.style.display = concept === 'Acc' ? 'flex' : 'none';
       }
 
+      const moActions = document.getElementById('mo-actions-bar');
+      if (moActions) {
+        moActions.style.display = concept === 'ManoDeObra' ? 'flex' : 'none';
+      }
+
       cargarInputConcept(concept);
     }
 
@@ -2802,19 +2877,23 @@
         const json = await res.json();
         thead.innerHTML = `
           <tr>
-            <th style="width:78px;">Prod</th><th>Prenda</th>
-            <th style="text-align:center;">Tallas 2 - 10</th>
-            <th style="text-align:center;">Tallas 12 - S</th>
-            <th style="text-align:center;">Tallas M - 4XL</th>
+            <th style="width:78px;">Prod</th><th>Prenda / Ítem</th>
+            <th style="text-align:center;">Tallas 2 - 10 (Bs)</th>
+            <th style="text-align:center;">Tallas 12 - S (Bs)</th>
+            <th style="text-align:center;">Tallas M - 4XL (Bs)</th>
+            <th style="text-align:center; width:70px;">Acción</th>
           </tr>
         `;
-        tbody.innerHTML = json.data.map(p => `
+        tbody.innerHTML = json.data.map((p, idx) => `
           <tr>
-            <td><span class="col-item">${p.prod || p.itemNumero}</span></td>
-            <td><strong>${p.descripcion}</strong></td>
+            <td><span class="col-item">${p.prod || p.itemNumero || (idx + 1)}</span></td>
+            <td><strong>${escAttr(p.descripcion)}</strong></td>
             <td style="text-align:center;">${getInputHtml(p.grupo1_tallas_2_10, '0.5', `id="mo1-${p.productoId}" onchange="guardarManoObraLive('${p.productoId}')"`)}</td>
             <td style="text-align:center;">${getInputHtml(p.grupo2_tallas_12_S, '0.5', `id="mo2-${p.productoId}" onchange="guardarManoObraLive('${p.productoId}')"`)}</td>
             <td style="text-align:center;">${getInputHtml(p.grupo3_tallas_M_4XL, '0.5', `id="mo3-${p.productoId}" onchange="guardarManoObraLive('${p.productoId}')"`)}</td>
+            <td style="text-align:center;">
+              <button onclick="eliminarManoObraItem('${p.productoId}', '${escAttr(p.descripcion)}')" title="Eliminar ítem" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:0.9rem; padding:2px 6px;">🗑️</button>
+            </td>
           </tr>
         `).join('');
       } else if (concept === 'fijosXprenda') {
@@ -4090,6 +4169,68 @@
           cargarResumen();
         }
       } catch (e) { console.error('Error al actualizar Mano de Obra:', e); }
+    }
+
+    function abrirModalNuevoManoObra() {
+      document.getElementById('mo-nuevo-nombre').value = '';
+      document.getElementById('mo-nuevo-g1').value = '0';
+      document.getElementById('mo-nuevo-g2').value = '0';
+      document.getElementById('mo-nuevo-g3').value = '0';
+      document.getElementById('modal-nuevo-mano-obra').style.display = 'flex';
+    }
+
+    function cerrarModalNuevoManoObra() {
+      document.getElementById('modal-nuevo-mano-obra').style.display = 'none';
+    }
+
+    async function crearNuevoManoObra(e) {
+      e.preventDefault();
+      const nombre = document.getElementById('mo-nuevo-nombre').value.trim();
+      const grupo1 = parseFloat(document.getElementById('mo-nuevo-g1').value) || 0;
+      const grupo2 = parseFloat(document.getElementById('mo-nuevo-g2').value) || 0;
+      const grupo3 = parseFloat(document.getElementById('mo-nuevo-g3').value) || 0;
+
+      if (!nombre) return alert('Por favor ingresá el nombre del ítem.');
+
+      try {
+        const res = await fetch('/api/inputs/mano-de-obra', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre, grupo1, grupo2, grupo3 })
+        });
+        const json = await res.json();
+        if (json.success) {
+          cerrarModalNuevoManoObra();
+          await cargarInputConcept('ManoDeObra');
+          await cargarMatrizConsolidada();
+          generarMatrizPrenda();
+          cargarResumen();
+        } else {
+          alert('Error al crear ítem de Mano de Obra: ' + (json.error || 'Desconocido'));
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error al crear ítem de Mano de Obra: ' + err.message);
+      }
+    }
+
+    async function eliminarManoObraItem(id, nombre) {
+      if (!confirm(`¿Estás seguro de eliminar el ítem de Mano de Obra "${nombre}"?`)) return;
+      try {
+        const res = await fetch('/api/inputs/mano-de-obra/' + id, { method: 'DELETE' });
+        const json = await res.json();
+        if (json.success) {
+          await cargarInputConcept('ManoDeObra');
+          await cargarMatrizConsolidada();
+          generarMatrizPrenda();
+          cargarResumen();
+        } else {
+          alert('No se pudo eliminar el ítem: ' + (json.error || 'Desconocido'));
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error al eliminar ítem de Mano de Obra: ' + err.message);
+      }
     }
 
     async function guardarPesoLive(productoId, tallaCodigo, inputElem) {
@@ -6580,8 +6721,10 @@
           (p.esDeOtroColegio ? ' · ' + p.colegioNombre : '') +
           ` · ${p.lineas} insumo(s), ${Number(p.subtotalBs).toFixed(2)} Bs`;
 
-        const opciones = (lista) =>
-          lista.map(p => `<option value="${escAttr(p.id)}">${escAttr(etiqueta(p))}</option>`).join('');
+        const opciones = (lista) => {
+          const sorted = [...(lista || [])].sort((a, b) => (a.descripcion || '').localeCompare(b.descripcion || '', 'es', { sensitivity: 'base' }));
+          return sorted.map(p => `<option value="${escAttr(p.id)}">${escAttr(etiqueta(p))}</option>`).join('');
+        };
 
         let html = '<option value="">-- elegí una prenda --</option>';
         if ((json.mismaTela || []).length > 0) {
@@ -6654,6 +6797,7 @@
         const resAcc = await fetch(url);
         const jsonAcc = await resAcc.json();
         const disponibles = (jsonAcc.data || []).filter(a => !yaPuestos.has(a.id));
+        disponibles.sort((a, b) => (a.descripcion || '').localeCompare(b.descripcion || '', 'es', { sensitivity: 'base' }));
 
         document.getElementById('receta-nuevo-acc').innerHTML = disponibles.length === 0
           ? '<option value="">(la prenda ya lleva todos los insumos del catálogo)</option>'
@@ -8246,7 +8390,7 @@
       ].map(([k, v]) => `<div class="rp-meta-item"><span>${esc(k)}</span><strong>${esc(v)}</strong></div>`).join('');
 
       const tiras = (kpis || []).map(k => `
-        <div class="rp-kpi ${k.destacado ? 'rp-kpi-dest' : ''}">
+        <div class="rp-kpi ${k.destacado ? 'rp-kpi-dest' : ''}"${k.flex ? ` style="flex:${k.flex};"` : ''}>
           <span class="rp-kpi-t">${esc(k.titulo)}</span>
           <span class="rp-kpi-v">${esc(k.valor)}</span>
           ${k.sub ? `<span class="rp-kpi-s">${esc(k.sub)}</span>` : ''}
@@ -8326,7 +8470,7 @@
         document.head.appendChild(regla);
       }
       const h = HOJA[orientacion];
-      regla.textContent = `@page { size: letter ${orientacion === 'horizontal' ? 'landscape' : 'portrait'}; margin: ${h.margenMm}mm; @bottom-right { content: ; font-size: 9pt; color: #555; } }`;
+      regla.textContent = `@page { size: letter ${orientacion === 'horizontal' ? 'landscape' : 'portrait'}; margin: ${h.margenMm}mm; @bottom-right { content: ; font-size: 10pt; color: #555; } }`;
 
       document.body.classList.add('rp-imprimiendo');
       raiz.classList.add('rp-multipagina');
@@ -8350,35 +8494,88 @@
       alert('No hay datos para exportar en ' + que + '.\n\nRevisá el ámbito seleccionado en el encabezado.');
     }
 
-    /* ---------------- REPORTE 1 · RESUMEN GENERAL ---------------- */
+    /* ---------------- REPORTE 1 · INVENTARIO GENERAL ---------------- */
     async function reporteResumenGeneral() {
       try {
         const res = await fetch('/api/dashboard-resumen?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam());
         const d = await res.json();
-        if (!d || !d.prendas || !d.prendas.length) return _sinDatos('Resumen General');
+        const prendas = d.prendas || [];
+        if (!prendas.length) return _sinDatos('Inventario General');
 
         const ctx = contextoReporte();
-        const isFijos = currentInputConcept === 'fijosXprenda';
-        const nombreHoja = isFijos ? 'Salarios Fijos y Gastos Operativos Mensuales' : (HOJAS_PRODUCCION[currentInputConcept] || currentInputConcept);
-        const sub = currentInputConcept === 'Acc'
-          ? (currentAccSubView === 'aux' ? 'Tabla auxiliar de costos' : 'Matriz de uso por prenda')
-          : null;
 
-        const kpis = isFijos ? null : [
-          { titulo: 'Hoja', valor: nombreHoja },
-          { titulo: 'Registros', valor: nInt(totalFilas) },
-          { titulo: 'Columnas', valor: nInt(maxCols) },
+        const pctGananciaInversion = d.totalValorCostoBs > 0
+          ? ((d.gananciaTotalBs / d.totalValorCostoBs) * 100).toFixed(1)
+          : '0.0';
+
+        const kpis = [
+          { titulo: 'Stock Físico', valor: nInt(d.totalStockUnidades) + ' Unid.', sub: 'en almacén', flex: '0.70' },
+          { titulo: 'Variantes', valor: nInt(d.variacionesCount || 0), sub: `${d.productosCount || prendas.length} en catálogo`, flex: '0.75' },
+          { titulo: 'Inversión en Productos', valor: 'Bs. ' + nBs(d.totalValorCostoBs), sub: 'costo total', flex: '1.35' },
+          { titulo: 'Venta Proyectada', valor: 'Bs. ' + nBs(d.totalValorVentaBs), sub: 'venta proyectada', flex: '1.25' },
+          { titulo: 'Ganancia Proyectada', valor: 'Bs. ' + nBs(d.gananciaTotalBs), sub: `+${pctGananciaInversion}% ganancia`, destacado: true, flex: '1.25' },
         ];
 
-        const tituloReporte = isFijos ? nombreHoja : ('Costos de Producción · ' + nombreHoja);
+        const filas = prendas.map(p => {
+          const rCosto = (p.costoMin === p.costoMax) ? nBs(p.costoMin) : (nBs(p.costoMin) + ' – ' + nBs(p.costoMax));
+          const rPrecio = (p.precioMin === p.precioMax) ? nBs(p.precioMin) : (nBs(p.precioMin) + ' – ' + nBs(p.precioMax));
+          const mPct = (Number(p.margenPromedioPct) || 0).toFixed(1) + '%';
+          const ref = p.prod || ('#' + p.itemNumero);
+
+          return `
+            <tr>
+              <td class="rp-c">${esc(ref)}</td>
+              <td><strong>${esc(p.descripcion)}</strong></td>
+              <td class="rp-r">${nInt(p.stockTotal)} Unid.</td>
+              <td class="rp-r">${rCosto}</td>
+              <td class="rp-r">${rPrecio}</td>
+              <td class="rp-r">${nBs(p.valorCostoTotalBs)}</td>
+              <td class="rp-r">${nBs(p.valorVentaTotalBs)}</td>
+              <td class="rp-r">${nBs(p.gananciaEstimadaBs)}</td>
+              <td class="rp-r">${mPct}</td>
+            </tr>`;
+        }).join('');
 
         const html = `
-          ${encabezadoReporte(tituloReporte,
-          sub || (isFijos ? 'Desglose mensual de salarios fijos y gastos de operación' : 'Insumos y parámetros que alimentan el motor de costeo'), ctx, kpis)}
-          ${partes.map((p) => p.html).join('')}
-          ${pieReporte(isFijos ? 'Detalle de salarios y gastos operativos.' : 'Datos de entrada del motor de costeo.')}`;
+          ${encabezadoReporte(
+          'Inventario General de Prendas',
+          'Consolidado de prendas e inventario disponible',
+          ctx,
+          kpis
+        )}
+          <table class="rp-tabla rp-densa">
+            <thead>
+              <tr>
+                <th class="rp-c">Ítem</th>
+                <th>Prenda</th>
+                <th class="rp-r">Stock</th>
+                <th class="rp-r">Costo (Bs)</th>
+                <th class="rp-r">Venta (Bs)</th>
+                <th class="rp-r">Costo Inv.</th>
+                <th class="rp-r">Venta Inv.</th>
+                <th class="rp-r">Ganancia</th>
+                <th class="rp-r">Margen</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filas}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="2"><strong>TOTAL GENERAL</strong> (${nInt(prendas.length)} prendas)</td>
+                <td class="rp-r"><strong>${nInt(d.totalStockUnidades)} Unid.</strong></td>
+                <td colspan="2"></td>
+                <td class="rp-r"><strong>${nBs(d.totalValorCostoBs)}</strong></td>
+                <td class="rp-r"><strong>${nBs(d.totalValorVentaBs)}</strong></td>
+                <td class="rp-r"><strong>${nBs(d.gananciaTotalBs)}</strong></td>
+                <td class="rp-r"><strong>${d.totalValorCostoBs > 0 ? (((d.gananciaTotalBs / d.totalValorCostoBs) * 100).toFixed(1) + '%') : '-'}</strong></td>
+              </tr>
+            </tfoot>
+          </table>
+          ${pieReporte('Inventario general consolidado de prendas y valorización total.')}
+        `;
 
-        emitirReporte(isFijos ? 'vertical' : 'auto', html);
+        emitirReporte('horizontal', html);
       } catch (e) { console.error(e); alert('No se pudo generar el reporte: ' + e.message); }
     }
 
@@ -8390,11 +8587,12 @@
         const item = selP ? selP.value : '';
         if (!item) return _sinDatos('Costeo Individual');
 
-        let url = '/api/inputs/desglose-inteligente-producto?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam() + '&itemNumero=' + item;
+        let url = '/api/inputs/desglose-inteligente-producto?colegioId=' + colegioFiltroActual + getSnapshotQueryParam() + getModalidadFQueryParam();
         if (selT && selT.value) url += '&tallaId=' + selT.value;
 
         const j = await (await fetch(url)).json();
-        const p = (j.data || [])[0];
+        const allData = j.data || [];
+        const p = (item ? allData.find(x => String(x.itemNumero) === String(item) || String(x.productoId) === String(item) || String(x.prod) === String(item)) : null) || allData[0];
         if (!p) return _sinDatos('Costeo Individual');
 
         const ctx = contextoReporte();
@@ -8407,10 +8605,10 @@
         const utilidadUnidad = (Number(p.ingresoNetoEfectivoBs) || 0) - (Number(p.costoUnitarioNetoBs) || 0);
 
         const kpis = [
-          { titulo: 'Costo unitario neto', valor: 'Bs. ' + nBs(p.costoUnitarioNetoBs) },
-          { titulo: 'Precio de venta', valor: 'Bs. ' + nBs(p.precioVentaEfectivoBs) },
-          { titulo: 'Utilidad por unidad', valor: 'Bs. ' + nBs(utilidadUnidad) },
-          { titulo: 'Margen de ganancia', valor: (Number(p.margenEfectivoPct) || 0).toFixed(1) + '%', destacado: true },
+          { titulo: 'Costo unit. neto', valor: 'Bs. ' + nBs(p.costoUnitarioNetoBs), flex: '1.1' },
+          { titulo: 'Precio de venta', valor: 'Bs. ' + nBs(p.precioVentaEfectivoBs), flex: '0.9' },
+          { titulo: 'Utilidad por unidad', valor: 'Bs. ' + nBs(utilidadUnidad), flex: '1.1' },
+          { titulo: 'Margen utilidad', valor: (Number(p.margenEfectivoPct) || 0).toFixed(1) + '%', destacado: true, flex: '0.9' },
         ];
 
         const acc = (p.accesoriosIntervinientes || []);
@@ -8445,7 +8643,7 @@
             <section>
               <h2 class="rp-h2">Composición del costo unitario</h2>
               <table class="rp-tabla">
-                <thead><tr><th>Componente</th><th class="rp-r">Bs.</th><th class="rp-r">Peso</th></tr></thead>
+                <thead><tr><th>Componente</th><th class="rp-r">Bs.</th><th class="rp-r">%</th></tr></thead>
                 <tbody>${filasComp}</tbody>
                 <tfoot><tr><td>Costo unitario neto</td><td class="rp-r">${nBs(p.costoUnitarioNetoBs)}</td><td class="rp-r">100%</td></tr></tfoot>
               </table>
@@ -8474,7 +8672,7 @@
                   <tr><td>Ingreso neto efectivo</td><td class="rp-r">${nBs(p.ingresoNetoEfectivoBs)}</td></tr>
                   <tr><td>Costo unitario neto</td><td class="rp-r">−${nBs(p.costoUnitarioNetoBs)}</td></tr>
                   <tr class="rp-total"><td>Utilidad por unidad</td><td class="rp-r rp-pos">${nBs((Number(p.ingresoNetoEfectivoBs) || 0) - (Number(p.costoUnitarioNetoBs) || 0))}</td></tr>
-                  <tr class="rp-total"><td>Margen sobre ingreso</td><td class="rp-r">${(Number(p.margenEfectivoPct) || 0).toFixed(2)}%</td></tr>
+                  <tr class="rp-total"><td>Margen de utilidad</td><td class="rp-r">${(Number(p.margenEfectivoPct) || 0).toFixed(2)}%</td></tr>
                 </tbody>
               </table>
             </section>
@@ -8679,11 +8877,14 @@
       });
 
       const filaCeldas = (tr, etiqueta) =>
-        [...tr.children].map((c) => {
+        [...tr.children].map((c, idx) => {
           const span = Number(c.getAttribute('colspan') || 1);
           const txt = _textoCelda(c);
-          const alineaDer = /^[\s\-—]*[\d.,()%-]+[\s%]*$/.test(txt) && txt !== '';
-          return `<${etiqueta}${span > 1 ? ` colspan="${span}"` : ''} class="${alineaDer ? 'rp-r' : ''}">${esc(txt)}</${etiqueta}>`;
+          const esNumero = /^[\s\-—]*[\d.,()%-]+[\s%]*$/.test(txt) && txt !== '';
+          const alineaDer = etiqueta === 'td' && esNumero;
+          const esTallaEnHead = etiqueta === 'th' && idx > 0 && !/^(concepto|prenda|descripci|item|subtotal|total)/i.test(txt);
+          const cls = esTallaEnHead ? 'rp-c' : (alineaDer ? 'rp-r' : '');
+          return `<${etiqueta}${span > 1 ? ` colspan="${span}"` : ''}${cls ? ` class="${cls}"` : ''}>${esc(txt)}</${etiqueta}>`;
         }).join('');
 
       const cab = [...clon.querySelectorAll('thead tr')]
@@ -8846,7 +9047,8 @@
         const ctx = contextoReporte();
         const p = json.producto || {};
         const tallas = json.data || [];
-        const colegioNombre = p.colegioNombre || ctx.ambito;
+        const colObj = colegiosCache.find(x => String(x.id) === String(p.colegioId));
+        const colegioNombre = p.colegioNombre || (colObj ? colObj.nombre : '') || 'Colegio';
         const codigoPos = p.prod || ('#' + p.itemNumero);
 
         const conceptosMatriz = [
@@ -8855,30 +9057,35 @@
           { clave: 'costoManoObra', label: 'Mano de Obra Directa' },
           { clave: 'costoFijoPrenda', label: 'Costos Fijos por Prenda' },
           { clave: 'costoUnitarioNeto', label: 'Costo Unitario Neto', destacado: true },
-          { clave: 'precioVentaEfectivo', label: 'Precio de Venta' },
+          { clave: 'precioLista', label: 'Precio de Lista', tenue: true },
+          { clave: 'precioVentaEfectivo', label: 'Precio de Venta c. Desc' },
           { clave: 'utilidadUnidad', label: 'Utilidad por Unidad' },
           { clave: 'margenPct', label: 'Margen de Ganancia (%)' }
         ];
 
-        const thTallas = tallas.map(t => `<th class="rp-r">${esc(fmtTalla(t.codigo || t.talla || t.nombre))}</th>`).join('');
+        const thTallas = tallas.map(t => `<th class="rp-c">${esc(fmtTalla(t.tallaCodigo || t.tallaNombre || t.codigo || t.talla || t.nombre))}</th>`).join('');
 
         const cuerpo = conceptosMatriz.map(c => {
           const celdas = tallas.map(t => {
+            const tieneTalla = t.seOfrece || (t.costoUnitarioNeto > 0) || (t.precioVenta > 0) || (t.precioLista > 0);
             let val = 0;
             if (c.clave === 'costoTela') val = t.costoTela || 0;
             else if (c.clave === 'costoAccesorios') val = t.costoAccesorios || 0;
             else if (c.clave === 'costoManoObra') val = t.costoManoObra || 0;
-            else if (c.clave === 'costoFijoPrenda') val = t.costoIndirectoUnitario || t.costoFijo || 0;
+            else if (c.clave === 'costoFijoPrenda') val = t.costoIndirecto !== undefined ? t.costoIndirecto : (t.costoIndirectoUnitario || t.costoFijo || 0);
             else if (c.clave === 'costoUnitarioNeto') val = t.costoUnitarioNeto || 0;
-            else if (c.clave === 'precioVentaEfectivo') val = t.precioVentaEfectivo || 0;
-            else if (c.clave === 'utilidadUnidad') val = (t.ingresoNetoEfectivo || 0) - (t.costoUnitarioNeto || 0);
-            else if (c.clave === 'margenPct') val = (t.margenEfectivoPct !== null && t.margenEfectivoPct !== undefined) ? t.margenEfectivoPct : 0;
+            else if (c.clave === 'precioLista') val = t.precioLista || t.precioVenta || 0;
+            else if (c.clave === 'precioVentaEfectivo') val = t.precioVenta !== undefined ? t.precioVenta : (t.precioVentaEfectivo || 0);
+            else if (c.clave === 'utilidadUnidad') val = (t.ingresoNetoEfectivo !== null && t.ingresoNetoEfectivo !== undefined ? t.ingresoNetoEfectivo : 0) - (t.costoUnitarioNeto || 0);
+            else if (c.clave === 'margenPct') val = (t.margenEfectivoPct !== null && t.margenEfectivoPct !== undefined) ? t.margenEfectivoPct : (modalidadFActual ? (t.margenConFactura ?? 0) : (t.margenSinFactura ?? 0));
 
-            const txt = c.clave === 'margenPct' ? (Number(val).toFixed(1) + '%') : ('Bs. ' + nBs(val));
+            const esVacio = !tieneTalla || val === null || val === undefined || Number(val) === 0;
+            const txt = esVacio ? '-' : (c.clave === 'margenPct' ? (Number(val).toFixed(1) + '%') : nBs(val));
             return `<td class="rp-r ${c.destacado ? 'rp-total-col' : ''}">${txt}</td>`;
           }).join('');
 
-          return `<tr ${c.destacado ? 'class="rp-total"' : ''}>
+          const trCls = c.destacado ? 'class="rp-total"' : (c.tenue ? 'class="rp-tenue"' : '');
+          return `<tr ${trCls}>
             <td><strong>${esc(c.label)}</strong></td>
             ${celdas}
           </tr>`;
@@ -9002,7 +9209,7 @@
           <table class="rp-tabla rp-matriz rp-densa">
             <thead><tr>
               <th class="rp-c">Prod</th><th class="rp-desc">Prenda</th>
-              ${tallas.map(t => `<th class="rp-r">${esc(fmtTalla(t.codigo))}</th>`).join('')}
+              ${tallas.map(t => `<th class="rp-c">${esc(fmtTalla(t.codigo || t.tallaCodigo || t.talla))}</th>`).join('')}
               <th class="rp-r rp-total-col">${sumable ? (currentExcelConcept === 'inventarioUnidades' ? 'SUBTOTAL' : 'SUBTOTAL Bs') : ''}</th>
             </tr></thead>
             <tbody>${cuerpo}</tbody>

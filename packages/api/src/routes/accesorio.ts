@@ -51,14 +51,7 @@ api.get('/', async (c) => {
 
   const allAccesorios = await query;
   allAccesorios.sort((a: any, b: any) => {
-    const numA = parseInt(String(a.codigo || ''), 10);
-    const numB = parseInt(String(b.codigo || ''), 10);
-    const validA = !isNaN(numA);
-    const validB = !isNaN(numB);
-    if (validA && validB) return numA - numB;
-    if (validA) return -1;
-    if (validB) return 1;
-    return String(a.descripcion || '').localeCompare(String(b.descripcion || ''));
+    return String(a.descripcion || '').localeCompare(String(b.descripcion || ''), 'es', { sensitivity: 'base' });
   });
 
   return c.json({

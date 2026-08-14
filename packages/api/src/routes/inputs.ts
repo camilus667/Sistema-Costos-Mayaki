@@ -846,6 +846,67 @@ api.put('/mano-de-obra/:tipoPrendaId', async (c) => {
   }
 });
 
+// POST /api/inputs/mano-de-obra - Crear nuevo ítem/tipo de mano de obra
+api.post('/mano-de-obra', async (c) => {
+  const db = (c as any).db;
+  const body = await c.req.json();
+  const nombre = String(body.nombre || '').trim();
+  const grupo1 = Number(body.grupo1 || 0);
+  const grupo2 = Number(body.grupo2 || 0);
+  const grupo3 = Number(body.grupo3 || 0);
+
+  if (!nombre) return c.json({ success: false, error: 'El nombre del ítem es obligatorio.' }, 400);
+
+  try {
+    const id = nuevoIdHex();
+    await db.insert(tipoPrenda).values({ id, nombre, activo: true });
+
+    const todasTallas = await db.select().from(tallas).where(or(eq(tallas.activo, true), isNull(tallas.activo)));
+    for (const talla of todasTallas) {
+      const banda = bandaManoObra(talla.codigo);
+      let costoBs = grupo3;
+      if (banda === 1) costoBs = grupo1;
+      else if (banda === 2) costoBs = grupo2;
+
+      await db.insert(manoObraTipo).values({
+        id: nuevoIdHex(),
+        tipoPrendaId: id,
+        tallaId: talla.id,
+        costoBs,
+      });
+    }
+
+    saveDbToDisk();
+    return c.json({ success: true, message: 'Ítem de Mano de Obra creado exitosamente.', id, nombre });
+  } catch (e) {
+    console.error('Error creando ítem de mano de obra:', e);
+    return c.json({ success: false, error: String(e) }, 500);
+  }
+});
+
+// DELETE /api/inputs/mano-de-obra/:id - Eliminar ítem de mano de obra si no está asignado
+api.delete('/mano-de-obra/:id', async (c) => {
+  const db = (c as any).db;
+  const id = c.req.param('id');
+  try {
+    const [tipo] = await db.select().from(tipoPrenda).where(eq(tipoPrenda.id, id)).limit(1);
+    if (!tipo) return c.json({ success: false, error: 'Ítem de mano de obra no encontrado.' }, 404);
+
+    const asignados = await db.select({ id: productos.id }).from(productos).where(eq(productos.tipoPrendaId, id)).limit(1);
+    if (asignados.length > 0) {
+      return c.json({ success: false, error: 'No se puede eliminar: el ítem está asignado a prendas en el catálogo.' }, 409);
+    }
+
+    await db.delete(manoObraTipo).where(eq(manoObraTipo.tipoPrendaId, id));
+    await db.delete(tipoPrenda).where(eq(tipoPrenda.id, id));
+    saveDbToDisk();
+    return c.json({ success: true, message: 'Ítem eliminado correctamente.' });
+  } catch (e) {
+    console.error('Error eliminando ítem de mano de obra:', e);
+    return c.json({ success: false, error: String(e) }, 500);
+  }
+});
+
 
 // PUT /api/inputs/fijos-x-prenda/:id - Actualizar factor de complejidad en tiempo real
 api.put('/fijos-x-prenda/:id', async (c) => {

@@ -1357,8 +1357,8 @@ footer {
     .rp-densa td { padding: 4pt 5pt; font-size: 10pt; }
     .rp-densa th { font-size: 10pt; padding: 4.5pt 5pt; }
 
-    .rp-r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .rp-c { text-align: center; white-space: nowrap; }
+    .rp-r, .rp-tabla th.rp-r, .rp-tabla td.rp-r { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .rp-c, .rp-tabla th.rp-c, .rp-tabla td.rp-c { text-align: center !important; white-space: nowrap; }
     .rp-nota { font-size: 10pt !important; color: #1e293b !important; font-weight: 600; margin-top: 1pt; display: block; }
 
     /* Matriz de conceptos por talla. La primera columna se ancla porque es la
@@ -1378,6 +1378,8 @@ footer {
     .rp-precio td, tr.rp-precio td { font-weight: 800; border-bottom: 0.5pt solid var(--rp-guindo) !important; }
     .rp-total-col { font-weight: 800; }
     .rp-alerta td { background: #f9edf1 !important; }
+    .rp-tenue td, tr.rp-tenue td { background: #ffffff !important; color: #64748b !important; font-weight: 500 !important; }
+    .rp-tenue td strong { font-weight: 500 !important; color: #64748b !important; }
 
     .rp-dos { display: grid; grid-template-columns: 1.15fr 1fr; gap: 12pt; align-items: start; }
     .rp-comparativo { margin-top: 6pt; }
