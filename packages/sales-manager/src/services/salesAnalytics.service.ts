@@ -60,7 +60,9 @@ export function esEstadoValido(estado?: string): boolean {
 
 export async function obtenerResumenColegios(
   colegioFiltro?: string,
-  anioFiltro?: number
+  anioFiltro?: number,
+  fechaInicioStr?: string,
+  fechaFinStr?: string
 ): Promise<VentaResumenColegio[]> {
   const db = await getDb();
   let todas: any[] = db.select().from(posVentas).all();
@@ -72,6 +74,16 @@ export async function obtenerResumenColegios(
       const cgNorm = normalizarColegioNombre(v.colegioGrupo || '');
       return cgNorm.includes(targetNorm) || targetNorm.includes(cgNorm);
     });
+  }
+
+  const inicioIso = normalizarFechaIso(fechaInicioStr);
+  const finIso = normalizarFechaIso(fechaFinStr);
+
+  if (inicioIso) {
+    todas = todas.filter((v) => v.fechaIso && v.fechaIso >= inicioIso);
+  }
+  if (finIso) {
+    todas = todas.filter((v) => v.fechaIso && v.fechaIso <= finIso);
   }
 
   if (anioFiltro) {
@@ -100,7 +112,9 @@ export async function obtenerResumenColegios(
 export async function obtenerResumenPeriodo(
   agrupacion: 'mensual' | 'trimestral' = 'trimestral',
   colegioFiltro?: string,
-  anioFiltro?: number
+  anioFiltro?: number,
+  fechaInicioStr?: string,
+  fechaFinStr?: string
 ): Promise<VentaResumenPeriodo[]> {
   const db = await getDb();
   let ventas: any[] = db.select().from(posVentas).all();
@@ -112,6 +126,16 @@ export async function obtenerResumenPeriodo(
       const cgNorm = normalizarColegioNombre(v.colegioGrupo || '');
       return cgNorm.includes(targetNorm) || targetNorm.includes(cgNorm);
     });
+  }
+
+  const inicioIso = normalizarFechaIso(fechaInicioStr);
+  const finIso = normalizarFechaIso(fechaFinStr);
+
+  if (inicioIso) {
+    ventas = ventas.filter((v) => v.fechaIso && v.fechaIso >= inicioIso);
+  }
+  if (finIso) {
+    ventas = ventas.filter((v) => v.fechaIso && v.fechaIso <= finIso);
   }
 
   if (anioFiltro) {
@@ -153,7 +177,9 @@ export async function obtenerResumenPeriodo(
 export async function obtenerVentasPorPrendaYTalla(
   colegioGrupo?: string,
   anio?: number,
-  trimestre?: string
+  trimestre?: string,
+  fechaInicioStr?: string,
+  fechaFinStr?: string
 ): Promise<DetallePrendaVenta[]> {
   const db = await getDb();
   let ventas: any[] = db.select().from(posVentas).all();
@@ -165,6 +191,16 @@ export async function obtenerVentasPorPrendaYTalla(
       const cgNorm = normalizarColegioNombre(v.colegioGrupo || '');
       return cgNorm.includes(targetNorm) || targetNorm.includes(cgNorm);
     });
+  }
+
+  const inicioIso = normalizarFechaIso(fechaInicioStr);
+  const finIso = normalizarFechaIso(fechaFinStr);
+
+  if (inicioIso) {
+    ventas = ventas.filter((v) => v.fechaIso && v.fechaIso >= inicioIso);
+  }
+  if (finIso) {
+    ventas = ventas.filter((v) => v.fechaIso && v.fechaIso <= finIso);
   }
 
   if (anio) {
@@ -262,17 +298,17 @@ export async function obtenerRangoFechasVentas(
   };
 
   if (inicioIso || finIso) {
-    const inicioFmt = inicioIso ? fmtFecha(inicioIso) : (todas.length > 0 ? fmtFecha(todas[0].fechaIso || '') : '01/01/2026');
-    const finFmt = finIso ? fmtFecha(finIso) : (todas.length > 0 ? fmtFecha(todas[todas.length - 1].fechaIso || '') : '31/12/2026');
+    const inicioFmt = inicioIso ? fmtFecha(inicioIso) : (todas.length > 0 ? fmtFecha(todas[0].fechaIso || '') : '-');
+    const finFmt = finIso ? fmtFecha(finIso) : (todas.length > 0 ? fmtFecha(todas[todas.length - 1].fechaIso || '') : '-');
     return { fechaInicio: inicioFmt, fechaFin: finFmt };
   }
 
   if (todas.length === 0) {
-    return { fechaInicio: '01/01/2025', fechaFin: '31/12/2026' };
+    return { fechaInicio: '-', fechaFin: '-' };
   }
 
-  let minIso = todas[0].fechaIso || '2025-01-01';
-  let maxIso = todas[0].fechaIso || '2026-12-31';
+  let minIso = todas[0].fechaIso || '2020-01-01';
+  let maxIso = todas[0].fechaIso || '2030-12-31';
 
   todas.forEach((v) => {
     if (v.fechaIso && v.fechaIso < minIso) minIso = v.fechaIso;
@@ -283,6 +319,18 @@ export async function obtenerRangoFechasVentas(
     fechaInicio: fmtFecha(minIso),
     fechaFin: fmtFecha(maxIso),
   };
+}
+
+export async function obtenerAniosDisponibles(): Promise<number[]> {
+  const db = await getDb();
+  const todas: any[] = db.select().from(posVentas).all();
+  const setAnios = new Set<number>();
+  todas.forEach((v) => {
+    if (v.anio && !isNaN(Number(v.anio))) {
+      setAnios.add(parseInt(String(v.anio), 10));
+    }
+  });
+  return Array.from(setAnios).sort((a, b) => b - a); // orden descendente
 }
 
 export interface VentaConsolidadaItem {
@@ -332,11 +380,9 @@ export async function obtenerVentasConsolidadas(
     todas = todas.filter((v) => v.fechaIso && v.fechaIso <= finIso);
   }
 
-  // 3. Filtrar por año si no hay rango explícito o si se pasó anioFiltro
+  // 3. Filtrar por año solo si anioFiltro se proporciona
   if (anioFiltro) {
     todas = todas.filter((v) => parseInt(String(v.anio), 10) === anioFiltro);
-  } else if (!inicioIso && !finIso && anioFiltro === undefined) {
-    todas = todas.filter((v) => parseInt(String(v.anio), 10) === 2026);
   }
 
   // 3. Ordenar desde la más antigua a la más nueva (cronológico ascendente)
@@ -429,7 +475,7 @@ const NOMBRE_MESES: Record<number, string> = {
 };
 
 export async function obtenerResumenMensualPorColegio(
-  anioFiltro: number = 2026
+  anioFiltro?: number
 ): Promise<ResumenMensualColegioGroup[]> {
   const db = await getDb();
   let ventas: any[] = db.select().from(posVentas).all();
@@ -483,6 +529,7 @@ export async function obtenerResumenMensualPorColegio(
 }
 
 export interface ResumenPorMesGroup {
+  anio: number;
   mesNum: number;
   mesNombre: string;
   totalUnidadesMes: number;
@@ -492,6 +539,16 @@ export interface ResumenPorMesGroup {
     unidades: number;
     montoBs: number;
   }>;
+}
+
+export interface HistorialMensualItem {
+  anio: number;
+  mesNum: number;
+  periodoTexto: string;
+  totalVentaBs: number;
+  totalUnidades: number;
+  colegioLider: string;
+  pctDelTotal: number;
 }
 
 function obtenerOrdenPrioridadColegio(colegio: string): number {
@@ -507,55 +564,127 @@ function obtenerOrdenPrioridadColegio(colegio: string): number {
 }
 
 export async function obtenerResumenPorMesDetalleColegios(
-  anioFiltro: number = 2026
+  anioFiltro?: number,
+  colegioFiltro?: string,
+  fechaInicioStr?: string,
+  fechaFinStr?: string
 ): Promise<ResumenPorMesGroup[]> {
   const db = await getDb();
   let ventas: any[] = db.select().from(posVentas).all();
   ventas = ventas.filter((v) => esEstadoValido(v.estado));
 
+  if (colegioFiltro && colegioFiltro.trim() !== '') {
+    const targetNorm = normalizarColegioNombre(colegioFiltro);
+    ventas = ventas.filter((v) => {
+      const cgNorm = normalizarColegioNombre(v.colegioGrupo || '');
+      return cgNorm.includes(targetNorm) || targetNorm.includes(cgNorm);
+    });
+  }
+
+  const inicioIso = normalizarFechaIso(fechaInicioStr);
+  const finIso = normalizarFechaIso(fechaFinStr);
+
+  if (inicioIso) {
+    ventas = ventas.filter((v) => v.fechaIso && v.fechaIso >= inicioIso);
+  }
+  if (finIso) {
+    ventas = ventas.filter((v) => v.fechaIso && v.fechaIso <= finIso);
+  }
+
   if (anioFiltro) {
     ventas = ventas.filter((v) => parseInt(String(v.anio), 10) === parseInt(String(anioFiltro), 10));
   }
 
-  // Agrupar por mes -> colegio
-  const mapa: Record<number, Record<string, { unidades: number; montoBs: number }>> = {};
+  // Agrupar por (anio, mes) -> colegio
+  const mapa: Record<string, { anio: number; mes: number; colegios: Record<string, { unidades: number; montoBs: number }> }> = {};
 
   ventas.forEach((v) => {
-    const mes = v.mes || 1;
+    const anio = parseInt(String(v.anio), 10) || 2026;
+    const mes = parseInt(String(v.mes), 10) || 1;
+    const key = `${anio}_${String(mes).padStart(2, '0')}`;
     const cg = v.colegioGrupo || 'Empresas y General';
-    if (!mapa[mes]) mapa[mes] = {};
-    if (!mapa[mes][cg]) mapa[mes][cg] = { unidades: 0, montoBs: 0 };
-    mapa[mes][cg].unidades += v.cantidad || 0;
-    mapa[mes][cg].montoBs += v.totalCobrado || v.subtotal || 0;
+
+    if (!mapa[key]) {
+      mapa[key] = { anio, mes, colegios: {} };
+    }
+    if (!mapa[key].colegios[cg]) {
+      mapa[key].colegios[cg] = { unidades: 0, montoBs: 0 };
+    }
+    mapa[key].colegios[cg].unidades += v.cantidad || 0;
+    mapa[key].colegios[cg].montoBs += v.totalCobrado || v.subtotal || 0;
   });
 
-  const mesesOrdenados = Object.keys(mapa).map(Number).sort((a, b) => a - b);
+  // Orden cronológico ascendente (más antiguo a más nuevo)
+  const keysOrdenadas = Object.keys(mapa).sort();
 
-  return mesesOrdenados.map((mesNum) => {
+  return keysOrdenadas.map((key) => {
+    const item = mapa[key];
     let totalUnidadesMes = 0;
     let totalVentaBsMes = 0;
 
-    const colegiosArr = Object.keys(mapa[mesNum])
-      .map((cg) => {
-        const u = Math.round(mapa[mesNum][cg].unidades * 100) / 100;
-        const m = Math.round(mapa[mesNum][cg].montoBs * 100) / 100;
-        totalUnidadesMes += u;
-        totalVentaBsMes += m;
-        return {
-          colegioGrupo: cg,
-          unidades: u,
-          montoBs: m,
-        };
-      });
+    const colegiosArr = Object.keys(item.colegios).map((cg) => {
+      const u = Math.round(item.colegios[cg].unidades * 100) / 100;
+      const m = Math.round(item.colegios[cg].montoBs * 100) / 100;
+      totalUnidadesMes += u;
+      totalVentaBsMes += m;
+      return {
+        colegioGrupo: cg,
+        unidades: u,
+        montoBs: m,
+      };
+    });
 
     colegiosArr.sort((a, b) => obtenerOrdenPrioridadColegio(a.colegioGrupo) - obtenerOrdenPrioridadColegio(b.colegioGrupo));
 
     return {
-      mesNum,
-      mesNombre: NOMBRE_MESES[mesNum] || `Mes ${mesNum}`,
+      anio: item.anio,
+      mesNum: item.mes,
+      mesNombre: NOMBRE_MESES[item.mes] || `Mes ${item.mes}`,
       totalUnidadesMes: Math.round(totalUnidadesMes * 100) / 100,
       totalVentaBsMes: Math.round(totalVentaBsMes * 100) / 100,
       colegios: colegiosArr,
     };
   });
+}
+
+export async function obtenerHistorialMensualIngresos(
+  colegioFiltro?: string,
+  anioFiltro?: number,
+  fechaInicioStr?: string,
+  fechaFinStr?: string
+): Promise<{ items: HistorialMensualItem[]; totalGeneralBs: number; totalGeneralUnidades: number }> {
+  const resumenes = await obtenerResumenPorMesDetalleColegios(anioFiltro, colegioFiltro, fechaInicioStr, fechaFinStr);
+
+  let totalGeneralBs = 0;
+  let totalGeneralUnidades = 0;
+
+  resumenes.forEach((r) => {
+    totalGeneralBs += r.totalVentaBsMes;
+    totalGeneralUnidades += r.totalUnidadesMes;
+  });
+
+  const items: HistorialMensualItem[] = resumenes.map((r) => {
+    let colegioLiderObj = { colegioGrupo: '-', montoBs: 0, unidades: 0 };
+    r.colegios.forEach((c) => {
+      if (c.montoBs > colegioLiderObj.montoBs) colegioLiderObj = c;
+    });
+
+    const pct = totalGeneralBs > 0 ? Math.round((r.totalVentaBsMes / totalGeneralBs) * 1000) / 10 : 0;
+
+    return {
+      anio: r.anio,
+      mesNum: r.mesNum,
+      periodoTexto: `${r.mesNombre} ${r.anio}`,
+      totalVentaBs: r.totalVentaBsMes,
+      totalUnidades: r.totalUnidadesMes,
+      colegioLider: colegioLiderObj.colegioGrupo || '-',
+      pctDelTotal: pct,
+    };
+  });
+
+  return {
+    items,
+    totalGeneralBs: Math.round(totalGeneralBs * 100) / 100,
+    totalGeneralUnidades: Math.round(totalGeneralUnidades * 100) / 100,
+  };
 }

@@ -46,3 +46,6 @@ runService('POS-3001', '\x1b[33m', 'npx', ['tsx', 'watch', 'src/server.ts'], 'pa
 
 // 3. Sales Manager (3002)
 runService('SALES-3002', '\x1b[35m', 'npx', ['tsx', 'watch', 'src/server.ts'], 'packages/sales-manager');
+
+// 4. Bank Analyzer (3003)
+runService('BANK-3003', '\x1b[32m', 'npx', ['tsx', 'watch', 'src/server.ts'], 'packages/bank-analyzer');

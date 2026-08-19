@@ -90,6 +90,11 @@
             <h3>Carga de Reportes de Ventas (.xlsx)</h3>
             <p>Selecciona tu archivo <code>sales_export_*.xlsx</code> para procesar pedidos, cantidades y totales.</p>
 
+            <div id="imported-file-badge" class="imported-file-badge" style="margin-bottom: 12px; padding: 10px 14px; background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 8px; font-size: 0.9rem; color: #4ade80; display: flex; align-items: center; justify-content: space-between;">
+              <span>📄 <strong>Archivo Base Registrado:</strong> <span id="lbl-archivo-nombre">No hay archivo guardado</span></span>
+              <span id="lbl-archivo-filas" style="font-size: 0.82rem; color: #94a3b8;"></span>
+            </div>
+
             <div class="dropzone" id="dropzone-sales">
               <p>Arrastra tu archivo Excel aquí o <strong>haz clic para seleccionar</strong></p>
               <input type="file" id="input-file-sales" accept=".xlsx, .xls" hidden />
@@ -135,14 +140,17 @@
           <div class="filter-group">
             <label>Año:</label>
             <select id="filter-anio-analisis" class="select-input">
-              <option value="2026">2026</option>
               <option value="">Todos los Años</option>
+              <option value="2026">2026</option>
               <option value="2025">2025</option>
-
+              <option value="2024">2024</option>
+              <option value="2023">2023</option>
             </select>
           </div>
 
           <button class="btn btn-primary" id="btn-aplicar-filtros-analisis">Filtrar Analytics</button>
+          <button class="btn btn-secondary" id="btn-guardar-filtros-analisis" title="Guardar la configuración actual de filtros como predeterminada">💾 Guardar Filtro</button>
+          <button class="btn btn-secondary" id="btn-limpiar-filtros-analisis" title="Limpiar todos los filtros y ver todos los datos">🧹 Limpiar Filtros</button>
         </div>
 
         <!-- KPI Cards de Montos por Colegio -->
@@ -223,6 +231,37 @@
           </div>
         </div>
 
+        <!-- Tabla de Historial Mensual de Ingresos (De más antiguo a más nuevo) -->
+        <div class="glass-card table-card margin-top">
+          <div class="card-header-flex">
+            <h3>📊 Historial Mensual de Ingresos (Del más antiguo al más nuevo)</h3>
+            <button class="btn btn-secondary btn-sm" id="btn-pdf-historial-mensual"
+              title="Generar e imprimir Reporte PDF de Resumen Mensual">Imprimir Reporte PDF</button>
+          </div>
+          <div class="table-container compact-scroll">
+            <table class="data-table" id="table-historial-mensual">
+              <thead>
+                <tr>
+                  <th style="width: 6%; text-align: center;">N°</th>
+                  <th style="width: 22%;">Mes / Período</th>
+                  <th style="width: 24%; text-align: right;">Ingresos Totales (Bs.)</th>
+                  <th style="width: 18%; text-align: right;">Unidades Vendidas</th>
+                  <th style="width: 12%; text-align: right;">% del Historial</th>
+                  <th style="width: 18%;">Colegio Líder</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colspan="6" class="text-center">Cargando historial mensual...</td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <!-- Inyectado por JS -->
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
         <!-- Gráficos por Período -->
         <div class="charts-grid margin-top">
           <div class="glass-card chart-card">
@@ -260,9 +299,11 @@
           <div class="filter-group">
             <label>Año:</label>
             <select id="filter-anio-consolidado" class="select-input">
-              <option value="2026">2026</option>
               <option value="">Todos los Años</option>
+              <option value="2026">2026</option>
               <option value="2025">2025</option>
+              <option value="2024">2024</option>
+              <option value="2023">2023</option>
             </select>
           </div>
 
@@ -290,11 +331,13 @@
           </div>
 
           <button class="btn btn-primary" id="btn-aplicar-filtros-consolidado">Filtrar</button>
+          <button class="btn btn-secondary" id="btn-guardar-filtros-consolidado" title="Guardar la configuración actual de filtros como predeterminada">💾 Guardar Filtro</button>
+          <button class="btn btn-secondary" id="btn-limpiar-filtros-consolidado" title="Limpiar todos los filtros y ver todos los datos">🧹 Limpiar Filtros</button>
 
           <div style="margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap;">
             <button class="btn btn-secondary" id="btn-excel-consolidado" title="Exportar Registro Consolidado a Excel">Exportar Excel (.xlsx)</button>
             <button class="btn btn-secondary" id="btn-pdf-consolidado" title="Generar e Imprimir Reporte PDF">Reporte PDF</button>
-            <button class="btn btn-secondary" id="btn-pdf-resumen-mensual" title="Generar e Imprimir Resumen Mensual de Ventas por Colegio">Resumen Mensual PDF</button>
+            <button class="btn btn-secondary" id="btn-pdf-resumen-mensual-consolidado" title="Generar e Imprimir Resumen Mensual de Ventas por Colegio">Resumen Mensual PDF</button>
           </div>
         </div>
 

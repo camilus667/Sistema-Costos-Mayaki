@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (toggleTopBtn) toggleTopBtn.addEventListener('click', toggleSidebar);
 
   const savedState = localStorage.getItem('sales_sidebar_collapsed');
-  if (savedState === 'true' || savedState === null) {
+  if ((savedState === 'true' || savedState === null) && appContainer) {
     appContainer.classList.add('sidebar-collapsed');
   }
 
@@ -65,28 +65,84 @@ document.addEventListener('DOMContentLoaded', () => {
   const fileInput = document.getElementById('input-file-sales');
   const importStatus = document.getElementById('import-status');
 
-  dropzone.addEventListener('click', () => fileInput.click());
+  if (dropzone && fileInput) {
+    dropzone.addEventListener('click', () => fileInput.click());
 
-  dropzone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropzone.classList.add('dragover');
-  });
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
 
-  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
 
-  dropzone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropzone.classList.remove('dragover');
-    if (e.dataTransfer.files.length > 0) {
-      subirArchivo(e.dataTransfer.files[0]);
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        subirArchivo(e.dataTransfer.files[0]);
+      }
+    });
+  }
+
+  if (fileInput) {
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        subirArchivo(e.target.files[0]);
+      }
+    });
+  }
+
+  async function cargarInfoImportacion() {
+    try {
+      const res = await fetch(`${API_BASE}/info`);
+      const json = await res.json();
+      if (json.success && json.data) {
+        const data = json.data;
+
+        // Mostrar nombre de archivo activo
+        const lblNombre = document.getElementById('lbl-archivo-nombre');
+        const lblFilas = document.getElementById('lbl-archivo-filas');
+        if (lblNombre) {
+          if (data.nombreArchivo) {
+            lblNombre.innerHTML = `<span style="font-weight: 700; text-decoration: underline; color: #86efac;">${data.nombreArchivo}</span>`;
+          } else {
+            lblNombre.textContent = 'No hay archivo guardado';
+          }
+        }
+        if (lblFilas) {
+          lblFilas.textContent = data.totalFilas ? `${data.totalFilas.toLocaleString()} filas cargadas` : '';
+        }
+
+        // Actualizar selectores de año si vienen desde la BD
+        if (data.aniosDisponibles && data.aniosDisponibles.length > 0) {
+          actualizarSelectoresAnio(data.aniosDisponibles);
+        }
+      }
+    } catch (e) {
+      console.error('Error al cargar info de importación:', e);
     }
-  });
+  }
 
-  fileInput.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) {
-      subirArchivo(e.target.files[0]);
-    }
-  });
+  function actualizarSelectoresAnio(aniosArr) {
+    const selectores = ['filter-anio-analisis', 'filter-anio-consolidado', 'proj-anio'];
+    selectores.forEach((id) => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+
+      const valorActual = sel.value;
+      sel.innerHTML = '<option value="">Todos los Años</option>';
+      aniosArr.forEach((y) => {
+        const opt = document.createElement('option');
+        opt.value = String(y);
+        opt.textContent = String(y);
+        sel.appendChild(opt);
+      });
+
+      if (valorActual && Array.from(sel.options).some((o) => o.value === valorActual)) {
+        sel.value = valorActual;
+      }
+    });
+  }
 
   async function subirArchivo(file) {
     const formData = new FormData();
@@ -103,6 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
       if (data.success) {
         importStatus.innerHTML = `<span style="color: var(--accent-green);">✅ ${data.message}</span>`;
+        cargarInfoImportacion();
         cargarResumenColegios();
       } else {
         importStatus.innerHTML = `<span style="color: #ef4444;">❌ Error: ${data.error}</span>`;
@@ -244,15 +301,73 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // 2. Analytics & Chart Rendering
-  document.getElementById('btn-aplicar-filtros-analisis').addEventListener('click', cargarAnalytics);
+  const btnAplicarAnalisis = document.getElementById('btn-aplicar-filtros-analisis');
+  if (btnAplicarAnalisis) {
+    btnAplicarAnalisis.addEventListener('click', cargarAnalytics);
+  }
+
+  async function cargarHistorialMensual(colegioFiltro = '', anioFiltro = '') {
+    const tableBody = document.querySelector('#table-historial-mensual tbody');
+    const tableFoot = document.querySelector('#table-historial-mensual tfoot');
+    if (!tableBody) return;
+
+    try {
+      let url = `${API_BASE}/historial-mensual`;
+      const params = new URLSearchParams();
+      if (colegioFiltro) params.append('colegio', colegioFiltro);
+      if (anioFiltro) params.append('anio', anioFiltro);
+      if (params.toString()) url += `?${params.toString()}`;
+
+      const res = await fetch(url);
+      const json = await res.json();
+
+      if (json.success && json.data && json.data.items && json.data.items.length > 0) {
+        const { items, totalGeneralBs, totalGeneralUnidades } = json.data;
+
+        tableBody.innerHTML = items.map((it, idx) => `
+          <tr>
+            <td style="text-align: center; font-weight: 600;">${idx + 1}</td>
+            <td><strong>${it.periodoTexto}</strong></td>
+            <td class="text-right" style="font-weight: 700; color: #4ade80;">Bs. ${it.totalVentaBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+            <td class="text-right">${it.totalUnidades.toLocaleString()} u.</td>
+            <td class="text-right" style="font-weight: 600;">${it.pctDelTotal.toFixed(1)}%</td>
+            <td><span class="badge" style="background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.82rem;">${it.colegioLider}</span></td>
+          </tr>
+        `).join('');
+
+        if (tableFoot) {
+          tableFoot.innerHTML = `
+            <tr style="background: rgba(15, 23, 42, 0.6); font-weight: 700;">
+              <td colspan="2" style="padding: 10px;">TOTAL GENERAL HISTÓRICO</td>
+              <td class="text-right" style="color: #4ade80; font-size: 1.05rem;">Bs. ${totalGeneralBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+              <td class="text-right" style="font-size: 1.05rem;">${totalGeneralUnidades.toLocaleString()} u.</td>
+              <td class="text-right">100.0%</td>
+              <td>-</td>
+            </tr>
+          `;
+        }
+      } else {
+        tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No se encontraron ventas para el período seleccionado.</td></tr>';
+        if (tableFoot) tableFoot.innerHTML = '';
+      }
+    } catch (e) {
+      console.error('Error al cargar historial mensual:', e);
+      tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error al cargar historial de ventas por mes.</td></tr>';
+    }
+  }
 
   async function cargarAnalytics() {
-    const agrupacion = document.getElementById('filter-agrupacion').value;
-    const colegio = document.getElementById('filter-colegio-analisis').value;
-    const anio = document.getElementById('filter-anio-analisis').value;
+    const agrupacion = document.getElementById('filter-agrupacion')?.value || 'trimestral';
+    const colegio = document.getElementById('filter-colegio-analisis')?.value || '';
+    const anio = document.getElementById('filter-anio-analisis')?.value || '';
+    const fechaInicio = document.getElementById('filter-fecha-inicio-consolidado')?.value || '';
+    const fechaFin = document.getElementById('filter-fecha-fin-consolidado')?.value || '';
 
     // Actualizar KPIs y tabla de montos por colegio
     cargarResumenColegios(colegio, anio);
+
+    // Actualizar tabla de historial mensual de ingresos (de más antiguo a más nuevo)
+    cargarHistorialMensual(colegio, anio);
 
     // Actualizar gráficos de período
     let url = `${API_BASE}/resumen-periodo?agrupacion=${agrupacion}`;
@@ -427,69 +542,49 @@ document.addEventListener('DOMContentLoaded', () => {
     printFrame.src = url;
   }
 
-  const btnPdfColegios = document.getElementById('btn-pdf-colegios');
-  if (btnPdfColegios) {
-    btnPdfColegios.addEventListener('click', () => {
-      const colegio = document.getElementById('filter-colegio-analisis')?.value || '';
-      const anio = document.getElementById('filter-anio-analisis')?.value || '';
-      let url = `${API_BASE}/imprimir-colegios?colegio=${encodeURIComponent(colegio)}`;
-      if (anio) url += `&anio=${anio}`;
-      imprimirDirecto(url);
-    });
-  }
-
-  const btnPdfPrendas = document.getElementById('btn-pdf-prendas');
-  if (btnPdfPrendas) {
-    btnPdfPrendas.addEventListener('click', () => {
-      const colegio = document.getElementById('filter-colegio-analisis')?.value || '';
-      const anio = document.getElementById('filter-anio-analisis')?.value || '';
-      let url = `${API_BASE}/imprimir-prendas?colegio=${encodeURIComponent(colegio)}`;
-      if (anio) url += `&anio=${anio}`;
-      imprimirDirecto(url);
-    });
-  }
-
   // 3. Proyección Inteligente
-  document.getElementById('btn-calcular-proyeccion').addEventListener('click', async () => {
-    const colegioOrigen = document.getElementById('proj-colegio-origen').value;
-    const colegioDestino = document.getElementById('proj-colegio-destino').value;
-    const anio = document.getElementById('proj-anio').value;
-    const trimestre = document.getElementById('proj-trimestre').value;
-    const factorEscalaAlumnos = document.getElementById('proj-factor-escala').value;
-    const factorCrecimientoPct = document.getElementById('proj-factor-crecimiento').value;
+  const btnCalcularProy = document.getElementById('btn-calcular-proyeccion');
+  if (btnCalcularProy) {
+    btnCalcularProy.addEventListener('click', async () => {
+      const colegioOrigen = document.getElementById('proj-colegio-origen')?.value || 'Inf SM';
+      const colegioDestino = document.getElementById('proj-colegio-destino')?.value || 'Cambridge';
+      const anio = document.getElementById('proj-anio')?.value || '2025';
+      const trimestre = document.getElementById('proj-trimestre')?.value || undefined;
+      const factorEscalaAlumnos = document.getElementById('proj-factor-escala')?.value || '1.0';
+      const factorCrecimientoPct = document.getElementById('proj-factor-crecimiento')?.value || '0.0';
 
-    const btn = document.getElementById('btn-calcular-proyeccion');
-    btn.disabled = true;
-    btn.textContent = '⏳ Calculando Similitud y Proyección...';
+      btnCalcularProy.disabled = true;
+      btnCalcularProy.textContent = '⏳ Calculando Similitud y Proyección...';
 
-    try {
-      const res = await fetch(`${API_BASE}/proyectar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          colegioOrigen,
-          colegioDestino,
-          anio,
-          trimestre,
-          factorEscalaAlumnos,
-          factorCrecimientoPct,
-        }),
-      });
+      try {
+        const res = await fetch(`${API_BASE}/proyectar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            colegioOrigen,
+            colegioDestino,
+            anio,
+            trimestre,
+            factorEscalaAlumnos,
+            factorCrecimientoPct,
+          }),
+        });
 
-      const data = await res.json();
-      if (data.success) {
-        ultimaProyeccion = data.data;
-        mostrarResultadosProyeccion(data.data);
-      } else {
-        alert('Error: ' + data.error);
+        const data = await res.json();
+        if (data.success) {
+          ultimaProyeccion = data.data;
+          mostrarResultadosProyeccion(data.data);
+        } else {
+          alert('Error: ' + data.error);
+        }
+      } catch (e) {
+        alert('Error de conexión: ' + e.message);
+      } finally {
+        btnCalcularProy.disabled = false;
+        btnCalcularProy.textContent = '🚀 Calcular Proyección Inteligente';
       }
-    } catch (e) {
-      alert('Error de conexión: ' + e.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = '🚀 Calcular Proyección Inteligente';
-    }
-  });
+    });
+  }
 
   function mostrarResultadosProyeccion(p) {
     document.getElementById('projection-results').classList.remove('hidden');
@@ -805,6 +900,109 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Guardar y Restaurar Filtros Predeterminados
+  const LOCAL_STORAGE_KEY_FILTROS = 'sales_manager_saved_filters';
+
+  function guardarFiltrosActuales() {
+    const colegio = document.getElementById('filter-colegio-consolidado')?.value || document.getElementById('filter-colegio-analisis')?.value || '';
+    const anio = document.getElementById('filter-anio-consolidado')?.value || document.getElementById('filter-anio-analisis')?.value || '';
+    const rangoPreset = document.getElementById('select-rango-preset')?.value || 'custom';
+    const fechaInicio = document.getElementById('filter-fecha-inicio-consolidado')?.value || '';
+    const fechaFin = document.getElementById('filter-fecha-fin-consolidado')?.value || '';
+
+    const filtrosObj = { colegio, anio, rangoPreset, fechaInicio, fechaFin };
+    localStorage.setItem(LOCAL_STORAGE_KEY_FILTROS, JSON.stringify(filtrosObj));
+
+    let msg = '💾 Filtros guardados exitosamente como predeterminados:\n';
+    msg += `• Colegio: ${colegio || 'Todos los Colegios'}\n`;
+    msg += `• Año: ${anio || 'Todos los Años'}\n`;
+    msg += `• Fecha Inicio: ${fechaInicio || 'Sin fecha inicio'}\n`;
+    msg += `• Fecha Fin: ${fechaFin || 'Sin fecha fin'}\n\n`;
+    msg += 'Cada vez que abras la aplicación, estos filtros se aplicarán automáticamente.';
+    alert(msg);
+  }
+
+  function restaurarFiltrosGuardados() {
+    try {
+      const raw = localStorage.getItem(LOCAL_STORAGE_KEY_FILTROS);
+      if (!raw) return;
+      const f = JSON.parse(raw);
+      if (!f || typeof f !== 'object') return;
+
+      if (f.colegio !== undefined) {
+        const c1 = document.getElementById('filter-colegio-analisis');
+        const c2 = document.getElementById('filter-colegio-consolidado');
+        if (c1) c1.value = f.colegio;
+        if (c2) c2.value = f.colegio;
+      }
+      if (f.anio !== undefined) {
+        const a1 = document.getElementById('filter-anio-analisis');
+        const a2 = document.getElementById('filter-anio-consolidado');
+        if (a1) a1.value = f.anio;
+        if (a2) a2.value = f.anio;
+      }
+      if (f.rangoPreset !== undefined) {
+        const rp = document.getElementById('select-rango-preset');
+        if (rp) rp.value = f.rangoPreset;
+      }
+      if (f.fechaInicio !== undefined) {
+        const fi = document.getElementById('filter-fecha-inicio-consolidado');
+        if (fi) fi.value = f.fechaInicio;
+      }
+      if (f.fechaFin !== undefined) {
+        const ff = document.getElementById('filter-fecha-fin-consolidado');
+        if (ff) ff.value = f.fechaFin;
+      }
+    } catch (e) {
+      console.error('Error restaurando filtros:', e);
+    }
+  }
+
+  function limpiarFiltrosActuales() {
+    localStorage.removeItem(LOCAL_STORAGE_KEY_FILTROS);
+
+    const idsToClear = [
+      'filter-colegio-analisis',
+      'filter-colegio-consolidado',
+      'filter-anio-analisis',
+      'filter-anio-consolidado',
+      'filter-fecha-inicio-consolidado',
+      'filter-fecha-fin-consolidado',
+    ];
+    idsToClear.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+
+    const rp = document.getElementById('select-rango-preset');
+    if (rp) rp.value = 'todo';
+
+    cargarResumenColegios();
+    cargarAnalytics();
+    cargarHistorialMensual();
+    cargarRegistroConsolidado('', '', 1);
+  }
+
+  const btnGuardarConsolidado = document.getElementById('btn-guardar-filtros-consolidado');
+  if (btnGuardarConsolidado) {
+    btnGuardarConsolidado.addEventListener('click', guardarFiltrosActuales);
+  }
+
+  const btnGuardarAnalisis = document.getElementById('btn-guardar-filtros-analisis');
+  if (btnGuardarAnalisis) {
+    btnGuardarAnalisis.addEventListener('click', guardarFiltrosActuales);
+  }
+
+  const btnLimpiarAnalisis = document.getElementById('btn-limpiar-filtros-analisis');
+  if (btnLimpiarAnalisis) {
+    btnLimpiarAnalisis.addEventListener('click', limpiarFiltrosActuales);
+  }
+
+  const btnLimpiarConsolidado = document.getElementById('btn-limpiar-filtros-consolidado');
+  if (btnLimpiarConsolidado) {
+    btnLimpiarConsolidado.addEventListener('click', limpiarFiltrosActuales);
+  }
+
   const btnExcelConsolidado = document.getElementById('btn-excel-consolidado');
   if (btnExcelConsolidado) {
     btnExcelConsolidado.addEventListener('click', () => {
@@ -835,11 +1033,68 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  const btnPdfResumenMensual = document.getElementById('btn-pdf-resumen-mensual');
-  if (btnPdfResumenMensual) {
-    btnPdfResumenMensual.addEventListener('click', () => {
-      const anio = document.getElementById('filter-anio-consolidado')?.value || '2026';
-      let url = `${API_BASE}/imprimir-resumen-mensual?anio=${anio}`;
+  const btnPdfHistorialMensual = document.getElementById('btn-pdf-historial-mensual');
+  if (btnPdfHistorialMensual) {
+    btnPdfHistorialMensual.addEventListener('click', () => {
+      const colegio = document.getElementById('filter-colegio-analisis')?.value || document.getElementById('filter-colegio-consolidado')?.value || '';
+      const anio = document.getElementById('filter-anio-analisis')?.value || document.getElementById('filter-anio-consolidado')?.value || '';
+      const fechaInicio = document.getElementById('filter-fecha-inicio-consolidado')?.value || '';
+      const fechaFin = document.getElementById('filter-fecha-fin-consolidado')?.value || '';
+      let url = `${API_BASE}/imprimir-resumen-mensual`;
+      const params = new URLSearchParams();
+      if (colegio) params.append('colegio', colegio);
+      if (anio) params.append('anio', anio);
+      if (fechaInicio) params.append('fechaInicio', fechaInicio);
+      if (fechaFin) params.append('fechaFin', fechaFin);
+      if (params.toString()) url += `?${params.toString()}`;
+      imprimirDirecto(url);
+    });
+  }
+
+  const btnPdfResumenConsolidado = document.getElementById('btn-pdf-resumen-mensual-consolidado');
+  if (btnPdfResumenConsolidado) {
+    btnPdfResumenConsolidado.addEventListener('click', () => {
+      const colegio = document.getElementById('filter-colegio-consolidado')?.value || '';
+      const anio = document.getElementById('filter-anio-consolidado')?.value || '';
+      const fechaInicio = document.getElementById('filter-fecha-inicio-consolidado')?.value || '';
+      const fechaFin = document.getElementById('filter-fecha-fin-consolidado')?.value || '';
+      let url = `${API_BASE}/imprimir-resumen-mensual`;
+      const params = new URLSearchParams();
+      if (colegio) params.append('colegio', colegio);
+      if (anio) params.append('anio', anio);
+      if (fechaInicio) params.append('fechaInicio', fechaInicio);
+      if (fechaFin) params.append('fechaFin', fechaFin);
+      if (params.toString()) url += `?${params.toString()}`;
+      imprimirDirecto(url);
+    });
+  }
+
+  const btnPdfColegios = document.getElementById('btn-pdf-colegios');
+  if (btnPdfColegios) {
+    btnPdfColegios.addEventListener('click', () => {
+      const colegio = document.getElementById('filter-colegio-analisis')?.value || document.getElementById('filter-colegio-consolidado')?.value || '';
+      const anio = document.getElementById('filter-anio-analisis')?.value || document.getElementById('filter-anio-consolidado')?.value || '';
+      const fechaInicio = document.getElementById('filter-fecha-inicio-consolidado')?.value || '';
+      const fechaFin = document.getElementById('filter-fecha-fin-consolidado')?.value || '';
+      let url = `${API_BASE}/imprimir-colegios?colegio=${encodeURIComponent(colegio)}`;
+      if (anio) url += `&anio=${anio}`;
+      if (fechaInicio) url += `&fechaInicio=${encodeURIComponent(fechaInicio)}`;
+      if (fechaFin) url += `&fechaFin=${encodeURIComponent(fechaFin)}`;
+      imprimirDirecto(url);
+    });
+  }
+
+  const btnPdfPrendas = document.getElementById('btn-pdf-prendas');
+  if (btnPdfPrendas) {
+    btnPdfPrendas.addEventListener('click', () => {
+      const colegio = document.getElementById('filter-colegio-analisis')?.value || document.getElementById('filter-colegio-consolidado')?.value || '';
+      const anio = document.getElementById('filter-anio-analisis')?.value || document.getElementById('filter-anio-consolidado')?.value || '';
+      const fechaInicio = document.getElementById('filter-fecha-inicio-consolidado')?.value || '';
+      const fechaFin = document.getElementById('filter-fecha-fin-consolidado')?.value || '';
+      let url = `${API_BASE}/imprimir-prendas?colegio=${encodeURIComponent(colegio)}`;
+      if (anio) url += `&anio=${anio}`;
+      if (fechaInicio) url += `&fechaInicio=${encodeURIComponent(fechaInicio)}`;
+      if (fechaFin) url += `&fechaFin=${encodeURIComponent(fechaFin)}`;
       imprimirDirecto(url);
     });
   }
@@ -866,7 +1121,7 @@ document.addEventListener('DOMContentLoaded', () => {
     tableBody.innerHTML = '<tr><td colspan="9" class="text-center">Cargando liquidación de confeccionistas...</td></tr>';
 
     try {
-      const res = await fetch(`${API_BASE}/talleristas?tallerista=${encodeURIComponent(tallerista)}&origen=${origen}&anio=2026`);
+      const res = await fetch(`${API_BASE}/talleristas?tallerista=${encodeURIComponent(tallerista)}&origen=${origen}`);
       const json = await res.json();
 
       if (!json.success || !json.data) {
@@ -976,7 +1231,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnImprimirTalleristas.addEventListener('click', () => {
       const tallerista = document.getElementById('filter-tallerista')?.value || 'todos';
       const origen = document.getElementById('filter-tallerista-origen')?.value || 'total';
-      let url = `${API_BASE}/imprimir-talleristas?tallerista=${encodeURIComponent(tallerista)}&origen=${origen}&anio=2026`;
+      let url = `${API_BASE}/imprimir-talleristas?tallerista=${encodeURIComponent(tallerista)}&origen=${origen}`;
       imprimirDirecto(url);
     });
   }
@@ -991,16 +1246,26 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Botón Actualizar
-  document.getElementById('btn-refresh-stats').addEventListener('click', () => {
-    cargarResumenColegios();
-    cargarAnalytics();
-    cargarRegistroConsolidado();
-    cargarLiquidacionTalleristas();
-  });
+  const btnRefreshStats = document.getElementById('btn-refresh-stats');
+  if (btnRefreshStats) {
+    btnRefreshStats.addEventListener('click', () => {
+      cargarInfoImportacion();
+      cargarResumenColegios();
+      cargarAnalytics();
+      cargarHistorialMensual();
+      cargarRegistroConsolidado();
+      cargarLiquidacionTalleristas();
+    });
+  }
+
+  // Restablecer filtros predeterminados guardados por el usuario
+  restaurarFiltrosGuardados();
 
   // Inicial
+  cargarInfoImportacion();
   cargarResumenColegios();
   cargarAnalytics();
+  cargarHistorialMensual();
   cargarRegistroConsolidado();
   cargarLiquidacionTalleristas();
 });

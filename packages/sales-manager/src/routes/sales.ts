@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import * as XLSX from 'xlsx';
-import { importarVentasPos, vaciarVentasPos } from '../services/salesImport.service';
+import { importarVentasPos, vaciarVentasPos, obtenerMetadataImportacion } from '../services/salesImport.service';
 import {
   obtenerResumenColegios,
   obtenerResumenPeriodo,
@@ -9,6 +9,8 @@ import {
   obtenerVentasConsolidadas,
   obtenerResumenMensualPorColegio,
   obtenerResumenPorMesDetalleColegios,
+  obtenerAniosDisponibles,
+  obtenerHistorialMensualIngresos,
 } from '../services/salesAnalytics.service';
 import { calcularProyeccionVentas } from '../services/salesProjection.service';
 import { generarVentasSimuladasExcelBuffer } from '../services/salesSimulator.service';
@@ -16,6 +18,12 @@ import { LOGO_MAYAKI_BASE64 } from '../constants/logo';
 import { obtenerLiquidacionTalleristas, actualizarConfeccionistaPrenda } from '../services/talleristas.service';
 
 const app = new Hono();
+
+const parseAnioParam = (anioStr?: string): number | undefined => {
+  if (!anioStr || anioStr.trim() === '' || anioStr === 'todos' || anioStr === 'este-anio') return undefined;
+  const num = parseInt(anioStr, 10);
+  return isNaN(num) ? undefined : num;
+};
 
 // /api/sales/limpiar - Vaciar base de datos de ventas (DELETE, POST, GET)
 const handleLimpiar = async (c: any) => {
@@ -34,6 +42,27 @@ app.delete('/limpiar', handleLimpiar);
 app.post('/limpiar', handleLimpiar);
 app.get('/limpiar', handleLimpiar);
 
+// GET /api/sales/info - Información sobre el archivo importado activo y años disponibles
+app.get('/info', async (c) => {
+  try {
+    const metadata = obtenerMetadataImportacion();
+    const aniosDisponibles = await obtenerAniosDisponibles();
+    const colegios = await obtenerResumenColegios();
+    const colegiosDisponibles = colegios.map((k) => k.colegioGrupo);
+
+    return c.json({
+      success: true,
+      data: {
+        ...metadata,
+        aniosDisponibles,
+        colegiosDisponibles,
+      },
+    });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message || 'Error al obtener información' }, 500);
+  }
+});
+
 // POST /api/sales/importar
 app.post('/importar', async (c) => {
   try {
@@ -46,13 +75,14 @@ app.post('/importar', async (c) => {
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+    const nombreArchivo = file.name || 'sales_export.xlsx';
 
-    const resultado = await importarVentasPos(buffer);
+    const resultado = await importarVentasPos(buffer, nombreArchivo);
 
     return c.json({
       success: true,
       data: resultado,
-      message: `Ventas importadas con éxito. Total filas insertadas: ${resultado.insertados}`,
+      message: `Ventas importadas con éxito desde '${nombreArchivo}'. Total filas insertadas: ${resultado.insertados}`,
     });
   } catch (err: any) {
     return c.json({ success: false, error: err.message || 'Error al importar ventas' }, 500);
@@ -63,10 +93,11 @@ app.post('/importar', async (c) => {
 app.get('/colegios', async (c) => {
   try {
     const colegio = c.req.query('colegio');
-    const anioStr = c.req.query('anio');
-    const anio = anioStr ? parseInt(anioStr, 10) : undefined;
+    const anio = parseAnioParam(c.req.query('anio'));
+    const fechaInicio = c.req.query('fechaInicio');
+    const fechaFin = c.req.query('fechaFin');
 
-    const colegios = await obtenerResumenColegios(colegio, anio);
+    const colegios = await obtenerResumenColegios(colegio, anio, fechaInicio, fechaFin);
     return c.json({ success: true, data: colegios });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
@@ -78,11 +109,27 @@ app.get('/resumen-periodo', async (c) => {
   try {
     const agrupacion = (c.req.query('agrupacion') as 'mensual' | 'trimestral') || 'trimestral';
     const colegio = c.req.query('colegio');
-    const anioStr = c.req.query('anio');
-    const anio = anioStr ? parseInt(anioStr, 10) : undefined;
+    const anio = parseAnioParam(c.req.query('anio'));
+    const fechaInicio = c.req.query('fechaInicio');
+    const fechaFin = c.req.query('fechaFin');
 
-    const resumen = await obtenerResumenPeriodo(agrupacion, colegio, anio);
+    const resumen = await obtenerResumenPeriodo(agrupacion, colegio, anio, fechaInicio, fechaFin);
     return c.json({ success: true, data: resumen });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// GET /api/sales/historial-mensual - Obtener ingresos por meses de todo el historial (cronológico ascendente)
+app.get('/historial-mensual', async (c) => {
+  try {
+    const colegio = c.req.query('colegio');
+    const anio = parseAnioParam(c.req.query('anio'));
+    const fechaInicio = c.req.query('fechaInicio');
+    const fechaFin = c.req.query('fechaFin');
+
+    const resData = await obtenerHistorialMensualIngresos(colegio, anio, fechaInicio, fechaFin);
+    return c.json({ success: true, data: resData });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }
@@ -92,11 +139,12 @@ app.get('/resumen-periodo', async (c) => {
 app.get('/ventas-prenda', async (c) => {
   try {
     const colegio = c.req.query('colegio');
-    const anioStr = c.req.query('anio');
     const trimestre = c.req.query('trimestre');
-    const anio = anioStr ? parseInt(anioStr, 10) : undefined;
+    const anio = parseAnioParam(c.req.query('anio'));
+    const fechaInicio = c.req.query('fechaInicio');
+    const fechaFin = c.req.query('fechaFin');
 
-    const detalle = await obtenerVentasPorPrendaYTalla(colegio, anio, trimestre);
+    const detalle = await obtenerVentasPorPrendaYTalla(colegio, anio, trimestre, fechaInicio, fechaFin);
     return c.json({ success: true, data: detalle });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
@@ -108,10 +156,12 @@ app.get('/imprimir-colegios', async (c) => {
   try {
     const colegio = c.req.query('colegio');
     const anioStr = c.req.query('anio');
-    const anio = anioStr ? parseInt(anioStr, 10) : undefined;
+    const fechaInicio = c.req.query('fechaInicio');
+    const fechaFin = c.req.query('fechaFin');
+    const anio = parseAnioParam(anioStr);
 
-    const colegios = await obtenerResumenColegios(colegio, anio);
-    const rango = await obtenerRangoFechasVentas(colegio, anio);
+    const colegios = await obtenerResumenColegios(colegio, anio, fechaInicio, fechaFin);
+    const rango = await obtenerRangoFechasVentas(colegio, anio, fechaInicio, fechaFin);
 
     let montoTotalGlobal = 0;
     let unidadesTotalGlobal = 0;
@@ -238,10 +288,12 @@ app.get('/imprimir-prendas', async (c) => {
     const colegio = c.req.query('colegio');
     const anioStr = c.req.query('anio');
     const trimestre = c.req.query('trimestre');
-    const anio = anioStr ? parseInt(anioStr, 10) : undefined;
+    const fechaInicio = c.req.query('fechaInicio');
+    const fechaFin = c.req.query('fechaFin');
+    const anio = parseAnioParam(anioStr);
 
-    const prendas = await obtenerVentasPorPrendaYTalla(colegio, anio, trimestre);
-    const rango = await obtenerRangoFechasVentas(colegio, anio);
+    const prendas = await obtenerVentasPorPrendaYTalla(colegio, anio, trimestre, fechaInicio, fechaFin);
+    const rango = await obtenerRangoFechasVentas(colegio, anio, fechaInicio, fechaFin);
 
     let montoTotalGlobal = 0;
     let unidadesTotalGlobal = 0;
@@ -489,8 +541,7 @@ app.get('/consolidado', async (c) => {
     const colegio = c.req.query('colegio');
     const fechaInicio = c.req.query('fechaInicio');
     const fechaFin = c.req.query('fechaFin');
-    const anioStr = c.req.query('anio');
-    const anio = (fechaInicio || fechaFin) ? (anioStr ? parseInt(anioStr, 10) : undefined) : (anioStr === '' ? undefined : (anioStr ? parseInt(anioStr, 10) : 2026));
+    const anio = parseAnioParam(c.req.query('anio'));
     const page = parseInt(c.req.query('page') || '1', 10);
     const limit = parseInt(c.req.query('limit') || '25', 10);
 
@@ -536,8 +587,7 @@ app.get('/exportar-consolidado-excel', async (c) => {
     const colegio = c.req.query('colegio');
     const fechaInicio = c.req.query('fechaInicio');
     const fechaFin = c.req.query('fechaFin');
-    const anioStr = c.req.query('anio');
-    const anio = (fechaInicio || fechaFin) ? (anioStr ? parseInt(anioStr, 10) : undefined) : (anioStr === '' ? undefined : (anioStr ? parseInt(anioStr, 10) : 2026));
+    const anio = parseAnioParam(c.req.query('anio'));
 
     const ventas = await obtenerVentasConsolidadas(colegio, anio, fechaInicio, fechaFin);
 
@@ -575,8 +625,7 @@ app.get('/imprimir-consolidado', async (c) => {
     const colegio = c.req.query('colegio');
     const fechaInicio = c.req.query('fechaInicio');
     const fechaFin = c.req.query('fechaFin');
-    const anioStr = c.req.query('anio');
-    const anio = (fechaInicio || fechaFin) ? (anioStr ? parseInt(anioStr, 10) : undefined) : (anioStr === '' ? undefined : (anioStr ? parseInt(anioStr, 10) : 2026));
+    const anio = parseAnioParam(c.req.query('anio'));
 
     const ventas = await obtenerVentasConsolidadas(colegio, anio, fechaInicio, fechaFin);
     const rango = await obtenerRangoFechasVentas(colegio, anio, fechaInicio, fechaFin);
@@ -792,11 +841,13 @@ app.get('/imprimir-consolidado', async (c) => {
 // GET /api/sales/imprimir-resumen-mensual - Generar vista PDF imprimible de Resumen Mensual de Ventas por Colegio
 app.get('/imprimir-resumen-mensual', async (c) => {
   try {
-    const anioStr = c.req.query('anio');
-    const anio = anioStr === '' ? 2026 : (anioStr ? parseInt(anioStr, 10) : 2026);
+    const anio = parseAnioParam(c.req.query('anio'));
+    const colegio = c.req.query('colegio');
+    const fechaInicio = c.req.query('fechaInicio');
+    const fechaFin = c.req.query('fechaFin');
 
-    const mesesResumen = await obtenerResumenPorMesDetalleColegios(anio);
-    const rango = await obtenerRangoFechasVentas('', anio);
+    const mesesResumen = await obtenerResumenPorMesDetalleColegios(anio, colegio, fechaInicio, fechaFin);
+    const rango = await obtenerRangoFechasVentas(colegio, anio, fechaInicio, fechaFin);
 
     let montoTotalAnualGlobal = 0;
     let unidadesTotalAnualGlobal = 0;
@@ -805,6 +856,8 @@ app.get('/imprimir-resumen-mensual', async (c) => {
       montoTotalAnualGlobal += m.totalVentaBsMes || 0;
       unidadesTotalAnualGlobal += m.totalUnidadesMes || 0;
     });
+
+    const tituloAnioStr = anio ? `(${anio})` : '(Histórico Completo)';
 
     const html = `<!DOCTYPE html>
 <html lang="es">
@@ -938,14 +991,16 @@ app.get('/imprimir-resumen-mensual', async (c) => {
       <img src="${LOGO_MAYAKI_BASE64}" alt="mayaki Moda" style="height: 38px; width: auto; object-fit: contain;" />
     </div>
     <div class="report-title-center">
-      Resumen Mensual de Ventas por Colegio (${anio})
+      Resumen Mensual de Ventas por Colegio ${tituloAnioStr}
     </div>
     <div style="width: 80px;"></div>
   </div>
 
-  ${mesesResumen.map((m) => `
+  ${mesesResumen.map((m) => {
+    const mesAnioLabel = `${m.mesNombre.toUpperCase()} ${m.anio || ''}`.trim();
+    return `
     <div class="mes-block">
-      <div class="mes-title">MES: ${m.mesNombre.toUpperCase()} ${anio}</div>
+      <div class="mes-title">MES: ${mesAnioLabel}</div>
       <table>
         <thead>
           <tr>
@@ -970,7 +1025,7 @@ app.get('/imprimir-resumen-mensual', async (c) => {
         </tbody>
         <tfoot>
           <tr>
-            <td>TOTAL ${m.mesNombre.toUpperCase()} ${anio}</td>
+            <td>TOTAL ${mesAnioLabel}</td>
             <td class="num">${m.totalUnidadesMes.toLocaleString()} u.</td>
             <td class="num">Bs. ${m.totalVentaBsMes.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
             <td class="num">100.0%</td>
@@ -978,16 +1033,17 @@ app.get('/imprimir-resumen-mensual', async (c) => {
         </tfoot>
       </table>
     </div>
-  `).join('')}
+  `;
+  }).join('')}
 
   <div class="summary-box-wrap">
     <table class="summary-table">
       <tr>
-        <td class="label">RECAUDACIÓN TOTAL ANUAL (${anio})</td>
+        <td class="label">RECAUDACIÓN TOTAL ${anio ? `(${anio})` : 'HISTÓRICA'}</td>
         <td class="val">Bs. ${montoTotalAnualGlobal.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
       </tr>
       <tr>
-        <td class="label">UNIDADES TOTALES VENDIDAS (${anio})</td>
+        <td class="label">UNIDADES TOTALES VENDIDAS ${anio ? `(${anio})` : 'HISTÓRICAS'}</td>
         <td class="val">${unidadesTotalAnualGlobal.toLocaleString()} u.</td>
       </tr>
     </table>
@@ -1005,8 +1061,7 @@ app.get('/talleristas', async (c) => {
   try {
     const tallerista = c.req.query('tallerista');
     const origen = (c.req.query('origen') || 'total') as any;
-    const anioStr = c.req.query('anio');
-    const anio = anioStr ? parseInt(anioStr, 10) : 2026;
+    const anio = parseAnioParam(c.req.query('anio'));
 
     const res = await obtenerLiquidacionTalleristas(tallerista, origen, anio);
     return c.json(res);
@@ -1035,8 +1090,7 @@ app.get('/imprimir-talleristas', async (c) => {
   try {
     const tallerista = c.req.query('tallerista');
     const origen = (c.req.query('origen') || 'total') as any;
-    const anioStr = c.req.query('anio');
-    const anio = anioStr ? parseInt(anioStr, 10) : 2026;
+    const anio = parseAnioParam(c.req.query('anio'));
 
     const res = await obtenerLiquidacionTalleristas(tallerista, origen, anio);
     const data = res.data || [];

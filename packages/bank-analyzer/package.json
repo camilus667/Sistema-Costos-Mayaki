@@ -1,0 +1,25 @@
+{
+  "name": "@sistema-uniformes/bank-analyzer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema de Análisis de Extractos Bancarios, Detección de Anomalías y Clasificación de Ingresos/Egresos",
+  "main": "src/server.ts",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.10.0",
+    "drizzle-orm": "^0.30.10",
+    "hono": "^4.2.4",
+    "sql.js": "^1.10.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "@types/sql.js": "^1.4.9",
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5"
+  }
+}

@@ -7,6 +7,7 @@ export interface SalesImportResult {
   insertados: number;
   colegiosDetectados: Record<string, number>;
   aniosDetectados: Record<number, number>;
+  nombreArchivo?: string;
 }
 
 const MESES_MAP: Record<string, number> = {
@@ -14,6 +15,45 @@ const MESES_MAP: Record<string, number> = {
   jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
   ene: 1, abr: 4, ago: 8, dic: 12,
 };
+
+export function guardarConfiguracion(clave: string, valor: string, descripcion?: string): void {
+  try {
+    const rawDb = getRawDb();
+    rawDb.run(`
+      INSERT INTO configuracion_sistema (id, clave, valor, descripcion, actualizado_en)
+      VALUES (lower(hex(randomblob(16))), ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor, actualizado_en = CURRENT_TIMESTAMP;
+    `, [clave, valor, descripcion || null]);
+    saveDbToDisk();
+  } catch (e) {
+    console.error('Error al guardar configuración en SQLite:', e);
+  }
+}
+
+export function obtenerConfiguracion(clave: string): string | null {
+  try {
+    const rawDb = getRawDb();
+    const res = rawDb.exec('SELECT valor FROM configuracion_sistema WHERE clave = ? LIMIT 1;', [clave]);
+    if (res && res.length > 0 && res[0].values.length > 0) {
+      return String(res[0].values[0][0]);
+    }
+  } catch (e) {
+    console.error('Error al leer configuración en SQLite:', e);
+  }
+  return null;
+}
+
+export function obtenerMetadataImportacion(): {
+  nombreArchivo: string | null;
+  fechaImportacion: string | null;
+  totalFilas: number;
+} {
+  const nombreArchivo = obtenerConfiguracion('pos_ventas_archivo_nombre');
+  const fechaImportacion = obtenerConfiguracion('pos_ventas_fecha_importacion');
+  const totalFilasStr = obtenerConfiguracion('pos_ventas_total_filas');
+  const totalFilas = totalFilasStr ? parseInt(totalFilasStr, 10) || 0 : 0;
+  return { nombreArchivo, fechaImportacion, totalFilas };
+}
 
 export function parsearFechaVenta(fechaStr: string): { iso: string; anio: number; mes: number; trimestre: string } {
   if (!fechaStr) {
@@ -26,18 +66,55 @@ export function parsearFechaVenta(fechaStr: string): { iso: string; anio: number
     };
   }
 
-  // Formato habitual: '03/Aug/2026 - 08:50'
-  const partes = String(fechaStr).trim().split(/[\s\-\/]+/);
+  // Si viene como número serial de fecha de Excel
+  const numVal = Number(fechaStr);
+  if (!isNaN(numVal) && numVal > 30000 && numVal < 60000) {
+    const d = new Date(Math.round((numVal - 25569) * 86400 * 1000));
+    const anio = d.getFullYear();
+    const mes = d.getMonth() + 1;
+    const dia = d.getDate();
+    const iso = `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+    return { iso, anio, mes, trimestre: `Q${Math.ceil(mes / 3)}` };
+  }
+
+  const str = String(fechaStr).trim();
+  const partes = str.split(/[\s\-\/]+/);
 
   let dia = 1;
   let mes = 1;
   let anio = 2025;
 
   if (partes.length >= 3) {
-    dia = parseInt(partes[0], 10) || 1;
-    const mesTxt = (partes[1] || '').toLowerCase();
-    mes = MESES_MAP[mesTxt] || parseInt(mesTxt, 10) || 1;
-    anio = parseInt(partes[2], 10) || 2025;
+    const p0 = parseInt(partes[0], 10);
+    const p2 = parseInt(partes[2], 10);
+
+    if (p0 >= 1900 && p0 <= 2100) {
+      // Formato YYYY-MM-DD
+      anio = p0;
+      const mesTxt = (partes[1] || '').toLowerCase();
+      mes = MESES_MAP[mesTxt] || parseInt(partes[1], 10) || 1;
+      dia = parseInt(partes[2], 10) || 1;
+    } else if (p2 >= 1900 && p2 <= 2100) {
+      // Formato DD/MM/YYYY o DD/MMM/YYYY
+      anio = p2;
+      const mesTxt = (partes[1] || '').toLowerCase();
+      mes = MESES_MAP[mesTxt] || parseInt(mesTxt, 10) || 1;
+      dia = p0 || 1;
+    } else {
+      const parsedD = new Date(str);
+      if (!isNaN(parsedD.getTime())) {
+        anio = parsedD.getFullYear();
+        mes = parsedD.getMonth() + 1;
+        dia = parsedD.getDate();
+      }
+    }
+  } else {
+    const parsedD = new Date(str);
+    if (!isNaN(parsedD.getTime())) {
+      anio = parsedD.getFullYear();
+      mes = parsedD.getMonth() + 1;
+      dia = parsedD.getDate();
+    }
   }
 
   const mesPadded = String(mes).padStart(2, '0');
@@ -93,10 +170,13 @@ export async function vaciarVentasPos(): Promise<void> {
   await getDb(); // asegurar que la BD está abierta
   const rawDb = getRawDb();
   rawDb.run('DELETE FROM pos_venta;');
+  guardarConfiguracion('pos_ventas_archivo_nombre', '', 'Nombre de archivo vaciado');
+  guardarConfiguracion('pos_ventas_fecha_importacion', '', 'Fecha importación vaciada');
+  guardarConfiguracion('pos_ventas_total_filas', '0', 'Filas vaciadas');
   saveDbToDisk();
 }
 
-export async function importarVentasPos(buffer: Buffer): Promise<SalesImportResult> {
+export async function importarVentasPos(buffer: Buffer, nombreArchivo?: string): Promise<SalesImportResult> {
   // Vaciar ventas anteriores SIEMPRE antes de procesar un nuevo archivo para evitar duplicados
   await vaciarVentasPos();
 
@@ -220,13 +300,24 @@ export async function importarVentasPos(buffer: Buffer): Promise<SalesImportResu
       db.insert(posVentas).values(chunk).run();
       insertados += chunk.length;
     }
+
+    if (nombreArchivo) {
+      guardarConfiguracion('pos_ventas_archivo_nombre', nombreArchivo, 'Nombre del archivo Excel de ventas importado');
+    }
+    const ahora = new Date().toISOString();
+    guardarConfiguracion('pos_ventas_fecha_importacion', ahora, 'Fecha y hora de importación');
+    guardarConfiguracion('pos_ventas_total_filas', String(insertados), 'Total filas de ventas insertadas');
+
     saveDbToDisk();
   }
+
+  const finalNombreArchivo = nombreArchivo || obtenerConfiguracion('pos_ventas_archivo_nombre') || undefined;
 
   return {
     totalFilasLeidas: rawData.length - (headerRowIndex + 1),
     insertados,
     colegiosDetectados,
     aniosDetectados,
+    nombreArchivo: finalNombreArchivo,
   };
 }

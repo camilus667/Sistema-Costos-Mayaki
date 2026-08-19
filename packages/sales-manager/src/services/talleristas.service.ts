@@ -86,7 +86,7 @@ export async function actualizarConfeccionistaPrenda(productoId: string, confecc
 export async function obtenerLiquidacionTalleristas(
   talleristaFiltro?: string,
   origenFiltro: 'total' | 'ventas' | 'stock' = 'total',
-  anio: number = 2026
+  anio?: number
 ): Promise<{ success: boolean; data: TalleristaResumen[]; kpis: any }> {
   await asegurarColumnaConfeccionista();
   const raw = getRawDb();
@@ -135,7 +135,7 @@ export async function obtenerLiquidacionTalleristas(
     });
 
     // 3. Cargar ventas acumuladas POS agrupadas por prenda (limpiando nombre) y talla
-    const anioNum = parseInt(String(anio), 10);
+    const anioNum = (anio && !isNaN(Number(anio)) && Number(anio) > 0) ? parseInt(String(anio), 10) : null;
     const ventasRaw = queryObjs(`
       SELECT nombre_limpio as detalle_item, talla, SUM(cantidad) as total_unidades
       FROM pos_venta
