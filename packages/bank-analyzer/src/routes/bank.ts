@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import XLSX from 'xlsx';
+import { LOGO_MAYAKI_BASE64 } from '../constants/logo';
 import { parsearExtractoBancarioBuffer } from '../services/bankParser.service';
 import {
   guardarMovimientos,
@@ -16,7 +17,9 @@ const bankRoutes = new Hono();
 // Info de la base de datos de extractos
 bankRoutes.get('/info', (c) => {
   try {
-    const meta = obtenerMetadataResumen();
+    const desde = c.req.query('desde');
+    const hasta = c.req.query('hasta');
+    const meta = obtenerMetadataResumen(desde, hasta);
     return c.json({ success: true, data: meta });
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500);
@@ -90,7 +93,9 @@ bankRoutes.get('/movimientos', (c) => {
 // Anomalías detectadas
 bankRoutes.get('/anomalias', (c) => {
   try {
-    const res = obtenerMovimientosFiltrados({ anomaloOnly: true, limit: 100 });
+    const desde = c.req.query('desde') || c.req.query('fechaInicio');
+    const hasta = c.req.query('hasta') || c.req.query('fechaFin');
+    const res = obtenerMovimientosFiltrados({ anomaloOnly: true, fechaInicio: desde, fechaFin: hasta, limit: 100 });
     return c.json({ success: true, data: res.data });
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500);
@@ -102,7 +107,9 @@ bankRoutes.get('/recurrentes', (c) => {
   try {
     const tipo = c.req.query('tipo') as 'INGRESO' | 'EGRESO' | undefined;
     const limit = parseInt(c.req.query('limit') || '15', 10);
-    const data = obtenerRecurrentes(tipo, limit);
+    const desde = c.req.query('desde');
+    const hasta = c.req.query('hasta');
+    const data = obtenerRecurrentes(tipo, limit, desde, hasta);
     return c.json({ success: true, data });
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500);
@@ -114,7 +121,9 @@ bankRoutes.get('/resumen-mensual', (c) => {
   try {
     const anioStr = c.req.query('anio');
     const anio = anioStr ? parseInt(anioStr, 10) : undefined;
-    const data = obtenerResumenMensualClasificado(anio);
+    const desde = c.req.query('desde');
+    const hasta = c.req.query('hasta');
+    const data = obtenerResumenMensualClasificado(anio, desde, hasta);
     return c.json({ success: true, data });
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500);
@@ -134,11 +143,13 @@ bankRoutes.post('/limpiar', (c) => {
 // Generar Reporte PDF Imprimible
 bankRoutes.get('/imprimir-reporte', (c) => {
   try {
-    const meta = obtenerMetadataResumen();
-    const resumenes = obtenerResumenMensualClasificado();
-    const recurrentesIngresos = obtenerRecurrentes('INGRESO', 5);
-    const recurrentesEgresos = obtenerRecurrentes('EGRESO', 5);
-    const anomalias = obtenerMovimientosFiltrados({ anomaloOnly: true, limit: 50 }).data;
+    const desde = c.req.query('desde');
+    const hasta = c.req.query('hasta');
+    const meta = obtenerMetadataResumen(desde, hasta);
+    const resumenes = obtenerResumenMensualClasificado(undefined, desde, hasta);
+    const recurrentesIngresos = obtenerRecurrentes('INGRESO', 5, desde, hasta);
+    const recurrentesEgresos = obtenerRecurrentes('EGRESO', 5, desde, hasta);
+    const anomalias = obtenerMovimientosFiltrados({ anomaloOnly: true, fechaInicio: desde, fechaFin: hasta, limit: 50 }).data;
 
     const fechaHoy = new Date().toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
@@ -149,20 +160,31 @@ bankRoutes.get('/imprimir-reporte', (c) => {
         <meta charset="UTF-8">
         <title>Reporte Ejecutivo de Extractos Bancarios - MAYAKI</title>
         <style>
-          @page { size: letter; margin: 15mm; }
-          body { font-family: 'Segoe UI', Arial, sans-serif; color: #1e293b; background: #fff; line-height: 1.4; margin: 0; padding: 0; font-size: 12px; }
+          * { box-sizing: border-box; }
+          @media screen {
+            body { background-color: #525659; display: flex; justify-content: center; padding: 16px 8px; margin: 0; font-family: 'Segoe UI', Arial, sans-serif; }
+            .pdf-page { width: 215.9mm; min-height: 279.4mm; background: #ffffff; box-shadow: 0 10px 35px rgba(0, 0, 0, 0.45); padding: 10mm 10mm 10mm 13mm; border-radius: 2px; }
+          }
+          @media print {
+            @page { size: letter portrait; margin-top: 10mm; margin-right: 10mm; margin-bottom: 10mm; margin-left: 13mm; }
+            body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; font-family: 'Segoe UI', Arial, sans-serif; }
+            .pdf-page { width: 100% !important; box-shadow: none !important; padding: 0 !important; }
+          }
+          body { color: #1e293b; line-height: 1.4; font-size: 9.5pt; }
           .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 20px; }
           .logo { font-size: 22px; font-weight: 800; color: #0284c7; letter-spacing: -0.5px; }
           .logo span { color: #0f172a; }
           .meta-info { text-align: right; font-size: 11px; color: #64748b; }
-          h2 { color: #0f172a; font-size: 16px; margin: 18px 0 8px 0; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+          h2 { color: #0f172a; font-size: 14px; margin: 18px 0 8px 0; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
           .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
           .kpi-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; text-align: center; }
           .kpi-title { font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: 600; }
           .kpi-val { font-size: 15px; font-weight: 700; color: #0284c7; margin-top: 4px; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11px; }
-          th { background: #f1f5f9; color: #334155; font-weight: 700; text-align: left; padding: 6px 8px; border: 1px solid #cbd5e1; }
-          td { padding: 6px 8px; border: 1px solid #e2e8f0; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 9.5pt; }
+          th { background: #f1f5f9; color: #334155; font-weight: 700; text-align: left; padding: 5px 7px; border: 1px solid #cbd5e1; }
+          td { padding: 5px 7px; border: 1px solid #e2e8f0; color: #0f172a; }
+          tbody tr:nth-child(even) { background-color: #f1f5f9 !important; }
+          tbody tr:nth-child(odd) { background-color: #ffffff !important; }
           .text-right { text-align: right; }
           .badge-anomalo { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 10px; }
           .badge-ingreso { color: #16a34a; font-weight: 700; }
@@ -171,6 +193,7 @@ bankRoutes.get('/imprimir-reporte', (c) => {
         </style>
       </head>
       <body>
+        <div class="pdf-page">
         <div class="header">
           <div>
             <div class="logo">SISTEMA <span>MAYAKI</span></div>
@@ -307,6 +330,7 @@ bankRoutes.get('/imprimir-reporte', (c) => {
         <div class="footer">
           Reporte generado automáticamente por el Sistema de Análisis de Extractos Bancarios MAYAKI • ${fechaHoy}
         </div>
+        </div>
       </body>
       </html>
     `;
@@ -320,7 +344,9 @@ bankRoutes.get('/imprimir-reporte', (c) => {
 // Endpoint JSON del reporte estilo "12.0 Respaldo bancario resumen de cuentas"
 bankRoutes.get('/respaldo-resumen-cuentas', (c) => {
   try {
-    const data = obtenerRespaldoResumenCuentas();
+    const desde = c.req.query('desde');
+    const hasta = c.req.query('hasta');
+    const data = obtenerRespaldoResumenCuentas(desde, hasta);
     return c.json({ success: true, data });
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500);
@@ -330,7 +356,9 @@ bankRoutes.get('/respaldo-resumen-cuentas', (c) => {
 // Endpoint Exportar Excel .xlsx con estructura idéntica a "12.0 Respaldo bancario resumen de cuentas.xlsx"
 bankRoutes.get('/exportar-respaldo-excel', (c) => {
   try {
-    const data = obtenerRespaldoResumenCuentas();
+    const desde = c.req.query('desde');
+    const hasta = c.req.query('hasta');
+    const data = obtenerRespaldoResumenCuentas(desde, hasta);
     const wb = XLSX.utils.book_new();
 
     // Hoja 1: ingresos (Resumen mensual de cuentas bancarias)
@@ -389,6 +417,941 @@ bankRoutes.get('/exportar-respaldo-excel', (c) => {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': 'attachment; filename="12.0_Respaldo_bancario_resumen_cuentas.xlsx"',
     });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// 1. PDF Tab 1: Estado de Saldos & Conciliación
+bankRoutes.get('/imprimir-saldos-pdf', (c) => {
+  try {
+    const desde = c.req.query('desde');
+    const hasta = c.req.query('hasta');
+    const meta = obtenerMetadataResumen(desde, hasta);
+    const fechaHoy = new Date().toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <title>Reporte Estado de Saldos & Conciliación - MAYAKI</title>
+        <style>
+          * { box-sizing: border-box; }
+          @media screen {
+            body { background-color: #525659; display: flex; justify-content: center; padding: 16px 8px; margin: 0; font-family: 'Segoe UI', Arial, sans-serif; }
+            .pdf-page { width: 215.9mm; min-height: 279.4mm; background: #ffffff; box-shadow: 0 10px 35px rgba(0, 0, 0, 0.45); padding: 10mm 10mm 10mm 13mm; border-radius: 2px; }
+          }
+          @media print {
+            @page { size: letter portrait; margin-top: 10mm; margin-right: 10mm; margin-bottom: 10mm; margin-left: 13mm; }
+            body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; font-family: 'Segoe UI', Arial, sans-serif; }
+            .pdf-page { width: 100% !important; box-shadow: none !important; padding: 0 !important; }
+          }
+          body { color: #0f172a; line-height: 1.3; font-size: 9.5pt; }
+          .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0f172a; padding-bottom: 6px; margin-bottom: 10px; }
+          .brand-logo-box { display: flex; align-items: center; gap: 10px; }
+          .brand-logo-title { font-size: 11.5pt; font-weight: 800; color: #0f172a; text-transform: uppercase; }
+          .brand-logo-sub { font-size: 8.5pt; color: #475569; margin-top: 1px; }
+          .meta-info { text-align: right; font-size: 8.5pt; color: #475569; line-height: 1.3; }
+          .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+          .kpi-card { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px; text-align: center; }
+          .kpi-title { font-size: 8.5pt; text-transform: uppercase; color: #475569; font-weight: 600; }
+          .kpi-val { font-size: 12pt; font-weight: 700; color: #0f172a; margin-top: 2px; }
+          table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+          th { background: #f1f5f9; color: #0f172a; font-weight: 700; text-align: left; padding: 4px 5px; border: 1px solid #94a3b8; }
+          td { padding: 4px 5px; border: 1px solid #cbd5e1; color: #0f172a; }
+          tbody tr:nth-child(even) { background-color: #f1f5f9 !important; }
+          tbody tr:nth-child(odd) { background-color: #ffffff !important; }
+          .text-right { text-align: right; }
+          .text-center { text-align: center; }
+          .footer { margin-top: 16px; border-top: 1px solid #cbd5e1; padding-top: 5px; font-size: 8.5pt; color: #64748b; text-align: center; }
+        </style>
+      </head>
+      <body>
+        <div class="pdf-page">
+          <div class="header">
+            <div class="brand-logo-box">
+              <img src="${LOGO_MAYAKI_BASE64}" alt="MAYAKI" style="height: 42px; width: auto; object-fit: contain;" />
+              <div>
+                <div class="brand-logo-title">ESTADO DE SALDOS & CONCILIACIÓN BANCARIA</div>
+                <div class="brand-logo-sub">Sistema de Análisis Contable de Extractos Oficiales • Confección y Venta de Uniformes</div>
+              </div>
+            </div>
+            <div class="meta-info">
+              <div><strong>Fecha Emisión:</strong> ${fechaHoy}</div>
+              <div><strong>Registros:</strong> ${meta.totalMovimientos} movimientos</div>
+            </div>
+          </div>
+
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-title">Ingresos Totales</div>
+              <div class="kpi-val">${meta.totalIngresosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-title">Egresos Totales</div>
+              <div class="kpi-val">${meta.totalEgresosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-title">Balance Neto</div>
+              <div class="kpi-val">${meta.balanceNetoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-title">Alertas Anómalas</div>
+              <div class="kpi-val">${meta.totalAnomalias} 🚩</div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Banco / Entidad</th>
+                <th>Nro. Cuenta / Titular</th>
+                <th class="text-right">Saldo Inicial</th>
+                <th class="text-right">Ingresos (+)</th>
+                <th class="text-right">Egresos (-)</th>
+                <th class="text-right">Flujo Neto</th>
+                <th class="text-right">Saldo Final</th>
+                <th class="text-center">Conciliación</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${meta.cuentasDetalle.map((c) => `
+                <tr>
+                  <td><strong>${c.banco}</strong></td>
+                  <td>${c.nroCuenta}<br><span style="font-size: 8.5pt; color: #475569;">${c.titularNombre}</span></td>
+                  <td class="text-right">${c.saldoInicialBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                  <td class="text-right">${c.totalIngresosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                  <td class="text-right">${c.totalEgresosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                  <td class="text-right" style="font-weight: 700;">${c.balanceNetoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                  <td class="text-right" style="font-weight: 800;">${c.saldoFinalBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                  <td class="text-center" style="font-weight: 700;">${c.conciliadoOk ? '✅ Conciliado' : '⚠️ Descalce'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div class="footer">Reporte de Estado de Saldos Bancarios • MAYAKI • ${fechaHoy}</div>
+        </div>
+      </body>
+      </html>
+    `;
+    return c.html(html);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// 2. PDF Tab 2: Análisis por Mes
+bankRoutes.get('/imprimir-analisis-pdf', (c) => {
+  try {
+    const desde = c.req.query('desde');
+    const hasta = c.req.query('hasta');
+    const resumenes = obtenerResumenMensualClasificado(undefined, desde, hasta);
+    const fechaHoy = new Date().toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <title>Reporte de Análisis Mensual Clasificado - MAYAKI</title>
+        <style>
+          * { box-sizing: border-box; }
+          @media screen {
+            body { background-color: #525659; display: flex; justify-content: center; padding: 16px 8px; margin: 0; font-family: 'Segoe UI', Arial, sans-serif; }
+            .pdf-page { width: 215.9mm; min-height: 279.4mm; background: #ffffff; box-shadow: 0 10px 35px rgba(0, 0, 0, 0.45); padding: 10mm 10mm 10mm 13mm; border-radius: 2px; }
+          }
+          @media print {
+            @page { size: letter portrait; margin-top: 10mm; margin-right: 10mm; margin-bottom: 10mm; margin-left: 13mm; }
+            body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; font-family: 'Segoe UI', Arial, sans-serif; }
+            .pdf-page { width: 100% !important; box-shadow: none !important; padding: 0 !important; }
+          }
+          body { color: #0f172a; line-height: 1.3; font-size: 9.5pt; }
+          .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0f172a; padding-bottom: 6px; margin-bottom: 10px; }
+          .brand-logo-box { display: flex; align-items: center; gap: 10px; }
+          .brand-logo-title { font-size: 11.5pt; font-weight: 800; color: #0f172a; text-transform: uppercase; }
+          .brand-logo-sub { font-size: 8.5pt; color: #475569; margin-top: 1px; }
+          .meta-info { text-align: right; font-size: 8.5pt; color: #475569; line-height: 1.3; }
+          .card-box { border: 1px solid #64748b; border-radius: 4px; padding: 8px; margin-bottom: 10px; background: #ffffff; page-break-inside: avoid; }
+          .card-title { font-size: 10pt; font-weight: 700; color: #0f172a; border-bottom: 1px solid #cbd5e1; padding-bottom: 3px; margin-bottom: 5px; display: flex; justify-content: space-between; text-transform: uppercase; }
+          table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 3px; }
+          th { background: #f1f5f9; color: #0f172a; font-weight: 700; text-align: left; padding: 3px 5px; border: 1px solid #94a3b8; }
+          td { padding: 3px 5px; border: 1px solid #cbd5e1; color: #0f172a; }
+          tbody tr:nth-child(even) { background-color: #f1f5f9 !important; }
+          tbody tr:nth-child(odd) { background-color: #ffffff !important; }
+          .text-right { text-align: right; }
+          .footer { margin-top: 16px; border-top: 1px solid #cbd5e1; padding-top: 5px; font-size: 8.5pt; color: #64748b; text-align: center; }
+        </style>
+      </head>
+      <body>
+        <div class="pdf-page">
+          <div class="header">
+            <div class="brand-logo-box">
+              <img src="${LOGO_MAYAKI_BASE64}" alt="MAYAKI" style="height: 42px; width: auto; object-fit: contain;" />
+              <div>
+                <div class="brand-logo-title">REPORTE DE ANÁLISIS MENSUAL CLASIFICADO</div>
+                <div class="brand-logo-sub">Sistema de Análisis Contable de Extractos Oficiales • Confección y Venta de Uniformes</div>
+              </div>
+            </div>
+            <div class="meta-info">
+              <div><strong>Fecha Emisión:</strong> ${fechaHoy}</div>
+              <div><strong>Meses Evaluados:</strong> ${resumenes.length} períodos</div>
+            </div>
+          </div>
+
+          ${resumenes.map((m) => `
+            <div class="card-box">
+              <div class="card-title">
+                <span>PERÍODO: ${m.periodoTexto} (${m.totalTransacciones} MOVS)</span>
+                <span style="font-weight: 700;">BALANCE MES: ${m.balanceMesBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div>
+                  <strong style="color: #0f172a; font-size: 9.5pt;">INGRESOS CLASIFICADOS</strong>
+                  <table>
+                    <thead><tr><th>Categoría</th><th class="text-right">Movs</th><th class="text-right">Monto</th><th class="text-right">%</th></tr></thead>
+                    <tbody>
+                      ${m.ingresosPorCategoria.map((cat) => `
+                        <tr>
+                          <td>${cat.icono} ${cat.nombreVisible}</td>
+                          <td class="text-right">${cat.cantidad}</td>
+                          <td class="text-right" style="font-weight: 600;">${cat.montoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                          <td class="text-right">${cat.pctDelTotal}%</td>
+                        </tr>
+                      `).join('') || '<tr><td colspan="4" class="text-center">Sin ingresos</td></tr>'}
+                    </tbody>
+                  </table>
+                </div>
+                <div>
+                  <strong style="color: #0f172a; font-size: 9.5pt;">EGRESOS CLASIFICADOS</strong>
+                  <table>
+                    <thead><tr><th>Categoría</th><th class="text-right">Movs</th><th class="text-right">Monto</th><th class="text-right">%</th></tr></thead>
+                    <tbody>
+                      ${m.egresosPorCategoria.map((cat) => `
+                        <tr>
+                          <td>${cat.icono} ${cat.nombreVisible}</td>
+                          <td class="text-right">${cat.cantidad}</td>
+                          <td class="text-right" style="font-weight: 600;">${cat.montoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                          <td class="text-right">${cat.pctDelTotal}%</td>
+                        </tr>
+                      `).join('') || '<tr><td colspan="4" class="text-center">Sin egresos</td></tr>'}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          `).join('')}
+
+          <div class="footer">Reporte de Análisis Mensual • MAYAKI • ${fechaHoy}</div>
+        </div>
+      </body>
+      </html>
+    `;
+    return c.html(html);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// 3. PDF Tab 3: Anomalías Detectadas
+bankRoutes.get('/imprimir-anomalias-pdf', (c) => {
+  try {
+    const desde = c.req.query('desde');
+    const hasta = c.req.query('hasta');
+    const anomalias = obtenerMovimientosFiltrados({ anomaloOnly: true, fechaInicio: desde, fechaFin: hasta, limit: 100 }).data;
+    const fechaHoy = new Date().toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <title>Reporte de Auditoría y Detección de Anomalías - MAYAKI</title>
+        <style>
+          * { box-sizing: border-box; }
+          @media screen {
+            body { background-color: #525659; display: flex; justify-content: center; padding: 16px 8px; margin: 0; font-family: 'Segoe UI', Arial, sans-serif; }
+            .pdf-page { width: 215.9mm; min-height: 279.4mm; background: #ffffff; box-shadow: 0 10px 35px rgba(0, 0, 0, 0.45); padding: 10mm 10mm 10mm 13mm; border-radius: 2px; }
+          }
+          @media print {
+            @page { size: letter portrait; margin-top: 10mm; margin-right: 10mm; margin-bottom: 10mm; margin-left: 13mm; }
+            body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; font-family: 'Segoe UI', Arial, sans-serif; }
+            .pdf-page { width: 100% !important; box-shadow: none !important; padding: 0 !important; }
+          }
+          body { color: #0f172a; line-height: 1.3; font-size: 9.5pt; }
+          .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0f172a; padding-bottom: 6px; margin-bottom: 10px; }
+          .brand-logo-box { display: flex; align-items: center; gap: 10px; }
+          .brand-logo-title { font-size: 11.5pt; font-weight: 800; color: #0f172a; text-transform: uppercase; }
+          .brand-logo-sub { font-size: 8.5pt; color: #475569; margin-top: 1px; }
+          .meta-info { text-align: right; font-size: 8.5pt; color: #475569; line-height: 1.3; }
+          table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+          th { background: #f1f5f9; color: #0f172a; font-weight: 700; text-align: left; padding: 4px 5px; border: 1px solid #94a3b8; }
+          td { padding: 4px 5px; border: 1px solid #cbd5e1; color: #0f172a; }
+          tbody tr:nth-child(even) { background-color: #f1f5f9 !important; }
+          tbody tr:nth-child(odd) { background-color: #ffffff !important; }
+          .text-right { text-align: right; }
+          .footer { margin-top: 16px; border-top: 1px solid #cbd5e1; padding-top: 5px; font-size: 8.5pt; color: #64748b; text-align: center; }
+        </style>
+      </head>
+      <body>
+        <div class="pdf-page">
+          <div class="header">
+            <div class="brand-logo-box">
+              <img src="${LOGO_MAYAKI_BASE64}" alt="MAYAKI" style="height: 42px; width: auto; object-fit: contain;" />
+              <div>
+                <div class="brand-logo-title">REPORTE DE AUDITORÍA Y VIGILANCIA DE ANOMALÍAS</div>
+                <div class="brand-logo-sub">Sistema de Análisis Contable de Extractos Oficiales • Confección y Venta de Uniformes</div>
+              </div>
+            </div>
+            <div class="meta-info">
+              <div><strong>Fecha Emisión:</strong> ${fechaHoy}</div>
+              <div><strong>Total Hallazgos:</strong> ${anomalias.length} alertas</div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha / Hora</th>
+                <th>Banco</th>
+                <th>Tipo</th>
+                <th>Contraparte / Origen</th>
+                <th class="text-right">Monto</th>
+                <th>Glosa / Motivo de Alerta</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${anomalias.map((a) => `
+                <tr>
+                  <td>${a.fechaTexto} ${a.hora !== '00:00:00' ? a.hora : ''}</td>
+                  <td><strong>${a.banco}</strong></td>
+                  <td style="font-weight: 700;">${a.tipo}</td>
+                  <td><strong>${a.contraparteNombre}</strong></td>
+                  <td class="text-right" style="font-weight: 800;">${a.montoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                  <td>${a.motivoAnomalia || a.glosaDetalle}</td>
+                </tr>
+              `).join('') || '<tr><td colspan="6" class="text-center">Sin anomalías detectadas en este lapso.</td></tr>'}
+            </tbody>
+          </table>
+
+          <div class="footer">Reporte de Auditoría de Transacciones Anómalas • MAYAKI • ${fechaHoy}</div>
+        </div>
+      </body>
+      </html>
+    `;
+    return c.html(html);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// 4. PDF Tab 4: Cuentas Recurrentes (Clientes y Proveedores)
+bankRoutes.get('/imprimir-recurrentes-pdf', (c) => {
+  try {
+    const desde = c.req.query('desde');
+    const hasta = c.req.query('hasta');
+    const recIngresos = obtenerRecurrentes('INGRESO', 15, desde, hasta);
+    const recEgresos = obtenerRecurrentes('EGRESO', 15, desde, hasta);
+    const fechaHoy = new Date().toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <title>Reporte Ranking de Cuentas Recurrentes - MAYAKI</title>
+        <style>
+          * { box-sizing: border-box; }
+          @media screen {
+            body { background-color: #525659; display: flex; justify-content: center; padding: 16px 8px; margin: 0; font-family: 'Segoe UI', Arial, sans-serif; }
+            .pdf-page { width: 215.9mm; min-height: 279.4mm; background: #ffffff; box-shadow: 0 10px 35px rgba(0, 0, 0, 0.45); padding: 10mm 10mm 10mm 13mm; border-radius: 2px; }
+          }
+          @media print {
+            @page { size: letter portrait; margin-top: 10mm; margin-right: 10mm; margin-bottom: 10mm; margin-left: 13mm; }
+            body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; font-family: 'Segoe UI', Arial, sans-serif; }
+            .pdf-page { width: 100% !important; box-shadow: none !important; padding: 0 !important; }
+          }
+          body { color: #0f172a; line-height: 1.3; font-size: 9.5pt; }
+          .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0f172a; padding-bottom: 6px; margin-bottom: 10px; }
+          .brand-logo-box { display: flex; align-items: center; gap: 10px; }
+          .brand-logo-title { font-size: 11.5pt; font-weight: 800; color: #0f172a; text-transform: uppercase; }
+          .brand-logo-sub { font-size: 8.5pt; color: #475569; margin-top: 1px; }
+          .meta-info { text-align: right; font-size: 8.5pt; color: #475569; line-height: 1.3; }
+          h3 { color: #0f172a; font-size: 10pt; margin: 10px 0 5px 0; border-bottom: 1px solid #cbd5e1; padding-bottom: 3px; text-transform: uppercase; }
+          table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 10px; }
+          th { background: #f1f5f9; color: #0f172a; font-weight: 700; text-align: left; padding: 3px 5px; border: 1px solid #94a3b8; }
+          td { padding: 3px 5px; border: 1px solid #cbd5e1; color: #0f172a; }
+          tbody tr:nth-child(even) { background-color: #f1f5f9 !important; }
+          tbody tr:nth-child(odd) { background-color: #ffffff !important; }
+          .text-right { text-align: right; }
+          .footer { margin-top: 16px; border-top: 1px solid #cbd5e1; padding-top: 5px; font-size: 8.5pt; color: #64748b; text-align: center; }
+        </style>
+      </head>
+      <body>
+        <div class="pdf-page">
+          <div class="header">
+            <div class="brand-logo-box">
+              <img src="${LOGO_MAYAKI_BASE64}" alt="MAYAKI" style="height: 42px; width: auto; object-fit: contain;" />
+              <div>
+                <div class="brand-logo-title">RANKING DE CONTRAPARTES RECURRENTES</div>
+                <div class="brand-logo-sub">Sistema de Análisis Contable de Extractos Oficiales • Confección y Venta de Uniformes</div>
+              </div>
+            </div>
+            <div class="meta-info">
+              <div><strong>Fecha Emisión:</strong> ${fechaHoy}</div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start;">
+            <div>
+              <h3>TOP CLIENTES (INGRESOS)</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Cliente / Originante</th>
+                    <th class="text-right">Movs</th>
+                    <th class="text-right">Total Acumulado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${recIngresos.map((c) => `
+                    <tr>
+                      <td><strong>${c.contraparteNombre}</strong><br><span style="font-size: 8.5pt; color: #475569;">${c.banco}</span></td>
+                      <td class="text-right">${c.cantidadTransacciones}</td>
+                      <td class="text-right" style="font-weight: 700;">${c.totalMontoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+
+            <div>
+              <h3>TOP PROVEEDORES (EGRESOS)</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Proveedor / Beneficiario</th>
+                    <th class="text-right">Movs</th>
+                    <th class="text-right">Total Acumulado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${recEgresos.map((c) => `
+                    <tr>
+                      <td><strong>${c.contraparteNombre}</strong><br><span style="font-size: 8.5pt; color: #475569;">${c.banco}</span></td>
+                      <td class="text-right">${c.cantidadTransacciones}</td>
+                      <td class="text-right" style="font-weight: 700;">${c.totalMontoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="footer">Reporte Ranking de Recurrentes • MAYAKI • ${fechaHoy}</div>
+        </div>
+      </body>
+      </html>
+    `;
+    return c.html(html);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// 5. PDF Tab 6: Consolidado Movimientos Libro Caja/Bancos
+bankRoutes.get('/imprimir-movimientos-pdf', (c) => {
+  try {
+    const banco = c.req.query('banco');
+    const tipo = c.req.query('tipo');
+    const categoria = c.req.query('categoria');
+    const fechaInicio = c.req.query('desde');
+    const fechaFin = c.req.query('hasta');
+    const search = c.req.query('search');
+
+    const resMovs = obtenerMovimientosFiltrados({
+      banco,
+      tipo,
+      categoria,
+      fechaInicio,
+      fechaFin,
+      search,
+      page: 1,
+      limit: 200,
+    });
+
+    const fechaHoy = new Date().toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <title>Reporte Consolidado Libro Banco - MAYAKI</title>
+        <style>
+          * { box-sizing: border-box; }
+          @media screen {
+            body { background-color: #525659; display: flex; justify-content: center; padding: 16px 8px; margin: 0; font-family: 'Segoe UI', Arial, sans-serif; }
+            .pdf-page { width: 215.9mm; min-height: 279.4mm; background: #ffffff; box-shadow: 0 10px 35px rgba(0, 0, 0, 0.45); padding: 10mm 10mm 10mm 13mm; border-radius: 2px; }
+          }
+          @media print {
+            @page { size: letter portrait; margin-top: 10mm; margin-right: 10mm; margin-bottom: 10mm; margin-left: 13mm; }
+            body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; font-family: 'Segoe UI', Arial, sans-serif; }
+            .pdf-page { width: 100% !important; box-shadow: none !important; padding: 0 !important; }
+          }
+          body { color: #0f172a; line-height: 1.3; font-size: 9.5pt; }
+          .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0f172a; padding-bottom: 6px; margin-bottom: 10px; }
+          .brand-logo-box { display: flex; align-items: center; gap: 10px; }
+          .brand-logo-title { font-size: 11.5pt; font-weight: 800; color: #0f172a; text-transform: uppercase; }
+          .brand-logo-sub { font-size: 8.5pt; color: #475569; margin-top: 1px; }
+          .meta-info { text-align: right; font-size: 8.5pt; color: #475569; line-height: 1.3; }
+          table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 5px; }
+          th { background: #f1f5f9; color: #0f172a; font-weight: 700; text-align: left; padding: 3px 5px; border: 1px solid #94a3b8; }
+          td { padding: 3px 5px; border: 1px solid #cbd5e1; color: #0f172a; }
+          tbody tr:nth-child(even) { background-color: #f1f5f9 !important; }
+          tbody tr:nth-child(odd) { background-color: #ffffff !important; }
+          .text-right { text-align: right; }
+          .footer { margin-top: 16px; border-top: 1px solid #cbd5e1; padding-top: 5px; font-size: 8.5pt; color: #64748b; text-align: center; }
+        </style>
+      </head>
+      <body>
+        <div class="pdf-page">
+          <div class="header">
+            <div class="brand-logo-box">
+              <img src="${LOGO_MAYAKI_BASE64}" alt="MAYAKI" style="height: 42px; width: auto; object-fit: contain;" />
+              <div>
+                <div class="brand-logo-title">REPORTE CONSOLIDADO LIBRO CAJA Y BANCOS</div>
+                <div class="brand-logo-sub">Sistema de Análisis Contable de Extractos Oficiales • Confección y Venta de Uniformes</div>
+              </div>
+            </div>
+            <div class="meta-info">
+              <div><strong>Fecha Emisión:</strong> ${fechaHoy}</div>
+              <div><strong>Movimientos Mostrados:</strong> ${resMovs.data.length} de ${resMovs.total} totales</div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha / Hora</th>
+                <th>Banco</th>
+                <th>Tipo</th>
+                <th>Contraparte / Origen</th>
+                <th>Categoría</th>
+                <th class="text-right">Monto</th>
+                <th class="text-right">Saldo</th>
+                <th>Glosa Detalle</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${resMovs.data.map((m) => `
+                <tr>
+                  <td>${m.fechaTexto} ${m.hora !== '00:00:00' ? m.hora : ''}</td>
+                  <td><strong>${m.banco}</strong></td>
+                  <td style="font-weight: 700;">${m.tipo}</td>
+                  <td><strong>${m.contraparteNombre}</strong></td>
+                  <td>${m.categoria}</td>
+                  <td class="text-right" style="font-weight: 700;">${m.montoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                  <td class="text-right">${m.saldoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                  <td style="font-size: 8.5pt;">${m.glosaDetalle}</td>
+                </tr>
+              `).join('') || '<tr><td colspan="8" class="text-center">No se encontraron movimientos para los filtros seleccionados.</td></tr>'}
+            </tbody>
+          </table>
+
+          <div class="footer">Reporte Consolidado de Movimientos • MAYAKI • ${fechaHoy}</div>
+        </div>
+      </body>
+      </html>
+    `;
+    return c.html(html);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// Generar Reporte PDF Imprimible del Respaldo Mensual (Estilo 12.0 Respaldo bancario)
+bankRoutes.get('/imprimir-respaldo-pdf', (c) => {
+  try {
+    const desde = c.req.query('desde');
+    const hasta = c.req.query('hasta');
+    const data = obtenerRespaldoResumenCuentas(desde, hasta);
+    const fechaHoy = new Date().toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <title>Respaldo Bancario Resumen de Cuentas - MAYAKI</title>
+        <style>
+          * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          @media screen {
+            body {
+              background-color: #525659;
+              display: flex;
+              justify-content: center;
+              padding: 16px 8px;
+              margin: 0;
+              font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+            }
+            .pdf-page {
+              width: 215.9mm;
+              min-height: 279.4mm;
+              background: #ffffff;
+              box-shadow: 0 10px 35px rgba(0, 0, 0, 0.45);
+              padding: 10mm 10mm 10mm 13mm;
+              border-radius: 2px;
+            }
+          }
+          @media print {
+            @page {
+              size: letter portrait;
+              margin-top: 10mm;
+              margin-right: 10mm;
+              margin-bottom: 10mm;
+              margin-left: 13mm;
+            }
+            * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              color-adjust: exact !important;
+            }
+            body {
+              background: #ffffff !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            .pdf-page {
+              width: 100% !important;
+              box-shadow: none !important;
+              padding: 0 !important;
+            }
+          }
+
+          body { color: #0f172a; line-height: 1.3; font-size: 9.5pt; }
+          .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            border-bottom: 2px solid #881337;
+            padding-bottom: 5px;
+            margin-bottom: 8px;
+          }
+          .brand-logo-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+          }
+          .brand-logo-title {
+            font-size: 12pt;
+            font-weight: 800;
+            color: #0f172a;
+            letter-spacing: -0.3px;
+            text-transform: uppercase;
+          }
+          .brand-logo-sub {
+            font-size: 9pt;
+            color: #475569;
+            font-weight: 500;
+            margin-top: 1px;
+          }
+          .meta-info {
+            text-align: right;
+            font-size: 9pt;
+            color: #475569;
+            line-height: 1.3;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            font-size: 9.5pt;
+            margin-top: 0;
+          }
+          .text-right { text-align: right; }
+          .text-left { text-align: left; }
+          .text-center { text-align: center; }
+
+          /* Resumen General Consolidado Styles */
+          .rg-container {
+            width: calc(50% - 14px);
+            flex: 0 0 calc(50% - 14px);
+            box-sizing: border-box;
+            page-break-inside: avoid;
+            margin-bottom: 12px;
+          }
+          .rg-header {
+            background-color: #881337 !important;
+            color: #ffffff !important;
+            padding: 5px 8px;
+            font-size: 9.5pt;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-radius: 3px 3px 0 0;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .rg-badge {
+            font-size: 7.5pt;
+            background-color: #ffffff !important;
+            color: #881337 !important;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-weight: 800;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .rg-sub {
+            font-size: 8.5pt;
+            color: #881337 !important;
+            font-weight: 700;
+            background-color: #fff1f2 !important;
+            padding: 4px 6px;
+            border-bottom: 1px solid #fecdd3;
+            margin-bottom: 4px;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .rg-th {
+            background-color: #4c0519 !important;
+            color: #ffffff !important;
+            font-weight: 800;
+            border: 1px solid #4c0519 !important;
+            padding: 3.5px 6px;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .rg-tr-even {
+            background-color: #ffe4e6 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .rg-tr-odd {
+            background-color: #ffffff !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .rg-td {
+            border: 1px solid #fda4af !important;
+            padding: 3px 6px;
+            color: #0f172a;
+          }
+          .rg-tfoot-tr {
+            background-color: #881337 !important;
+            color: #ffffff !important;
+            font-weight: 800;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .rg-tfoot-td {
+            background-color: #881337 !important;
+            color: #ffffff !important;
+            font-weight: 800 !important;
+            border: 1.5px solid #881337 !important;
+            padding: 4.5px 6px;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          /* Tablas Bancos Styles */
+          .bank-container {
+            width: calc(50% - 14px);
+            flex: 0 0 calc(50% - 14px);
+            box-sizing: border-box;
+            page-break-inside: avoid;
+            margin-bottom: 12px;
+          }
+          .bank-title {
+            font-size: 9.5pt;
+            font-weight: 800;
+            color: #0f172a;
+            border-bottom: 1.5px solid #64748b;
+            padding-bottom: 2px;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+          }
+          .bank-sub {
+            font-size: 8.5pt;
+            color: #475569;
+            margin-bottom: 5px;
+            font-weight: 500;
+          }
+          .bank-th {
+            background-color: #f1f5f9 !important;
+            color: #0f172a !important;
+            font-weight: 700;
+            border: 1px solid #cbd5e1 !important;
+            padding: 3.5px 6px;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .bank-tr-even {
+            background-color: #f1f5f9 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .bank-tr-odd {
+            background-color: #ffffff !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .bank-td {
+            border: 1px solid #cbd5e1 !important;
+            padding: 3px 6px;
+            color: #0f172a;
+          }
+          .bank-tfoot-tr {
+            background-color: #e2e8f0 !important;
+            color: #0f172a !important;
+            font-weight: 800;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .bank-tfoot-td {
+            background-color: #e2e8f0 !important;
+            color: #0f172a !important;
+            font-weight: 800 !important;
+            border-top: 1.5px solid #0f172a !important;
+            border-bottom: 1.5px solid #0f172a !important;
+            border-left: 1px solid #cbd5e1 !important;
+            border-right: 1px solid #cbd5e1 !important;
+            padding: 4px 6px;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          .footer {
+            margin-top: 12px;
+            padding-top: 4px;
+            font-size: 8.5pt;
+            color: #64748b;
+            text-align: center;
+            border-top: 1px solid #cbd5e1;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="pdf-page" style="padding: 8mm 10mm 8mm 12mm;">
+          <div class="header">
+            <div class="brand-logo-box">
+              <img src="${LOGO_MAYAKI_BASE64}" alt="MAYAKI" style="height: 38px; width: auto; max-width: 190px; object-fit: contain;" />
+              <div>
+                <div class="brand-logo-title">RESPALDO BANCARIO RESUMEN DE CUENTAS</div>
+                <div class="brand-logo-sub">Análisis Contable de Extractos Bancarios Oficiales</div>
+              </div>
+            </div>
+            <div class="meta-info">
+              <div><strong>Fecha Emisión:</strong> ${fechaHoy}</div>
+              <div><strong>Cuentas Evaluadas:</strong> ${data.cuentas.length} Bancos</div>
+            </div>
+          </div>
+
+          <!-- Grilla de 2 columnas con amplio espaciado horizontal -->
+          <div style="display: flex; flex-wrap: wrap; gap: 12px 28px; width: 100%; box-sizing: border-box; align-items: start;">
+            
+            ${data.resumenConsolidado ? `
+              <div class="rg-container">
+                <div class="rg-header">
+                  <span>RESUMEN GRAL. CONSOLIDADO</span>
+                  <span class="rg-badge">TODOS LOS BANCOS</span>
+                </div>
+                <div class="rg-sub">
+                  Saldo Inicial Consolidado al ${data.resumenConsolidado.fechaInicialTexto}: <strong>Bs. ${data.resumenConsolidado.saldoInicialTotalBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</strong>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th class="rg-th text-left" style="width: 25%;">Mes</th>
+                      <th class="rg-th text-right" style="width: 25%;">Créditos</th>
+                      <th class="rg-th text-right" style="width: 25%;">Débitos</th>
+                      <th class="rg-th text-right" style="width: 25%;">Saldo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${data.resumenConsolidado.filasMensuales.map((f, idx) => `
+                      <tr class="${idx % 2 === 0 ? 'rg-tr-even' : 'rg-tr-odd'}" style="page-break-inside: avoid;">
+                        <td class="rg-td" style="font-weight: 700;">${f.mesTexto}</td>
+                        <td class="rg-td text-right">${f.creditosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                        <td class="rg-td text-right">${f.debitosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                        <td class="rg-td text-right" style="font-weight: 800; color: #881337;">${f.saldoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                  <tfoot>
+                    <tr class="rg-tfoot-tr" style="page-break-inside: avoid;">
+                      <td class="rg-tfoot-td">TOTAL</td>
+                      <td class="rg-tfoot-td text-right">${data.resumenConsolidado.totalCreditosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                      <td class="rg-tfoot-td text-right">${data.resumenConsolidado.totalDebitosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                      <td class="rg-tfoot-td text-right" style="font-size: 9.5pt;">${data.resumenConsolidado.saldoFinalBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            ` : ''}
+
+            ${data.cuentas.map((c) => `
+              <div class="bank-container">
+                <div class="bank-title">
+                  ${c.banco} (${c.nroCuenta})
+                </div>
+                <div class="bank-sub">
+                  ${c.titularNombre} — Saldo Inicial: <strong style="color: #0f172a;">Bs. ${c.saldoInicialBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</strong>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th class="bank-th text-left" style="width: 25%;">Mes</th>
+                      <th class="bank-th text-right" style="width: 25%;">Créditos</th>
+                      <th class="bank-th text-right" style="width: 25%;">Débitos</th>
+                      <th class="bank-th text-right" style="width: 25%;">Saldo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${c.filasMensuales.map((f, idx) => `
+                      <tr class="${idx % 2 === 0 ? 'bank-tr-even' : 'bank-tr-odd'}" style="page-break-inside: avoid;">
+                        <td class="bank-td" style="font-weight: 700;">${f.mesTexto}</td>
+                        <td class="bank-td text-right">${c.filasMensuales[idx] ? f.creditosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 }) : ''}</td>
+                        <td class="bank-td text-right">${f.debitosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                        <td class="bank-td text-right" style="font-weight: 800;">${f.saldoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                  <tfoot>
+                    <tr class="bank-tfoot-tr" style="page-break-inside: avoid;">
+                      <td class="bank-tfoot-td">TOTAL</td>
+                      <td class="bank-tfoot-td text-right">${c.totalCreditosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                      <td class="bank-tfoot-td text-right">${c.totalDebitosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                      <td class="bank-tfoot-td text-right">${c.saldoFinalBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="footer">
+            Reporte de Respaldo Bancario de Cuentas • MAYAKI • Elaboración propia, basada en los extractos bancarios
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    return c.html(html);
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500);
   }

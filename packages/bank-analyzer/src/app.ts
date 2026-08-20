@@ -33,10 +33,22 @@ function autocargarExtractos() {
     }
 
     if (dirExtractos) {
-      const files = fs.readdirSync(dirExtractos).filter((f: string) => f.endsWith('.xls') || f.endsWith('.xlsx'));
-      console.log(`📂 Se encontraron ${files.length} archivos de extractos en '${dirExtractos}'. Procesando...`);
+      const archivosDeseados = [
+        'banco BISA ExtractoDeMovimientos_1785873392607.xls',
+        'bnb 2025-2026.xls',
+        'Extracto_Banco Union_2.xls',
+      ];
 
-      files.forEach((file: string) => {
+      const todosArchivos = fs.readdirSync(dirExtractos);
+      const files = archivosDeseados.filter((f) => todosArchivos.includes(f));
+      const otrosArchivos = todosArchivos.filter(
+        (f) => (f.endsWith('.xls') || f.endsWith('.xlsx')) && !archivosDeseados.includes(f) && !f.startsWith('12.0')
+      );
+      const listaProcesar = files.length > 0 ? files : otrosArchivos;
+
+      console.log(`📂 Se procesarán ${listaProcesar.length} archivos de extractos por defecto desde '${dirExtractos}'...`);
+
+      listaProcesar.forEach((file: string) => {
         const filePath = path.join(dirExtractos, file);
         try {
           const buf = fs.readFileSync(filePath);

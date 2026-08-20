@@ -167,28 +167,54 @@ function parsearBNB(rows: any[][], fileName: string): BankImportResult {
   });
 
   if (!nroCuenta) nroCuenta = '2500528063';
-  if (!titularNombre) titularNombre = 'MODA MAYAKI';
+  if (!titularNombre || titularNombre === 'MODA MAYAKI') titularNombre = 'Angel Limachi';
 
   const movimientos: MovimientoBancario[] = [];
 
-  // En BNB las filas de datos pueden empezar desde arriba (ej. fila 1 o fila 6)
-  rows.forEach((r, idx) => {
+  // Mapeo dinámico de columnas desde la Fila 2 de Excel (índice 1 en JS)
+  let colFecha = 0;
+  let colHora = 1;
+  let colDesc = 3;
+  let colRef = 4;
+  let colDebito = 7;
+  let colCredito = 8;
+  let colSaldo = 9;
+  let colGlosa = 10;
+
+  if (rows[1] && Array.isArray(rows[1])) {
+    rows[1].forEach((val, cIdx) => {
+      const vUpper = String(val || '').toUpperCase().trim();
+      if (vUpper === 'FECHA') colFecha = cIdx;
+      if (vUpper === 'HORA') colHora = cIdx;
+      if (vUpper === 'DESCRIPCIÓN' || vUpper === 'DESCRIPCION') colDesc = cIdx;
+      if (vUpper === 'REFERENCIA') colRef = cIdx;
+      if (vUpper === 'DÉBITOS' || vUpper === 'DEBITOS' || vUpper === 'DÉBITO' || vUpper === 'DEBITO') colDebito = cIdx;
+      if (vUpper === 'CRÉDITOS' || vUpper === 'CREDITOS' || vUpper === 'CRÉDITO' || vUpper === 'CREDITO') colCredito = cIdx;
+      if (vUpper === 'SALDO') colSaldo = cIdx;
+      if (vUpper.includes('ADICIONAL') || vUpper.includes('GLOSA')) colGlosa = cIdx;
+    });
+  }
+
+  // Los datos de transacciones del BNB empiezan a partir de la Fila 3 (índice 2 en JS)
+  const dataRows = rows.slice(2);
+
+  dataRows.forEach((r, idx) => {
     if (!r || r.length < 4) return;
-    const fechaRaw = r[0];
-    if (!fechaRaw || !/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(String(fechaRaw).trim())) return;
+    const fechaRaw = r[colFecha];
+    if (!fechaRaw || !/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(String(fechaRaw).trim())) return;
 
-    const hora = String(r[1] || '00:00:00').trim();
-    const descripcionRaw = String(r[3] || '').trim();
-    const referencia = String(r[4] || '').trim();
-    const debitoVal = parseMontoLatino(r[7]);
-    const creditoVal = parseMontoLatino(r[8]);
-    const saldoVal = parseMontoLatino(r[9]);
-    const glosaRaw = String(r[10] || r[4] || '').trim();
+    const hora = String(r[colHora] || '00:00:00').trim();
+    const descripcionRaw = String(r[colDesc] || '').trim();
+    const referencia = String(r[colRef] || '').trim();
+    const creditoVal = parseMontoLatino(r[colCredito]);
+    const debitoVal = parseMontoLatino(r[colDebito]);
+    const saldoVal = parseMontoLatino(r[colSaldo]);
+    const glosaRaw = String(r[colGlosa] || r[colRef] || '').trim();
 
-    const tipo = creditoVal > 0 ? 'INGRESO' : 'EGRESO';
-    const montoBs = creditoVal > 0 ? creditoVal : debitoVal;
+    const tipo: 'INGRESO' | 'EGRESO' = creditoVal !== 0 ? 'INGRESO' : 'EGRESO';
+    const rawMonto = tipo === 'INGRESO' ? creditoVal : debitoVal;
 
-    if (montoBs <= 0) return;
+    if (rawMonto === 0) return;
 
     let contraparteNombre = '';
     let contraparteCuenta = '';
@@ -214,7 +240,9 @@ function parsearBNB(rows: any[][], fileName: string): BankImportResult {
     if (!glosaDetalle) glosaDetalle = glosaRaw;
 
     const fechaObj = parseFechaIsoUniversal(String(fechaRaw));
-    const clasif = clasificarTransaccion(montoBs, tipo, contraparteNombre, glosaDetalle, descripcionRaw);
+    const esReversion = rawMonto < 0;
+    const montoBsAbs = Math.abs(rawMonto);
+    const clasif = clasificarTransaccion(montoBsAbs, tipo, contraparteNombre, glosaDetalle, descripcionRaw);
 
     movimientos.push({
       id: `bnb_${fechaObj.iso}_${idx}`,
@@ -228,7 +256,7 @@ function parsearBNB(rows: any[][], fileName: string): BankImportResult {
       mes: fechaObj.mes,
       trimestre: fechaObj.trimestre,
       tipo,
-      montoBs,
+      montoBs: montoBsAbs,
       saldoBs: saldoVal,
       descripcionRaw,
       referencia,
@@ -239,6 +267,8 @@ function parsearBNB(rows: any[][], fileName: string): BankImportResult {
       categoria: clasif.categoria,
       esAnomalo: clasif.esAnomalo,
       motivoAnomalia: clasif.motivoAnomalia,
+      esReversion,
+      ordenOriginal: idx,
       archivoOrigen: fileName,
       creadoEn: new Date().toISOString(),
     });
@@ -263,7 +293,7 @@ function parsearBancoBisa(rows: any[][], fileName: string): BankImportResult {
   });
 
   if (!nroCuenta) nroCuenta = '0070510014';
-  if (!titularNombre) titularNombre = 'MODA MAYAKI';
+  if (!titularNombre || titularNombre === 'MODA MAYAKI') titularNombre = 'MODA MAYAKI';
 
   const movimientos: MovimientoBancario[] = [];
 
@@ -325,6 +355,7 @@ function parsearBancoBisa(rows: any[][], fileName: string): BankImportResult {
       categoria: clasif.categoria,
       esAnomalo: clasif.esAnomalo,
       motivoAnomalia: clasif.motivoAnomalia,
+      ordenOriginal: idx,
       archivoOrigen: fileName,
       creadoEn: new Date().toISOString(),
     });
@@ -421,6 +452,7 @@ function parsearBancoUnion(rows: any[][], fileName: string): BankImportResult {
       categoria: clasif.categoria,
       esAnomalo: clasif.esAnomalo,
       motivoAnomalia: clasif.motivoAnomalia,
+      ordenOriginal: idx,
       archivoOrigen: fileName,
       creadoEn: new Date().toISOString(),
     });
@@ -444,8 +476,9 @@ function calcularResumenExtracto(
   let totalAnomalias = 0;
 
   movimientos.forEach((m) => {
-    if (m.tipo === 'INGRESO') totalIngresosBs += m.montoBs;
-    else totalEgresosBs += m.montoBs;
+    const val = m.esReversion ? -m.montoBs : m.montoBs;
+    if (m.tipo === 'INGRESO') totalIngresosBs += val;
+    else totalEgresosBs += val;
     if (m.esAnomalo) totalAnomalias++;
   });
 
@@ -462,13 +495,31 @@ function calcularResumenExtracto(
   let saldoFinalBs = 0;
 
   if (movimientos.length > 0) {
-    const movOldest = movimientos[movimientos.length - 1];
-    const movNewest = movimientos[0];
+    // Si el archivo original está en orden ascendente (ej. Banco Unión donde los primeros índices son más antiguos),
+    // determinamos si el archivo viene en orden ascendente o descendente.
+    const isFileAscending =
+      movimientos.length > 1 &&
+      movimientos[0].fechaIso.localeCompare(movimientos[movimientos.length - 1].fechaIso) < 0;
+
+    const movsAsc = [...movimientos].sort((a, b) => {
+      const cmpDate = a.fechaIso.localeCompare(b.fechaIso);
+      if (cmpDate !== 0) return cmpDate;
+      const cmpTime = a.hora.localeCompare(b.hora);
+      if (cmpTime !== 0) return cmpTime;
+      // Para empates en misma fecha y hora: mantener orden cronológico real del archivo
+      return isFileAscending
+        ? (a.ordenOriginal || 0) - (b.ordenOriginal || 0)
+        : (b.ordenOriginal || 0) - (a.ordenOriginal || 0);
+    });
+
+    const movOldest = movsAsc[0];
+    const movNewest = movsAsc[movsAsc.length - 1];
 
     if (saldoInicialHeader > 0) {
       saldoInicialBs = saldoInicialHeader;
     } else {
-      saldoInicialBs = movOldest.tipo === 'INGRESO' ? movOldest.saldoBs - movOldest.montoBs : movOldest.saldoBs + movOldest.montoBs;
+      const oldestVal = movOldest.esReversion ? -movOldest.montoBs : movOldest.montoBs;
+      saldoInicialBs = movOldest.tipo === 'INGRESO' ? movOldest.saldoBs - oldestVal : movOldest.saldoBs + oldestVal;
     }
     saldoFinalBs = movNewest.saldoBs;
   }

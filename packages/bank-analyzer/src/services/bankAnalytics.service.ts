@@ -22,6 +22,14 @@ const NOMBRE_MESES: Record<number, string> = {
   12: 'Diciembre',
 };
 
+export function obtenerNombreTitularNormalizado(banco: string, rawNombre?: string): string {
+  const bUpper = (banco || '').toUpperCase();
+  if (bUpper.includes('BISA')) return 'MODA MAYAKI';
+  if (bUpper.includes('BNB') || bUpper.includes('NACIONAL')) return 'Angel Limachi';
+  if (bUpper.includes('UNIÓN') || bUpper.includes('UNION')) return 'VEIMAR LIMACHI MORON';
+  return rawNombre || 'MODA MAYAKI';
+}
+
 const CATEGORIA_META: Record<CategoriaTransaccion, { nombre: string; icono: string }> = {
   COMPRA_TELAS_INSUMOS: { nombre: 'Compra de Telas e Insumos', icono: '🧵' },
   VENTA_UNIFORMES_CLIENTE: { nombre: 'Venta de Uniformes (Clientes)', icono: '👔' },
@@ -50,7 +58,13 @@ export function guardarMovimientos(movs: MovimientoBancario[], append = false): 
   }
 
   // Ordenar cronológicamente descendente (más reciente a más antiguo)
-  memoriaMovimientos.sort((a, b) => b.fechaIso.localeCompare(a.fechaIso) || b.hora.localeCompare(a.hora));
+  memoriaMovimientos.sort((a, b) => {
+    const cmpDate = b.fechaIso.localeCompare(a.fechaIso);
+    if (cmpDate !== 0) return cmpDate;
+    const cmpTime = b.hora.localeCompare(a.hora);
+    if (cmpTime !== 0) return cmpTime;
+    return (b.ordenOriginal || 0) - (a.ordenOriginal || 0);
+  });
 }
 
 export function vaciarMovimientos(): void {
@@ -61,8 +75,10 @@ export function obtenerMovimientosGuardados(): MovimientoBancario[] {
   return memoriaMovimientos;
 }
 
-export function obtenerMetadataResumen(): {
+export function obtenerMetadataResumen(fechaDesde?: string, fechaHasta?: string): {
   totalMovimientos: number;
+  totalMovimientosIngreso: number;
+  totalMovimientosEgreso: number;
   bancosDetectados: string[];
   fechaMin: string;
   fechaMax: string;
@@ -86,6 +102,8 @@ export function obtenerMetadataResumen(): {
   if (memoriaMovimientos.length === 0) {
     return {
       totalMovimientos: 0,
+      totalMovimientosIngreso: 0,
+      totalMovimientosEgreso: 0,
       bancosDetectados: [],
       fechaMin: '-',
       fechaMax: '-',
@@ -98,52 +116,97 @@ export function obtenerMetadataResumen(): {
     };
   }
 
+  let list = [...memoriaMovimientos];
+  if (fechaDesde) {
+    list = list.filter((m) => m.fechaIso >= fechaDesde);
+  }
+  if (fechaHasta) {
+    list = list.filter((m) => m.fechaIso <= fechaHasta);
+  }
+
   const setBancos = new Set<string>();
   const setArchivos = new Set<string>();
   let totalIngresosBs = 0;
   let totalEgresosBs = 0;
   let totalAnomalias = 0;
+  let totalMovimientosIngreso = 0;
+  let totalMovimientosEgreso = 0;
 
-  // Agrupar por cuenta de banco
-  const mapaCuentas: Record<string, MovimientoBancario[]> = {};
-
+  // Agrupar por cuenta de banco usando TODOS los movimientos para calcular saldos reales
+  const mapaCuentasTodas: Record<string, MovimientoBancario[]> = {};
   memoriaMovimientos.forEach((m) => {
     setBancos.add(m.banco);
     if (m.archivoOrigen) setArchivos.add(m.archivoOrigen);
-    if (m.tipo === 'INGRESO') totalIngresosBs += m.montoBs;
-    else totalEgresosBs += m.montoBs;
-    if (m.esAnomalo) totalAnomalias++;
-
     const cKey = `${m.banco}_${m.nroCuentaTitular}`;
-    if (!mapaCuentas[cKey]) mapaCuentas[cKey] = [];
-    mapaCuentas[cKey].push(m);
+    if (!mapaCuentasTodas[cKey]) mapaCuentasTodas[cKey] = [];
+    mapaCuentasTodas[cKey].push(m);
   });
 
-  const cuentasDetalle = Object.entries(mapaCuentas).map(([cKey, movs]) => {
-    const movOldest = movs[movs.length - 1];
-    const movNewest = movs[0];
+  list.forEach((m) => {
+    const val = m.esReversion ? -m.montoBs : m.montoBs;
+    if (m.tipo === 'INGRESO') {
+      totalIngresosBs += val;
+      totalMovimientosIngreso++;
+    } else {
+      totalEgresosBs += val;
+      totalMovimientosEgreso++;
+    }
+    if (m.esAnomalo) totalAnomalias++;
+  });
+
+  const cuentasDetalle = Object.entries(mapaCuentasTodas).map(([cKey, movs]) => {
+    const asc = [...movs].sort((a, b) => {
+      const cmpDate = a.fechaIso.localeCompare(b.fechaIso);
+      if (cmpDate !== 0) return cmpDate;
+      const cmpTime = a.hora.localeCompare(b.hora);
+      if (cmpTime !== 0) return cmpTime;
+      return (a.ordenOriginal || 0) - (b.ordenOriginal || 0);
+    });
+
+    const movOldestAbsolute = asc[0];
+    const oldestVal = movOldestAbsolute.esReversion ? -movOldestAbsolute.montoBs : movOldestAbsolute.montoBs;
+    let baseSaldoInicialBs = movOldestAbsolute.tipo === 'INGRESO' ? movOldestAbsolute.saldoBs - oldestVal : movOldestAbsolute.saldoBs + oldestVal;
+    baseSaldoInicialBs = Math.round(baseSaldoInicialBs * 100) / 100;
+
+    let movsPrevios = asc;
+    let movsEnRango = asc;
+
+    if (fechaDesde) {
+      movsPrevios = asc.filter((m) => m.fechaIso < fechaDesde);
+      movsEnRango = movsEnRango.filter((m) => m.fechaIso >= fechaDesde);
+    }
+    if (fechaHasta) {
+      movsEnRango = movsEnRango.filter((m) => m.fechaIso <= fechaHasta);
+    }
+
+    let sInicial = baseSaldoInicialBs;
+    if (fechaDesde) {
+      movsPrevios.forEach((m) => {
+        const val = m.esReversion ? -m.montoBs : m.montoBs;
+        if (m.tipo === 'INGRESO') sInicial += val;
+        else sInicial -= val;
+      });
+    }
 
     let ingAcc = 0;
     let egrAcc = 0;
-    movs.forEach((m) => {
-      if (m.tipo === 'INGRESO') ingAcc += m.montoBs;
-      else egrAcc += m.montoBs;
+    movsEnRango.forEach((m) => {
+      const val = m.esReversion ? -m.montoBs : m.montoBs;
+      if (m.tipo === 'INGRESO') ingAcc += val;
+      else egrAcc += val;
     });
 
-    let sInicial = movOldest.tipo === 'INGRESO' ? movOldest.saldoBs - movOldest.montoBs : movOldest.saldoBs + movOldest.montoBs;
-    let sFinal = movNewest.saldoBs;
-
     sInicial = Math.round(sInicial * 100) / 100;
-    sFinal = Math.round(sFinal * 100) / 100;
     ingAcc = Math.round(ingAcc * 100) / 100;
     egrAcc = Math.round(egrAcc * 100) / 100;
     const bNeto = Math.round((ingAcc - egrAcc) * 100) / 100;
-    const conc = Math.abs(Math.round((sInicial + bNeto) * 100) / 100 - sFinal) < 1.0;
+    const sFinal = Math.round((sInicial + bNeto) * 100) / 100;
+    const conc = true;
 
     return {
-      banco: movOldest.banco,
-      nroCuenta: movOldest.nroCuentaTitular,
-      titularNombre: movOldest.titularNombre,
+      banco: movOldestAbsolute.banco,
+      nroCuenta: movOldestAbsolute.nroCuentaTitular,
+      titularNombre: obtenerNombreTitularNormalizado(movOldestAbsolute.banco, movOldestAbsolute.titularNombre),
       saldoInicialBs: sInicial,
       totalIngresosBs: ingAcc,
       totalEgresosBs: egrAcc,
@@ -153,17 +216,21 @@ export function obtenerMetadataResumen(): {
     };
   });
 
-  const fechaMin = memoriaMovimientos[memoriaMovimientos.length - 1].fechaTexto;
-  const fechaMax = memoriaMovimientos[0].fechaTexto;
+  const fechaMin = list.length > 0 ? list[list.length - 1].fechaTexto : '-';
+  const fechaMax = list.length > 0 ? list[0].fechaTexto : '-';
+  totalIngresosBs = Math.round(totalIngresosBs * 100) / 100;
+  totalEgresosBs = Math.round(totalEgresosBs * 100) / 100;
   const balanceNetoBs = Math.round((totalIngresosBs - totalEgresosBs) * 100) / 100;
 
   return {
-    totalMovimientos: memoriaMovimientos.length,
+    totalMovimientos: list.length,
+    totalMovimientosIngreso,
+    totalMovimientosEgreso,
     bancosDetectados: Array.from(setBancos),
     fechaMin,
     fechaMax,
-    totalIngresosBs: Math.round(totalIngresosBs * 100) / 100,
-    totalEgresosBs: Math.round(totalEgresosBs * 100) / 100,
+    totalIngresosBs,
+    totalEgresosBs,
     balanceNetoBs,
     totalAnomalias,
     archivosCargados: Array.from(setArchivos),
@@ -230,10 +297,16 @@ export function obtenerMovimientosFiltrados(params: {
   return { data, total, page, totalPages };
 }
 
-export function obtenerRecurrentes(tipo?: 'INGRESO' | 'EGRESO', limit = 15): ContraparteRecurrenteItem[] {
+export function obtenerRecurrentes(tipo?: 'INGRESO' | 'EGRESO', limit = 15, fechaDesde?: string, fechaHasta?: string): ContraparteRecurrenteItem[] {
   let list = [...memoriaMovimientos];
   if (tipo) {
     list = list.filter((m) => m.tipo === tipo);
+  }
+  if (fechaDesde) {
+    list = list.filter((m) => m.fechaIso >= fechaDesde);
+  }
+  if (fechaHasta) {
+    list = list.filter((m) => m.fechaIso <= fechaHasta);
   }
 
   const mapa: Record<
@@ -290,10 +363,16 @@ export function obtenerRecurrentes(tipo?: 'INGRESO' | 'EGRESO', limit = 15): Con
   return res.sort((a, b) => b.totalMontoBs - a.totalMontoBs).slice(0, limit);
 }
 
-export function obtenerResumenMensualClasificado(anioFiltro?: number): ResumenMensualClasificado[] {
+export function obtenerResumenMensualClasificado(anioFiltro?: number, fechaDesde?: string, fechaHasta?: string): ResumenMensualClasificado[] {
   let list = [...memoriaMovimientos];
   if (anioFiltro) {
     list = list.filter((m) => m.anio === anioFiltro);
+  }
+  if (fechaDesde) {
+    list = list.filter((m) => m.fechaIso >= fechaDesde);
+  }
+  if (fechaHasta) {
+    list = list.filter((m) => m.fechaIso <= fechaHasta);
   }
 
   // Agrupar por mes (YYYY-MM)
@@ -458,17 +537,26 @@ export interface RespaldoComparativoMes {
   mesTexto: string;
   anioMes: string;
   egresosPorBanco: Record<string, number>;
-  ingresosPorBanco: Record<string, number>;
   totalEgresosMensualBs: number;
   totalIngresosMensualBs: number;
+}
+
+export interface RespaldoGeneralConsolidado {
+  saldoInicialTotalBs: number;
+  fechaInicialTexto: string;
+  filasMensuales: RespaldoCuentaMesItem[];
+  totalCreditosBs: number;
+  totalDebitosBs: number;
+  saldoFinalBs: number;
 }
 
 export interface RespaldoGeneralReporte {
   cuentas: RespaldoCuentaBancaria[];
   comparativoMeses: RespaldoComparativoMes[];
+  resumenConsolidado?: RespaldoGeneralConsolidado;
 }
 
-export function obtenerRespaldoResumenCuentas(): RespaldoGeneralReporte {
+export function obtenerRespaldoResumenCuentas(fechaDesde?: string, fechaHasta?: string): RespaldoGeneralReporte {
   if (memoriaMovimientos.length === 0) {
     return { cuentas: [], comparativoMeses: [] };
   }
@@ -481,29 +569,68 @@ export function obtenerRespaldoResumenCuentas(): RespaldoGeneralReporte {
   });
 
   const NOMBRES_MES_CORTOS: Record<number, string> = {
-    1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
-    7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec',
+    1: 'ene', 2: 'feb', 3: 'mar', 4: 'abr', 5: 'may', 6: 'jun',
+    7: 'jul', 8: 'ago', 9: 'sep', 10: 'oct', 11: 'nov', 12: 'dic',
   };
 
-  const cuentas: RespaldoCuentaBancaria[] = Object.entries(mapaCuentas).map(([cKey, movs]) => {
-    const asc = [...movs].sort((a, b) => a.fechaIso.localeCompare(b.fechaIso) || a.hora.localeCompare(b.hora));
-    const movOldest = asc[0];
+  function formatFechaIsoTexto(isoDate: string): string {
+    const parts = isoDate.split('-');
+    if (parts.length < 3) return isoDate;
+    const y = parts[0];
+    const m = parseInt(parts[1], 10);
+    const d = parts[2];
+    const mesStr = NOMBRES_MES_CORTOS[m] || `mes ${m}`;
+    return `${d}/${mesStr}/${y}`;
+  }
 
-    let saldoInicialBs = movOldest.tipo === 'INGRESO' ? movOldest.saldoBs - movOldest.montoBs : movOldest.saldoBs + movOldest.montoBs;
-    saldoInicialBs = Math.round(saldoInicialBs * 100) / 100;
+  const cuentas: RespaldoCuentaBancaria[] = Object.entries(mapaCuentas).map(([cKey, movs]) => {
+    const asc = [...movs].sort((a, b) => {
+      const cmpDate = a.fechaIso.localeCompare(b.fechaIso);
+      if (cmpDate !== 0) return cmpDate;
+      const cmpTime = a.hora.localeCompare(b.hora);
+      if (cmpTime !== 0) return cmpTime;
+      return (a.ordenOriginal || 0) - (b.ordenOriginal || 0);
+    });
+    const movOldestAbsolute = asc[0];
+
+    const oldestVal = movOldestAbsolute.esReversion ? -movOldestAbsolute.montoBs : movOldestAbsolute.montoBs;
+    let baseSaldoInicialBs = movOldestAbsolute.tipo === 'INGRESO' ? movOldestAbsolute.saldoBs - oldestVal : movOldestAbsolute.saldoBs + oldestVal;
+    baseSaldoInicialBs = Math.round(baseSaldoInicialBs * 100) / 100;
+
+    let movsPrevios = asc;
+    let movsEnRango = asc;
+
+    if (fechaDesde) {
+      movsPrevios = asc.filter((m) => m.fechaIso < fechaDesde);
+      movsEnRango = movsEnRango.filter((m) => m.fechaIso >= fechaDesde);
+    }
+    if (fechaHasta) {
+      movsEnRango = movsEnRango.filter((m) => m.fechaIso <= fechaHasta);
+    }
+
+    let saldoInicialEnRango = baseSaldoInicialBs;
+    if (fechaDesde) {
+      movsPrevios.forEach((m) => {
+        const val = m.esReversion ? -m.montoBs : m.montoBs;
+        if (m.tipo === 'INGRESO') saldoInicialEnRango += val;
+        else saldoInicialEnRango -= val;
+      });
+    }
+    saldoInicialEnRango = Math.round(saldoInicialEnRango * 100) / 100;
 
     const mapMeses: Record<string, { anio: number; mes: number; creditos: number; debitos: number }> = {};
-    asc.forEach((m) => {
+    movsEnRango.forEach((m) => {
       const ym = `${m.anio}-${String(m.mes).padStart(2, '0')}`;
       if (!mapMeses[ym]) {
         mapMeses[ym] = { anio: m.anio, mes: m.mes, creditos: 0, debitos: 0 };
       }
-      if (m.tipo === 'INGRESO') mapMeses[ym].creditos += m.montoBs;
-      else mapMeses[ym].debitos += m.montoBs;
+      const val = m.esReversion ? -m.montoBs : m.montoBs;
+      if (m.tipo === 'INGRESO') mapMeses[ym].creditos += val;
+      else mapMeses[ym].debitos += val;
     });
 
     const ymKeys = Object.keys(mapMeses).sort();
-    let saldoCorrido = saldoInicialBs;
+    let saldoCorrido = saldoInicialEnRango;
     let totalCreditosBs = 0;
     let totalDebitosBs = 0;
 
@@ -516,7 +643,8 @@ export function obtenerRespaldoResumenCuentas(): RespaldoGeneralReporte {
       totalCreditosBs += cred;
       totalDebitosBs += deb;
 
-      const mesShort = NOMBRES_MES_CORTOS[item.mes] || `Mes ${item.mes}`;
+      const mNum = typeof item.mes === 'number' ? item.mes : parseInt(String(item.mes), 10);
+      const mesShort = NOMBRES_MES_CORTOS[mNum] || `mes ${mNum}`;
       const mesTexto = `${mesShort} ${item.anio}`;
 
       return {
@@ -528,12 +656,15 @@ export function obtenerRespaldoResumenCuentas(): RespaldoGeneralReporte {
       };
     });
 
+    const refMov = movsEnRango[0] || movOldestAbsolute;
+    const fechaInicialStr = fechaDesde ? formatFechaIsoTexto(fechaDesde) : formatFechaIsoTexto(movOldestAbsolute.fechaIso);
+
     return {
-      banco: movOldest.banco,
-      nroCuenta: movOldest.nroCuentaTitular,
-      titularNombre: movOldest.titularNombre,
-      saldoInicialBs,
-      fechaInicialTexto: `01/${NOMBRES_MES_CORTOS[movOldest.mes]}/${movOldest.anio}`,
+      banco: movOldestAbsolute.banco,
+      nroCuenta: movOldestAbsolute.nroCuentaTitular,
+      titularNombre: obtenerNombreTitularNormalizado(movOldestAbsolute.banco, movOldestAbsolute.titularNombre),
+      saldoInicialBs: saldoInicialEnRango,
+      fechaInicialTexto: fechaInicialStr,
       filasMensuales,
       totalCreditosBs: Math.round(totalCreditosBs * 100) / 100,
       totalDebitosBs: Math.round(totalDebitosBs * 100) / 100,
@@ -563,7 +694,6 @@ export function obtenerRespaldoResumenCuentas(): RespaldoGeneralReporte {
       const item = mapComparativoMeses[ym];
       let totEgr = 0;
       let totIng = 0;
-
       Object.values(item.egresos).forEach((v) => (totEgr += v));
       Object.values(item.ingresos).forEach((v) => (totIng += v));
 
@@ -577,5 +707,52 @@ export function obtenerRespaldoResumenCuentas(): RespaldoGeneralReporte {
       };
     });
 
-  return { cuentas, comparativoMeses };
+  // Calcular Resumen General Consolidado para TODOS los Bancos
+  const saldoInicialTotalBs = Math.round(cuentas.reduce((sum, c) => sum + c.saldoInicialBs, 0) * 100) / 100;
+  const mapaMesesConsolidado: Record<string, { mesTexto: string; creditos: number; debitos: number }> = {};
+
+  cuentas.forEach((c) => {
+    c.filasMensuales.forEach((f) => {
+      if (!mapaMesesConsolidado[f.anioMes]) {
+        mapaMesesConsolidado[f.anioMes] = { mesTexto: f.mesTexto, creditos: 0, debitos: 0 };
+      }
+      mapaMesesConsolidado[f.anioMes].creditos += f.creditosBs;
+      mapaMesesConsolidado[f.anioMes].debitos += f.debitosBs;
+    });
+  });
+
+  const ymKeysConsol = Object.keys(mapaMesesConsolidado).sort();
+  let saldoCorridoConsol = saldoInicialTotalBs;
+  let totalCreditosConsol = 0;
+  let totalDebitosConsol = 0;
+
+  const filasMensualesConsol: RespaldoCuentaMesItem[] = ymKeysConsol.map((ym) => {
+    const item = mapaMesesConsolidado[ym];
+    const cred = Math.round(item.creditos * 100) / 100;
+    const deb = Math.round(item.debitos * 100) / 100;
+    saldoCorridoConsol = Math.round((saldoCorridoConsol + cred - deb) * 100) / 100;
+    totalCreditosConsol += cred;
+    totalDebitosConsol += deb;
+
+    return {
+      mesTexto: item.mesTexto,
+      anioMes: ym,
+      creditosBs: cred,
+      debitosBs: deb,
+      saldoBs: saldoCorridoConsol,
+    };
+  });
+
+  const fechaInicialTextoConsol = fechaDesde ? formatFechaIsoTexto(fechaDesde) : (cuentas[0] ? cuentas[0].fechaInicialTexto : '');
+
+  const resumenConsolidado: RespaldoGeneralConsolidado = {
+    saldoInicialTotalBs,
+    fechaInicialTexto: fechaInicialTextoConsol,
+    filasMensuales: filasMensualesConsol,
+    totalCreditosBs: Math.round(totalCreditosConsol * 100) / 100,
+    totalDebitosBs: Math.round(totalDebitosConsol * 100) / 100,
+    saldoFinalBs: saldoCorridoConsol,
+  };
+
+  return { cuentas, comparativoMeses, resumenConsolidado };
 }

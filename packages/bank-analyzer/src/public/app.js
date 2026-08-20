@@ -94,10 +94,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function obtenerRangoFechasGlobal() {
+    const dIn = document.getElementById('global-filter-desde');
+    const hIn = document.getElementById('global-filter-hasta');
+    const desde = dIn ? dIn.value.trim() : '';
+    const hasta = hIn ? hIn.value.trim() : '';
+    return { desde, hasta };
+  }
+
+  function construirUrlConFiltroGlobal(urlBase) {
+    const { desde, hasta } = obtenerRangoFechasGlobal();
+    if (!desde && !hasta) return urlBase;
+    const separator = urlBase.includes('?') ? '&' : '?';
+    const params = [];
+    if (desde) params.push(`desde=${encodeURIComponent(desde)}`);
+    if (hasta) params.push(`hasta=${encodeURIComponent(hasta)}`);
+    return `${urlBase}${separator}${params.join('&')}`;
+  }
+
+  function refrescarTodoElSistema() {
+    cargarInfoGlobal();
+    cargarResumenMensual();
+    cargarAnomalias();
+    cargarRecurrentes();
+    cargarRespaldoResumen();
+    cargarMovimientos(1);
+  }
+
   // Cargar KPIs Globales e Información
   async function cargarInfoGlobal() {
     try {
-      const res = await fetch(`${API_BASE}/info`);
+      const res = await fetch(construirUrlConFiltroGlobal(`${API_BASE}/info`));
       const json = await res.json();
 
       if (json.success && json.data) {
@@ -109,6 +136,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const kpiAnomalias = document.getElementById('kpi-total-anomalias');
 
         const balanceNeto = d.totalIngresosBs - d.totalEgresosBs;
+
+        const kpiSubIngresos = document.getElementById('kpi-sub-ingresos');
+        const kpiSubEgresos = document.getElementById('kpi-sub-egresos');
+
+        if (kpiSubIngresos) kpiSubIngresos.textContent = `${(d.totalMovimientosIngreso || 0).toLocaleString()} movimientos de abono`;
+        if (kpiSubEgresos) kpiSubEgresos.textContent = `${(d.totalMovimientosEgreso || 0).toLocaleString()} movimientos de débito`;
 
         if (kpiIngresos) kpiIngresos.textContent = `Bs. ${d.totalIngresosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}`;
         if (kpiEgresos) kpiEgresos.textContent = `Bs. ${d.totalEgresosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}`;
@@ -141,13 +174,13 @@ document.addEventListener('DOMContentLoaded', () => {
             <tr>
               <td><span class="badge badge-banco">${c.banco}</span></td>
               <td><strong>${c.nroCuenta}</strong><br><span style="font-size: 0.75rem; color: var(--text-muted);">${c.titularNombre}</span></td>
-              <td class="text-right" style="font-weight: 600; color: #94a3b8;">Bs. ${c.saldoInicialBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
-              <td class="text-right" style="font-weight: 600; color: #4ade80;">Bs. ${c.totalIngresosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
-              <td class="text-right" style="font-weight: 600; color: #f87171;">Bs. ${c.totalEgresosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+              <td class="text-right" style="font-weight: 600; color: #94a3b8;">${c.saldoInicialBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+              <td class="text-right" style="font-weight: 600; color: #4ade80;">${c.totalIngresosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+              <td class="text-right" style="font-weight: 600; color: #f87171;">${c.totalEgresosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
               <td class="text-right" style="font-weight: 700; color: ${c.balanceNetoBs >= 0 ? '#60a5fa' : '#f87171'};">
-                ${c.balanceNetoBs >= 0 ? '+' : ''}Bs. ${c.balanceNetoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                ${c.balanceNetoBs >= 0 ? '+' : ''}${c.balanceNetoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
               </td>
-              <td class="text-right" style="font-weight: 800; color: #38bdf8;">Bs. ${c.saldoFinalBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+              <td class="text-right" style="font-weight: 800; color: #38bdf8;">${c.saldoFinalBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
               <td class="text-center">
                 ${c.conciliadoOk 
                   ? '<span class="badge badge-ingreso">✅ Conciliado (Ok)</span>' 
@@ -172,7 +205,7 @@ document.addEventListener('DOMContentLoaded', () => {
     container.innerHTML = '<div style="color: var(--text-muted);">Cargando análisis mensual...</div>';
 
     try {
-      const res = await fetch(`${API_BASE}/resumen-mensual`);
+      const res = await fetch(construirUrlConFiltroGlobal(`${API_BASE}/resumen-mensual`));
       const json = await res.json();
 
       if (json.success && json.data && json.data.length > 0) {
@@ -180,14 +213,14 @@ document.addEventListener('DOMContentLoaded', () => {
           const ingresosHtml = m.ingresosPorCategoria.map((cat) => `
             <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed rgba(255,255,255,0.06); font-size: 0.83rem;">
               <span>${cat.icono} <strong>${cat.nombreVisible}</strong> (${cat.cantidad} movs)</span>
-              <span style="color: #4ade80; font-weight: 600;">Bs. ${cat.montoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })} (${cat.pctDelTotal}%)</span>
+              <span style="color: #4ade80; font-weight: 600;">${cat.montoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })} (${cat.pctDelTotal}%)</span>
             </div>
           `).join('') || '<div style="font-size: 0.8rem; color: var(--text-muted);">Sin ingresos en este período</div>';
 
           const egresosHtml = m.egresosPorCategoria.map((cat) => `
             <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed rgba(255,255,255,0.06); font-size: 0.83rem;">
               <span>${cat.icono} <strong>${cat.nombreVisible}</strong> (${cat.cantidad} movs)</span>
-              <span style="color: #f87171; font-weight: 600;">Bs. ${cat.montoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })} (${cat.pctDelTotal}%)</span>
+              <span style="color: #f87171; font-weight: 600;">${cat.montoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })} (${cat.pctDelTotal}%)</span>
             </div>
           `).join('') || '<div style="font-size: 0.8rem; color: var(--text-muted);">Sin egresos en este período</div>';
 
@@ -229,7 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!tableBody) return;
 
     try {
-      const res = await fetch(`${API_BASE}/anomalias`);
+      const res = await fetch(construirUrlConFiltroGlobal(`${API_BASE}/anomalias`));
       const json = await res.json();
 
       if (json.success && json.data && json.data.length > 0) {
@@ -240,7 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <td><span class="badge ${m.tipo === 'INGRESO' ? 'badge-ingreso' : 'badge-egreso'}">${m.tipo}</span></td>
             <td><strong>${m.contraparteNombre}</strong></td>
             <td class="text-right" style="font-weight: 700; color: ${m.tipo === 'INGRESO' ? '#4ade80' : '#f87171'};">
-              Bs. ${m.montoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+              ${m.montoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
             </td>
             <td><span class="badge badge-anomalo">${m.motivoAnomalia || m.glosaDetalle}</span></td>
           </tr>
@@ -259,28 +292,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const bodyEgresos = document.querySelector('#table-recurrentes-egresos tbody');
 
     try {
-      const resIng = await fetch(`${API_BASE}/recurrentes?tipo=INGRESO&limit=10`);
+      const resIng = await fetch(construirUrlConFiltroGlobal(`${API_BASE}/recurrentes?tipo=INGRESO&limit=10`));
       const jsonIng = await resIng.json();
       if (jsonIng.success && bodyIngresos) {
         bodyIngresos.innerHTML = jsonIng.data.map((c) => `
           <tr>
             <td><strong>${c.contraparteNombre}</strong><br><span style="font-size: 0.75rem; color: var(--text-muted);">${c.banco}</span></td>
             <td class="text-right">${c.cantidadTransacciones} dep.</td>
-            <td class="text-right">Bs. ${c.promedioBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
-            <td class="text-right" style="font-weight: 700; color: #4ade80;">Bs. ${c.totalMontoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+            <td class="text-right">${c.promedioBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+            <td class="text-right" style="font-weight: 700; color: #4ade80;">${c.totalMontoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
           </tr>
         `).join('');
       }
 
-      const resEgr = await fetch(`${API_BASE}/recurrentes?tipo=EGRESO&limit=10`);
+      const resEgr = await fetch(construirUrlConFiltroGlobal(`${API_BASE}/recurrentes?tipo=EGRESO&limit=10`));
       const jsonEgr = await resEgr.json();
       if (jsonEgr.success && bodyEgresos) {
         bodyEgresos.innerHTML = jsonEgr.data.map((c) => `
           <tr>
             <td><strong>${c.contraparteNombre}</strong><br><span style="font-size: 0.75rem; color: var(--text-muted);">${c.banco}</span></td>
             <td class="text-right">${c.cantidadTransacciones} pag.</td>
-            <td class="text-right">Bs. ${c.promedioBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
-            <td class="text-right" style="font-weight: 700; color: #f87171;">Bs. ${c.totalMontoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+            <td class="text-right">${c.promedioBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+            <td class="text-right" style="font-weight: 700; color: #f87171;">${c.totalMontoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
           </tr>
         `).join('');
       }
@@ -305,7 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const search = document.getElementById('filter-bank-search')?.value || '';
 
     try {
-      let url = `${API_BASE}/movimientos?page=${page}&limit=25`;
+      let url = construirUrlConFiltroGlobal(`${API_BASE}/movimientos?page=${page}&limit=25`);
       if (banco) url += `&banco=${encodeURIComponent(banco)}`;
       if (tipo) url += `&tipo=${encodeURIComponent(tipo)}`;
       if (categoria) url += `&categoria=${encodeURIComponent(categoria)}`;
@@ -328,9 +361,9 @@ document.addEventListener('DOMContentLoaded', () => {
               <td><strong>${m.contraparteNombre}</strong></td>
               <td><span class="badge badge-secondary" style="font-size: 0.75rem;">${m.categoria}</span></td>
               <td class="text-right" style="font-weight: 700; color: ${m.tipo === 'INGRESO' ? '#4ade80' : '#f87171'};">
-                Bs. ${m.montoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                ${m.montoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
               </td>
-              <td class="text-right" style="color: var(--text-muted);">Bs. ${m.saldoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+              <td class="text-right" style="color: var(--text-muted);">${m.saldoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
               <td style="font-size: 0.78rem; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${m.glosaDetalle}">
                 ${m.glosaDetalle}
               </td>
@@ -354,30 +387,92 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
     } catch (e) {
-      console.error(e);
+      console.error('Error al cargar movimientos:', e);
     }
   }
 
-  // Cargar Respaldo Resumen Cuentas (Mensual Estilo 12.0)
+
+
+  // Cargar Respaldo Resumen Cuentas Bancarias (Pestaña Respaldo Mensual)
   async function cargarRespaldoResumen() {
-    const container = document.getElementById('container-respaldo-cuentas');
+    const container = document.getElementById('container-respaldo-cuentas') || document.getElementById('respaldo-resumen-container');
     if (!container) return;
 
+    const urlRespaldo = construirUrlConFiltroGlobal(`${API_BASE}/respaldo-resumen-cuentas`);
+    const urlExcel = construirUrlConFiltroGlobal(`${API_BASE}/exportar-respaldo-excel`);
+
+    // Actualizar enlace de exportación Excel con el rango de fechas seleccionado
+    const linkExcel = document.getElementById('link-exportar-respaldo-excel');
+    if (linkExcel) {
+      linkExcel.href = urlExcel;
+    }
+
+    container.innerHTML = '<div class="glass-card text-center" style="color: var(--text-muted);">Cargando respaldo mensual de cuentas...</div>';
+
     try {
-      const res = await fetch(`${API_BASE}/respaldo-resumen-cuentas`);
+      const res = await fetch(urlRespaldo);
       const json = await res.json();
 
       if (json.success && json.data) {
-        const { cuentas, comparativoMeses } = json.data;
+        const { cuentas, resumenConsolidado } = json.data;
 
-        if (cuentas.length === 0) {
+        if ((!cuentas || cuentas.length === 0) && !resumenConsolidado) {
           container.innerHTML = '<div class="glass-card text-center" style="color: var(--text-muted);">No hay extractos bancarios cargados para generar el respaldo mensual.</div>';
           return;
         }
 
         let html = '';
 
-        // 1. Tablas por Cuenta Bancaria (Sheet 1 estilo 'ingresos')
+        if (resumenConsolidado && resumenConsolidado.filasMensuales && resumenConsolidado.filasMensuales.length > 0) {
+          html += `
+            <div class="glass-card">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                <div>
+                  <h4 style="font-size: 1.05rem; font-weight: 700; color: #fff;">
+                    Resumen General Consolidado (Todos los Bancos)
+                  </h4>
+                  <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 1px;">Consolidado Acumulado de Cuentas Bancarias</p>
+                </div>
+                <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); padding: 5px 12px; border-radius: 6px; font-size: 0.82rem;">
+                  <span style="color: var(--text-muted);">Saldo Inicial Consolidado:</span>
+                  <strong style="color: #38bdf8; font-size: 0.92rem; margin-left: 6px;">Bs. ${resumenConsolidado.saldoInicialTotalBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</strong>
+                </div>
+              </div>
+
+              <div class="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Mes / Período</th>
+                      <th class="text-right">Créditos (Ingresos)</th>
+                      <th class="text-right">Débitos (Egresos)</th>
+                      <th class="text-right">Saldo al Cierre</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${resumenConsolidado.filasMensuales.map((f) => `
+                      <tr>
+                        <td><strong>${f.mesTexto}</strong></td>
+                        <td class="text-right" style="color: #4ade80; font-weight: 600;">${f.creditosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                        <td class="text-right" style="color: #f87171; font-weight: 600;">${f.debitosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                        <td class="text-right" style="color: #38bdf8; font-weight: 700;">${f.saldoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                  <tfoot>
+                    <tr style="background: rgba(15, 23, 42, 0.9); font-weight: 800;">
+                      <td>TOTAL GENERAL CONSOLIDADO ACUMULADO</td>
+                      <td class="text-right" style="color: #4ade80;">${resumenConsolidado.totalCreditosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                      <td class="text-right" style="color: #f87171;">${resumenConsolidado.totalDebitosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                      <td class="text-right" style="color: #38bdf8; font-size: 1.05rem;">${resumenConsolidado.saldoFinalBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          `;
+        }
+
         cuentas.forEach((c) => {
           html += `
             <div class="glass-card">
@@ -400,27 +495,27 @@ document.addEventListener('DOMContentLoaded', () => {
                   <thead>
                     <tr>
                       <th>Mes / Período</th>
-                      <th class="text-right">Créditos (Ingresos)</th>
-                      <th class="text-right">Débitos (Egresos)</th>
-                      <th class="text-right">Saldo al Cierre</th>
+                      <th class="text-right">Créditos (Bs.)</th>
+                      <th class="text-right">Débitos (Bs.)</th>
+                      <th class="text-right">Saldo (Bs.)</th>
                     </tr>
                   </thead>
                   <tbody>
                     ${c.filasMensuales.map((f) => `
                       <tr>
                         <td><strong>${f.mesTexto}</strong></td>
-                        <td class="text-right" style="color: #4ade80; font-weight: 600;">Bs. ${f.creditosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
-                        <td class="text-right" style="color: #f87171; font-weight: 600;">Bs. ${f.debitosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
-                        <td class="text-right" style="color: #38bdf8; font-weight: 700;">Bs. ${f.saldoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                        <td class="text-right" style="color: #4ade80; font-weight: 600;">${f.creditosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                        <td class="text-right" style="color: #f87171; font-weight: 600;">${f.debitosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                        <td class="text-right" style="color: #38bdf8; font-weight: 700;">${f.saldoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
                       </tr>
                     `).join('')}
                   </tbody>
                   <tfoot>
                     <tr style="background: rgba(15, 23, 42, 0.9); font-weight: 800;">
-                      <td>TOTAL GENERAL ACUMULADO</td>
-                      <td class="text-right" style="color: #4ade80;">Bs. ${c.totalCreditosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
-                      <td class="text-right" style="color: #f87171;">Bs. ${c.totalDebitosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
-                      <td class="text-right" style="color: #38bdf8; font-size: 1.05rem;">Bs. ${c.saldoFinalBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                      <td>TOTAL ACUMULADO CUENTA</td>
+                      <td class="text-right" style="color: #4ade80;">${c.totalCreditosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                      <td class="text-right" style="color: #f87171;">${c.totalDebitosBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                      <td class="text-right" style="color: #38bdf8; font-size: 1.05rem;">${c.saldoFinalBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -428,43 +523,6 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           `;
         });
-
-        // 2. Tabla Comparativa de Egresos entre Bancos por Mes (Sheet 2 estilo 'egresos')
-        if (comparativoMeses.length > 0) {
-          const bancos = Array.from(new Set(cuentas.map((c) => c.banco)));
-          html += `
-            <div class="glass-card">
-              <h4 style="font-size: 1.1rem; margin-bottom: 12px;">📊 Comparativo Mensual de Egresos por Banco</h4>
-              <div class="table-container">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Mes / Período</th>
-                      ${bancos.map((b) => `<th class="text-right">${b} (Egresos)</th>`).join('')}
-                      <th class="text-right">Total Egresos Mensual</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${comparativoMeses.map((m) => `
-                      <tr>
-                        <td><strong>${m.mesTexto}</strong></td>
-                        ${bancos.map((b) => `
-                          <td class="text-right" style="color: #f87171;">
-                            Bs. ${(m.egresosPorBanco[b] || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-                          </td>
-                        `).join('')}
-                        <td class="text-right" style="font-weight: 800; color: #f87171;">
-                          Bs. ${m.totalEgresosMensualBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                    `).join('')}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          `;
-        }
-
         container.innerHTML = html;
       }
     } catch (e) {
@@ -473,7 +531,42 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Filter Button
+  // Toggle Sidebar Nav (Menú Hamburguesa)
+  const btnToggleSidebar = document.getElementById('btn-toggle-sidebar');
+  const sidebarNav = document.getElementById('sidebar-nav');
+  if (btnToggleSidebar && sidebarNav) {
+    btnToggleSidebar.addEventListener('click', () => {
+      sidebarNav.classList.toggle('collapsed');
+    });
+  }
+
+  // Global Date Filter Buttons
+  const btnAplicarGlobal = document.getElementById('btn-aplicar-global-filtro');
+  if (btnAplicarGlobal) btnAplicarGlobal.addEventListener('click', () => refrescarTodoElSistema());
+
+  const btnResetGlobal = document.getElementById('btn-reset-global-filtro');
+  if (btnResetGlobal) {
+    btnResetGlobal.addEventListener('click', () => {
+      const dIn = document.getElementById('global-filter-desde');
+      const hIn = document.getElementById('global-filter-hasta');
+      if (dIn) dIn.value = '2025-07-01';
+      if (hIn) hIn.value = '2026-07-31';
+      refrescarTodoElSistema();
+    });
+  }
+
+  const btnAllTimeGlobal = document.getElementById('btn-alltime-global-filtro');
+  if (btnAllTimeGlobal) {
+    btnAllTimeGlobal.addEventListener('click', () => {
+      const dIn = document.getElementById('global-filter-desde');
+      const hIn = document.getElementById('global-filter-hasta');
+      if (dIn) dIn.value = '';
+      if (hIn) hIn.value = '';
+      refrescarTodoElSistema();
+    });
+  }
+
+  // Filter Button para Movimientos
   const btnFiltro = document.getElementById('btn-aplicar-filtros-bank');
   if (btnFiltro) btnFiltro.addEventListener('click', () => cargarMovimientos(1));
 
@@ -490,31 +583,146 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Imprimir PDF
-  const btnImprimir = document.getElementById('btn-imprimir-reporte-bank');
-  if (btnImprimir) {
-    btnImprimir.addEventListener('click', () => {
-      const url = `${API_BASE}/imprimir-reporte`;
-      let iframe = document.getElementById('hidden-bank-print-frame');
-      if (!iframe) {
-        iframe = document.createElement('iframe');
-        iframe.id = 'hidden-bank-print-frame';
-        iframe.style.display = 'none';
-        document.body.appendChild(iframe);
-      }
-      iframe.onload = () => {
-        setTimeout(() => {
-          if (iframe.contentWindow) {
-            iframe.contentWindow.focus();
-            iframe.contentWindow.print();
-          }
-        }, 350);
-      };
-      iframe.src = url;
+  // Control de Modal de Vista Previa PDF
+  const modalPdf = document.getElementById('modal-pdf-preview');
+  const iframePdf = document.getElementById('iframe-pdf-preview');
+  const modalPdfTitle = document.getElementById('pdf-modal-title');
+  const btnModalPrint = document.getElementById('btn-modal-print-action');
+  const btnModalClose = document.getElementById('btn-modal-close-action');
+
+  let currentObjectBlobUrl = null;
+
+  async function abrirModalPdfPreview(url, titulo = 'Vista Previa de Reporte PDF') {
+    if (!modalPdf || !iframePdf) return;
+    if (modalPdfTitle) modalPdfTitle.textContent = titulo;
+    modalPdf.style.display = 'flex';
+
+    if (currentObjectBlobUrl) {
+      URL.revokeObjectURL(currentObjectBlobUrl);
+      currentObjectBlobUrl = null;
+    }
+
+    iframePdf.removeAttribute('srcdoc');
+    iframePdf.src = url;
+  }
+
+  function cerrarModalPdfPreview() {
+    if (!modalPdf || !iframePdf) return;
+    modalPdf.style.display = 'none';
+    if (currentObjectBlobUrl) {
+      URL.revokeObjectURL(currentObjectBlobUrl);
+      currentObjectBlobUrl = null;
+    }
+    iframePdf.removeAttribute('srcdoc');
+    iframePdf.src = 'about:blank';
+  }
+
+  if (btnModalClose) btnModalClose.addEventListener('click', cerrarModalPdfPreview);
+  if (modalPdf) {
+    modalPdf.addEventListener('click', (e) => {
+      if (e.target === modalPdf) cerrarModalPdfPreview();
     });
   }
 
-  // Vaciar Datos
+  if (iframePdf) {
+    iframePdf.addEventListener('load', () => {
+      try {
+        if (iframePdf.contentWindow) {
+          iframePdf.contentWindow.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' || e.key === 'Esc') {
+              cerrarModalPdfPreview();
+            }
+          });
+        }
+      } catch (err) {}
+    });
+  }
+
+  // Cerrar modal al presionar ESC
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' || e.key === 'Esc') {
+      cerrarModalPdfPreview();
+    }
+  });
+
+  if (btnModalPrint && iframePdf) {
+    btnModalPrint.addEventListener('click', () => {
+      if (iframePdf.contentWindow) {
+        iframePdf.contentWindow.focus();
+        iframePdf.contentWindow.print();
+      }
+    });
+  }
+
+  // 1. PDF Tab 1: Estado de Saldos
+  const btnPdfSaldos = document.getElementById('btn-pdf-tab-saldos');
+  if (btnPdfSaldos) {
+    btnPdfSaldos.addEventListener('click', () => {
+      const url = construirUrlConFiltroGlobal(`${API_BASE}/imprimir-saldos-pdf`);
+      abrirModalPdfPreview(url, '🏦 Vista Previa — Estado de Saldos & Conciliación por Banco');
+    });
+  }
+
+  // 2. PDF Tab 2: Análisis por Mes
+  const btnPdfAnalisis = document.getElementById('btn-pdf-tab-analisis');
+  if (btnPdfAnalisis) {
+    btnPdfAnalisis.addEventListener('click', () => {
+      const url = construirUrlConFiltroGlobal(`${API_BASE}/imprimir-analisis-pdf`);
+      abrirModalPdfPreview(url, '📈 Vista Previa — Análisis Mensual Clasificado');
+    });
+  }
+
+  // 3. PDF Tab 3: Detección de Anomalías
+  const btnPdfAnomalias = document.getElementById('btn-pdf-tab-anomalias');
+  if (btnPdfAnomalias) {
+    btnPdfAnomalias.addEventListener('click', () => {
+      const url = construirUrlConFiltroGlobal(`${API_BASE}/imprimir-anomalias-pdf`);
+      abrirModalPdfPreview(url, '🚩 Vista Previa — Auditoría de Transacciones Anómalas');
+    });
+  }
+
+  // 4. PDF Tab 4: Ranking Recurrentes
+  const btnPdfRecurrentes = document.getElementById('btn-pdf-tab-recurrentes');
+  if (btnPdfRecurrentes) {
+    btnPdfRecurrentes.addEventListener('click', () => {
+      const url = construirUrlConFiltroGlobal(`${API_BASE}/imprimir-recurrentes-pdf`);
+      abrirModalPdfPreview(url, '👥 Vista Previa — Ranking de Clientes y Proveedores Recurrentes');
+    });
+  }
+
+  // 5. PDF Tab 5: Respaldo Mensual Estilo 12.0
+  const btnPreviewRespaldoPdf = document.getElementById('btn-preview-respaldo-pdf');
+  if (btnPreviewRespaldoPdf) {
+    btnPreviewRespaldoPdf.addEventListener('click', () => {
+      const url = construirUrlConFiltroGlobal(`${API_BASE}/imprimir-respaldo-pdf`);
+      abrirModalPdfPreview(url, '📊 Vista Previa — Respaldo Bancario Resumen de Cuentas (Mensual)');
+    });
+  }
+
+  // 6. PDF Tab 6: Consolidado Movimientos Libro Caja/Bancos
+  const btnPdfMovimientos = document.getElementById('btn-pdf-tab-movimientos');
+  if (btnPdfMovimientos) {
+    btnPdfMovimientos.addEventListener('click', () => {
+      const banco = document.getElementById('filter-bank-banco')?.value || '';
+      const tipo = document.getElementById('filter-bank-tipo')?.value || '';
+      const categoria = document.getElementById('filter-bank-categoria')?.value || '';
+      const search = document.getElementById('filter-bank-search')?.value || '';
+
+      const { desde, hasta } = obtenerRangoFechasGlobal();
+      const params = new URLSearchParams();
+      if (banco) params.set('banco', banco);
+      if (tipo) params.set('tipo', tipo);
+      if (categoria) params.set('categoria', categoria);
+      if (search) params.set('search', search);
+      if (desde) params.set('desde', desde);
+      if (hasta) params.set('hasta', hasta);
+
+      const url = `${API_BASE}/imprimir-movimientos-pdf?${params.toString()}`;
+      abrirModalPdfPreview(url, '📜 Vista Previa — Reporte Consolidado Libro Caja/Bancos');
+    });
+  }
+
+  // Vaciar Datos sin popups molestas
   const btnVaciar = document.getElementById('btn-vaciar-bank');
   if (btnVaciar) {
     btnVaciar.addEventListener('click', async () => {
@@ -523,7 +731,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const res = await fetch(`${API_BASE}/limpiar`, { method: 'POST' });
         const json = await res.json();
         if (json.success) {
-          alert('✅ Base de datos de extractos vaciada con éxito.');
+          if (importStatus) importStatus.innerHTML = '<span style="color: #38bdf8;">🗑️ Base de datos de extractos bancarios vaciada exitosamente.</span>';
           cargarInfoGlobal();
           cargarResumenMensual();
           cargarAnomalias();
@@ -531,11 +739,11 @@ document.addEventListener('DOMContentLoaded', () => {
           cargarMovimientos(1);
         }
       } catch (e) {
-        alert('Error: ' + e.message);
+        if (importStatus) importStatus.innerHTML = `<span style="color: #f87171;">❌ Error: ${e.message}</span>`;
       }
     });
   }
 
-  // Inicializar
-  cargarInfoGlobal();
+  // Inicializar todo el sistema al cargar la página
+  refrescarTodoElSistema();
 });

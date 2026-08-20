@@ -32,6 +32,8 @@ export interface MovimientoBancario {
   categoria: CategoriaTransaccion;
   esAnomalo: boolean;
   motivoAnomalia?: string;
+  esReversion?: boolean;
+  ordenOriginal?: number;
   archivoOrigen: string;
   creadoEn: string;
 }
