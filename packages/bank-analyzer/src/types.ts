@@ -3,11 +3,39 @@ export type BancoTipo = 'BNB' | 'Banco Bisa' | 'Banco Unión' | 'Desconocido';
 export type CategoriaTransaccion =
   | 'COMPRA_TELAS_INSUMOS'
   | 'VENTA_UNIFORMES_CLIENTE'
+  | 'ROPA_A_MEDIDA'
+  | 'SERVICIOS_CONFECCION_BORDADO'
+  | 'PAGO_MANO_DE_OBRA_TALLER'
   | 'SERVICIOS_COMERCIO_POS'
+  | 'GASTO_OPERATIVO_ALQUILER'
   | 'RETIRO_ATM_CAJA'
   | 'CARGO_BANCARIO_IMPUESTO'
+  | 'INGRESO_CONOCIDO'
+  | 'GASTO_CONOCIDO'
   | 'TRANSACCION_ANOMALA'
-  | 'OTRO_SIN_CLASIFICAR';
+  | 'OTRO_SIN_CLASIFICAR'
+  | string;
+
+export interface CategoriaCustomMeta {
+  id: string;
+  nombreVisible: string;
+  icono: string;
+  tipo: 'INGRESO' | 'EGRESO' | 'AMBOS';
+  esCustom?: boolean;
+  creadoEn?: string;
+}
+
+export interface ReglaPersonaConocida {
+  id: string;
+  keyword: string; // Nombre de la persona o palabra clave en glosa (ej. "JUAN PEREZ", "CHARITO")
+  banco?: string; // Opcional: Mi Banco específico (ej. 'BNB', 'Banco Bisa', 'Banco Unión', o 'TODOS')
+  bancoContraparte?: string; // Opcional: Banco de la Contraparte / Cliente (ej. 'BANCO DE CREDITO', 'BANCO BISA', etc.)
+  accion: 'EXCLUIR_ANOMALIA' | 'CLASIFICAR_CONOCIDO' | 'IGNORAR';
+  categoriaDestino?: string; // ID de categoría custom o predefinida
+  tipoTransaccion?: 'TODOS' | 'INGRESO' | 'EGRESO';
+  nota?: string;
+  creadoEn: string;
+}
 
 export interface MovimientoBancario {
   id: string;
@@ -72,11 +100,21 @@ export interface CategoriaResumenItem {
   cantidad: number;
   montoBs: number;
   pctDelTotal: number;
+  detalles?: {
+    fechaTexto: string;
+    contraparteNombre: string;
+    montoBs: number;
+    motivo?: string;
+    banco: string;
+    contraparteBanco?: string;
+    tipo: 'INGRESO' | 'EGRESO';
+  }[];
 }
 
 export interface ContraparteRecurrenteItem {
   contraparteNombre: string;
   banco: string;
+  contraparteBanco?: string;
   tipo: 'INGRESO' | 'EGRESO';
   cantidadTransacciones: number;
   totalMontoBs: number;

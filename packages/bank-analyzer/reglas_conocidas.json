@@ -1,0 +1,123 @@
+[
+  {
+    "keyword": "SARA LEIDY LIMACHI MORON",
+    "banco": "TODOS",
+    "bancoContraparte": "BANCO DE CREDITO",
+    "accion": "EXCLUIR_ANOMALIA",
+    "categoriaDestino": "cat_custom_1787344213875_bze0",
+    "tipoTransaccion": "EGRESO",
+    "nota": "Clasificado desde Sugerencias Rápida",
+    "id": "rule_1787350504356_r393y",
+    "creadoEn": "2026-08-21T22:15:04.356Z"
+  },
+  {
+    "keyword": "SARA LEIDY LIMACHI MORON",
+    "banco": "TODOS",
+    "bancoContraparte": "BANCO DE CREDITO",
+    "accion": "EXCLUIR_ANOMALIA",
+    "categoriaDestino": "cat_custom_1787344213875_bze0",
+    "tipoTransaccion": "INGRESO",
+    "nota": "Clasificado desde Sugerencias Rápida",
+    "id": "rule_1787350525734_uyf47",
+    "creadoEn": "2026-08-21T22:15:25.734Z"
+  },
+  {
+    "keyword": "LIMACHI MORON VEIMAR",
+    "banco": "TODOS",
+    "bancoContraparte": "COOPERATIVA JESUS NAZARENO",
+    "accion": "EXCLUIR_ANOMALIA",
+    "categoriaDestino": "cat_custom_1787344741158_mlgz",
+    "tipoTransaccion": "EGRESO",
+    "nota": "Clasificado desde Sugerencias Rápida",
+    "id": "rule_1787350557612_cnud8",
+    "creadoEn": "2026-08-21T22:15:57.612Z"
+  },
+  {
+    "keyword": "TRANSF. PAGO VEIMAR LIMACHI FC 54-55",
+    "banco": "TODOS",
+    "bancoContraparte": "Banco Ganadero",
+    "accion": "EXCLUIR_ANOMALIA",
+    "categoriaDestino": "VENTA_UNIFORMES_CLIENTE",
+    "tipoTransaccion": "INGRESO",
+    "nota": "Clasificado desde Sugerencias Rápida",
+    "id": "rule_1787350638118_sziwj",
+    "creadoEn": "2026-08-21T22:17:18.118Z"
+  },
+  {
+    "keyword": "MODA MAYAKI DE VEIMAR LIMACHI MORON",
+    "banco": "TODOS",
+    "bancoContraparte": "BANCO BISA",
+    "accion": "EXCLUIR_ANOMALIA",
+    "categoriaDestino": "VENTA_UNIFORMES_CLIENTE",
+    "tipoTransaccion": "INGRESO",
+    "nota": "Clasificado desde Sugerencias Rápida",
+    "id": "rule_1787350656812_t5qa1",
+    "creadoEn": "2026-08-21T22:17:36.812Z"
+  },
+  {
+    "keyword": "LIMACHI MORON ANGELIZ",
+    "banco": "TODOS",
+    "bancoContraparte": "BANCO DE CREDITO",
+    "accion": "EXCLUIR_ANOMALIA",
+    "categoriaDestino": "cat_custom_1787345641087_d4hd",
+    "tipoTransaccion": "EGRESO",
+    "nota": "Clasificado desde Sugerencias Rápida",
+    "id": "rule_1787350697845_sx496",
+    "creadoEn": "2026-08-21T22:18:17.845Z"
+  },
+  {
+    "keyword": "ANGELIZ LIMACHI MORON",
+    "banco": "TODOS",
+    "bancoContraparte": "BANCO DE CREDITO",
+    "accion": "EXCLUIR_ANOMALIA",
+    "categoriaDestino": "cat_custom_1787345641087_d4hd",
+    "tipoTransaccion": "EGRESO",
+    "nota": "Clasificado desde Sugerencias Rápida",
+    "id": "rule_1787350709629_k0ryl",
+    "creadoEn": "2026-08-21T22:18:29.629Z"
+  },
+  {
+    "keyword": "GARDENIA LIMACHI MORON",
+    "banco": "TODOS",
+    "bancoContraparte": "Banco credito",
+    "accion": "EXCLUIR_ANOMALIA",
+    "categoriaDestino": "cat_custom_1787345641087_d4hd",
+    "tipoTransaccion": "EGRESO",
+    "nota": "Clasificado desde Sugerencias Rápida",
+    "id": "rule_1787351320778_f2dso",
+    "creadoEn": "2026-08-21T22:28:40.778Z"
+  },
+  {
+    "keyword": "PAMPA CHILLO ARIEL C",
+    "banco": "TODOS",
+    "bancoContraparte": "BNB (Traspaso Directo)",
+    "accion": "EXCLUIR_ANOMALIA",
+    "categoriaDestino": "GASTO_CONOCIDO",
+    "tipoTransaccion": "EGRESO",
+    "nota": "Clasificado desde Sugerencias Rápida",
+    "id": "rule_1787351362808_eqiiq",
+    "creadoEn": "2026-08-21T22:29:22.808Z"
+  },
+  {
+    "keyword": "LIMACHI CHILLO ANGEL",
+    "banco": "TODOS",
+    "bancoContraparte": "Banco Nacional",
+    "accion": "EXCLUIR_ANOMALIA",
+    "categoriaDestino": "cat_custom_1787351449458_avhi",
+    "tipoTransaccion": "EGRESO",
+    "nota": "Clasificado desde Sugerencias Rápida",
+    "id": "rule_1787351460006_b6kuc",
+    "creadoEn": "2026-08-21T22:31:00.006Z"
+  },
+  {
+    "keyword": "GARDENIA LIMACHI MOR",
+    "banco": "TODOS",
+    "bancoContraparte": "BNB (Traspaso Directo)",
+    "accion": "EXCLUIR_ANOMALIA",
+    "categoriaDestino": "cat_custom_1787345641087_d4hd",
+    "tipoTransaccion": "EGRESO",
+    "nota": "Clasificado desde Sugerencias Rápida",
+    "id": "rule_1787350731507_gcwkg",
+    "creadoEn": "2026-08-21T22:18:51.507Z"
+  }
+]

@@ -1,0 +1,50 @@
+[
+  {
+    "id": "cat_custom_1787344213875_bze0",
+    "nombreVisible": "Cuenta Familiar",
+    "icono": "🏷️",
+    "tipo": "AMBOS",
+    "esCustom": true,
+    "creadoEn": "2026-08-21T20:30:13.875Z"
+  },
+  {
+    "id": "cat_custom_1787344741158_mlgz",
+    "nombreVisible": "Pago por patronaje y corte",
+    "icono": "🏷️",
+    "tipo": "EGRESO",
+    "esCustom": true,
+    "creadoEn": "2026-08-21T20:39:01.158Z"
+  },
+  {
+    "id": "cat_custom_1787344795554_5atg",
+    "nombreVisible": "Ingreso por ropa personalizada",
+    "icono": "🏷️",
+    "tipo": "INGRESO",
+    "esCustom": true,
+    "creadoEn": "2026-08-21T20:39:55.554Z"
+  },
+  {
+    "id": "cat_custom_1787345641087_d4hd",
+    "nombreVisible": "Personal de ventas",
+    "icono": "🏷️",
+    "tipo": "EGRESO",
+    "esCustom": true,
+    "creadoEn": "2026-08-21T20:54:01.087Z"
+  },
+  {
+    "id": "cat_custom_1787345762488_z2zh",
+    "nombreVisible": "Ingresos QR por venta de uniformes",
+    "icono": "🏷️",
+    "tipo": "INGRESO",
+    "esCustom": true,
+    "creadoEn": "2026-08-21T20:56:02.488Z"
+  },
+  {
+    "id": "cat_custom_1787351449458_avhi",
+    "nombreVisible": "Traspaso entre cuenrtas",
+    "icono": "🏷️",
+    "tipo": "AMBOS",
+    "esCustom": true,
+    "creadoEn": "2026-08-21T22:30:49.458Z"
+  }
+]

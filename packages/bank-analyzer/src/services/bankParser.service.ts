@@ -1,5 +1,5 @@
 import XLSX from 'xlsx';
-import { BancoTipo, CategoriaTransaccion, MovimientoBancario, BankImportResult } from '../types';
+import { BancoTipo, CategoriaTransaccion, MovimientoBancario, BankImportResult, ReglaPersonaConocida } from '../types';
 
 function parseMontoLatino(val: any): number {
   if (val === undefined || val === null || val === '') return 0;
@@ -63,9 +63,46 @@ export function clasificarTransaccion(
   tipo: 'INGRESO' | 'EGRESO',
   contraparteNombre: string,
   glosaDetalle: string,
-  descripcionRaw: string
+  descripcionRaw: string,
+  reglasCustom: ReglaPersonaConocida[] = [],
+  bancoStr: string = '',
+  contraparteBancoStr: string = ''
 ): { categoria: CategoriaTransaccion; esAnomalo: boolean; motivoAnomalia?: string } {
   const textFull = `${contraparteNombre} ${glosaDetalle} ${descripcionRaw}`.toUpperCase();
+  const bankContraparteNorm = (contraparteBancoStr || '').trim().toUpperCase();
+
+  // Verificar si coincide con alguna regla custom configurada por el usuario
+  const reglaCoincidente = reglasCustom.find((r) => {
+    // 1. Filtro por Tipo de transacción
+    if (r.tipoTransaccion && r.tipoTransaccion !== 'TODOS' && r.tipoTransaccion !== tipo) return false;
+
+    // 2. Filtro por Mi Cuenta (sólo si r.banco fue especificado explícitamente y no es TODOS)
+    if (r.banco && r.banco.trim() !== '' && r.banco.toUpperCase() !== 'TODOS' && bancoStr && r.banco.toUpperCase() !== bancoStr.toUpperCase()) {
+      return false;
+    }
+
+    // 3. Filtro por Persona / Keyword (Si se especificó persona y coincide en el texto, aplica la regla)
+    if (r.keyword && r.keyword.trim() !== '') {
+      const kw = r.keyword.trim().toUpperCase();
+      return textFull.includes(kw);
+    }
+
+    // 4. Filtro por Banco Contraparte / Origen (sólo si no especificó persona)
+    if (r.bancoContraparte && r.bancoContraparte.trim() !== '' && r.bancoContraparte.toUpperCase() !== 'TODOS') {
+      const bKw = r.bancoContraparte.trim().toUpperCase();
+      return bankContraparteNorm.includes(bKw) || textFull.includes(bKw);
+    }
+
+    return false;
+  });
+
+  if (reglaCoincidente) {
+    if (reglaCoincidente.categoriaDestino) {
+      return { categoria: reglaCoincidente.categoriaDestino, esAnomalo: false };
+    }
+    const catConocida: CategoriaTransaccion = tipo === 'INGRESO' ? 'INGRESO_CONOCIDO' : 'GASTO_CONOCIDO';
+    return { categoria: catConocida, esAnomalo: false };
+  }
 
   if (
     textFull.includes('CHARITO') ||
@@ -242,7 +279,7 @@ function parsearBNB(rows: any[][], fileName: string): BankImportResult {
     const fechaObj = parseFechaIsoUniversal(String(fechaRaw));
     const esReversion = rawMonto < 0;
     const montoBsAbs = Math.abs(rawMonto);
-    const clasif = clasificarTransaccion(montoBsAbs, tipo, contraparteNombre, glosaDetalle, descripcionRaw);
+    const clasif = clasificarTransaccion(montoBsAbs, tipo, contraparteNombre, glosaDetalle, descripcionRaw, [], 'BNB', contraparteBanco);
 
     movimientos.push({
       id: `bnb_${fechaObj.iso}_${idx}`,
@@ -330,7 +367,7 @@ function parsearBancoBisa(rows: any[][], fileName: string): BankImportResult {
     if (!glosaDetalle) glosaDetalle = infoComp || descripcionRaw;
 
     const fechaObj = parseFechaIsoUniversal(String(fechaRaw));
-    const clasif = clasificarTransaccion(montoBs, tipo, contraparteNombre, glosaDetalle, descripcionRaw);
+    const clasif = clasificarTransaccion(montoBs, tipo, contraparteNombre, glosaDetalle, descripcionRaw, [], 'Banco Bisa', contraparteBanco);
 
     movimientos.push({
       id: `bisa_${fechaObj.iso}_${idx}`,
@@ -427,7 +464,7 @@ function parsearBancoUnion(rows: any[][], fileName: string): BankImportResult {
     const glosaDetalle = descripcionRaw;
 
     const fechaObj = parseFechaIsoUniversal(String(fechaRaw));
-    const clasif = clasificarTransaccion(montoBs, tipo, contraparteNombre, glosaDetalle, descripcionRaw);
+    const clasif = clasificarTransaccion(montoBs, tipo, contraparteNombre, glosaDetalle, descripcionRaw, [], 'Banco Unión');
 
     movimientos.push({
       id: `bunion_${fechaObj.iso}_${idx}`,

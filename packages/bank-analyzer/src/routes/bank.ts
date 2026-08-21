@@ -10,6 +10,14 @@ import {
   obtenerRecurrentes,
   obtenerResumenMensualClasificado,
   obtenerRespaldoResumenCuentas,
+  obtenerReglas,
+  guardarRegla,
+  guardarReglasLote,
+  eliminarRegla,
+  reaplicarReglasAMovimientos,
+  obtenerCategoriasTotales,
+  crearCategoriaCustom,
+  obtenerSugerenciasClasificacion,
 } from '../services/bankAnalytics.service';
 
 const bankRoutes = new Hono();
@@ -125,6 +133,129 @@ bankRoutes.get('/resumen-mensual', (c) => {
     const hasta = c.req.query('hasta');
     const data = obtenerResumenMensualClasificado(anio, desde, hasta);
     return c.json({ success: true, data });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// GET /categorias - Obtener todas las categorías (predefinidas y custom)
+bankRoutes.get('/categorias', (c) => {
+  try {
+    const cats = obtenerCategoriasTotales();
+    return c.json({ success: true, data: cats });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// POST /categorias - Crear categoría custom al instante
+bankRoutes.post('/categorias', async (c) => {
+  try {
+    const body = await c.req.json();
+    const { nombreVisible, tipo, icono } = body;
+
+    if (!nombreVisible || typeof nombreVisible !== 'string' || nombreVisible.trim() === '') {
+      return c.json({ success: false, error: 'Debe ingresar un nombre válido para la categoría.' }, 400);
+    }
+
+    const nuevaCat = crearCategoriaCustom(nombreVisible, tipo || 'AMBOS', icono || '🏷️');
+    return c.json({ success: true, message: 'Categoría personalizada creada con éxito.', data: nuevaCat });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// GET /sugerencias-clasificacion - Transacciones grandes y contrapartes frecuentes con sus fechas
+bankRoutes.get('/sugerencias-clasificacion', (c) => {
+  try {
+    const sugerencias = obtenerSugerenciasClasificacion();
+    return c.json({ success: true, data: sugerencias });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// GET /reglas - Obtener reglas de personas conocidas
+bankRoutes.get('/reglas', (c) => {
+  try {
+    const reglas = obtenerReglas();
+    return c.json({ success: true, data: reglas });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// POST /reglas - Crear nueva regla
+bankRoutes.post('/reglas', async (c) => {
+  try {
+    const body = await c.req.json();
+    const { keyword, banco, bancoContraparte, accion, categoriaDestino, tipoTransaccion, nota } = body;
+
+    if (!keyword || typeof keyword !== 'string' || keyword.trim() === '') {
+      return c.json({ success: false, error: 'Debe ingresar un nombre de persona o palabra clave válido.' }, 400);
+    }
+
+    const accionValida = accion || 'EXCLUIR_ANOMALIA';
+    const nuevaRegla = guardarRegla({
+      keyword: keyword.trim(),
+      banco: banco || undefined,
+      bancoContraparte: bancoContraparte || undefined,
+      accion: accionValida,
+      categoriaDestino: categoriaDestino || undefined,
+      tipoTransaccion: tipoTransaccion || 'TODOS',
+      nota: nota || '',
+    });
+
+    return c.json({ success: true, message: 'Regla agregada con éxito.', data: nuevaRegla });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// POST /reglas/lote - Crear reglas masivas en lote
+bankRoutes.post('/reglas/lote', async (c) => {
+  try {
+    const body = await c.req.json();
+    const { reglas } = body;
+
+    if (!Array.isArray(reglas) || reglas.length === 0) {
+      return c.json({ success: false, error: 'Debe proporcionar una lista de reglas a guardar.' }, 400);
+    }
+
+    const reglasAInsertar = reglas.map((r: any) => ({
+      keyword: String(r.keyword || '').trim(),
+      banco: r.banco || undefined,
+      bancoContraparte: r.bancoContraparte || undefined,
+      accion: r.accion || 'EXCLUIR_ANOMALIA',
+      categoriaDestino: r.categoriaDestino || undefined,
+      tipoTransaccion: r.tipoTransaccion || 'TODOS',
+      nota: r.nota || '',
+    })).filter((r) => r.keyword !== '');
+
+    const creadas = guardarReglasLote(reglasAInsertar);
+    return c.json({ success: true, message: `${creadas.length} reglas creadas en lote con éxito.`, data: creadas });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// DELETE /reglas/:id - Eliminar una regla
+bankRoutes.delete('/reglas/:id', (c) => {
+  try {
+    const id = c.req.param('id');
+    const ok = eliminarRegla(id);
+    if (!ok) return c.json({ success: false, error: 'Regla no encontrada.' }, 404);
+    return c.json({ success: true, message: 'Regla eliminada exitosamente.' });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// POST /reaplicar-reglas - Re-clasificar movimientos
+bankRoutes.post('/reaplicar-reglas', (c) => {
+  try {
+    reaplicarReglasAMovimientos();
+    return c.json({ success: true, message: 'Reglas re-aplicadas a todos los movimientos.' });
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500);
   }
@@ -256,7 +387,8 @@ bankRoutes.get('/imprimir-reporte', (c) => {
           <thead>
             <tr>
               <th>Nombre del Cliente / Originante</th>
-              <th>Banco / Entidad</th>
+              <th>Banco Cliente / Origen</th>
+              <th>Mi Cuenta</th>
               <th class="text-right">Frecuencia</th>
               <th class="text-right">Monto Promedio</th>
               <th class="text-right">Total Ingresado</th>
@@ -266,6 +398,7 @@ bankRoutes.get('/imprimir-reporte', (c) => {
             ${recurrentesIngresos.map((c) => `
               <tr>
                 <td><strong>${c.contraparteNombre}</strong></td>
+                <td><span style="color: #0284c7; font-weight: 600;">${c.contraparteBanco || 'Mismo Banco'}</span></td>
                 <td>${c.banco}</td>
                 <td class="text-right">${c.cantidadTransacciones} depósitos</td>
                 <td class="text-right">Bs. ${c.promedioBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
@@ -280,7 +413,8 @@ bankRoutes.get('/imprimir-reporte', (c) => {
           <thead>
             <tr>
               <th>Nombre del Proveedor / Entidad</th>
-              <th>Banco / Entidad</th>
+              <th>Banco Cliente / Destino</th>
+              <th>Mi Cuenta</th>
               <th class="text-right">Frecuencia</th>
               <th class="text-right">Monto Promedio</th>
               <th class="text-right">Total Pagado</th>
@@ -290,6 +424,7 @@ bankRoutes.get('/imprimir-reporte', (c) => {
             ${recurrentesEgresos.map((c) => `
               <tr>
                 <td><strong>${c.contraparteNombre}</strong></td>
+                <td><span style="color: #0284c7; font-weight: 600;">${c.contraparteBanco || 'Mismo Banco'}</span></td>
                 <td>${c.banco}</td>
                 <td class="text-right">${c.cantidadTransacciones} pagos</td>
                 <td class="text-right">Bs. ${c.promedioBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
@@ -305,7 +440,8 @@ bankRoutes.get('/imprimir-reporte', (c) => {
             <thead>
               <tr>
                 <th>Fecha</th>
-                <th>Banco</th>
+                <th>Mi Cuenta</th>
+                <th>Banco Cliente / Receptor</th>
                 <th>Tipo</th>
                 <th>Contraparte / Origen</th>
                 <th class="text-right">Monto (Bs.)</th>
@@ -317,6 +453,7 @@ bankRoutes.get('/imprimir-reporte', (c) => {
                 <tr>
                   <td>${a.fechaTexto}</td>
                   <td>${a.banco}</td>
+                  <td><span style="color: #0284c7; font-weight: 600;">${a.contraparteBanco || 'Traspaso Directo'}</span></td>
                   <td><span class="${a.tipo === 'INGRESO' ? 'badge-ingreso' : 'badge-egreso'}">${a.tipo}</span></td>
                   <td><strong>${a.contraparteNombre}</strong></td>
                   <td class="text-right" style="font-weight: 700;">Bs. ${a.montoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
@@ -714,7 +851,8 @@ bankRoutes.get('/imprimir-anomalias-pdf', (c) => {
             <thead>
               <tr>
                 <th>Fecha / Hora</th>
-                <th>Banco</th>
+                <th>Mi Cuenta</th>
+                <th>Banco Cliente / Receptor</th>
                 <th>Tipo</th>
                 <th>Contraparte / Origen</th>
                 <th class="text-right">Monto</th>
@@ -726,16 +864,161 @@ bankRoutes.get('/imprimir-anomalias-pdf', (c) => {
                 <tr>
                   <td>${a.fechaTexto} ${a.hora !== '00:00:00' ? a.hora : ''}</td>
                   <td><strong>${a.banco}</strong></td>
+                  <td><span style="color: #0284c7; font-weight: 600;">${a.contraparteBanco || 'Traspaso Directo'}</span></td>
                   <td style="font-weight: 700;">${a.tipo}</td>
                   <td><strong>${a.contraparteNombre}</strong></td>
                   <td class="text-right" style="font-weight: 800;">${a.montoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
                   <td>${a.motivoAnomalia || a.glosaDetalle}</td>
                 </tr>
-              `).join('') || '<tr><td colspan="6" class="text-center">Sin anomalías detectadas en este lapso.</td></tr>'}
+              `).join('') || '<tr><td colspan="7" class="text-center">Sin anomalías detectadas en este lapso.</td></tr>'}
             </tbody>
           </table>
 
           <div class="footer">Reporte de Auditoría de Transacciones Anómalas • MAYAKI • ${fechaHoy}</div>
+        </div>
+      </body>
+      </html>
+    `;
+    return c.html(html);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// PDF: Transacciones Grandes y Anomalías (Sugerencias Rápida)
+bankRoutes.get('/imprimir-sugerencias-pdf', (c) => {
+  try {
+    const dataSug = obtenerSugerenciasClasificacion();
+    let list = dataSug.sugerenciasGrandesAnomalas || [];
+
+    const tipo = c.req.query('tipo');
+    const search = c.req.query('search');
+
+    if (tipo && tipo !== 'TODOS') {
+      list = list.filter((item) => item.tipo === tipo);
+    }
+
+    if (search && search.trim() !== '') {
+      const q = search.trim().toLowerCase();
+      list = list.filter(
+        (item) =>
+          item.contraparteNombre.toLowerCase().includes(q) ||
+          (item.contraparteBanco || '').toLowerCase().includes(q) ||
+          item.banco.toLowerCase().includes(q) ||
+          (item.glosaEjemplo || '').toLowerCase().includes(q) ||
+          String(item.totalMontoBs).includes(q)
+      );
+    }
+
+    const totalIngresos = list.filter((i) => i.tipo === 'INGRESO').reduce((acc, i) => acc + i.totalMontoBs, 0);
+    const totalEgresos = list.filter((i) => i.tipo === 'EGRESO').reduce((acc, i) => acc + i.totalMontoBs, 0);
+    const totalAnomalias = list.filter((i) => i.esAnomalo).length;
+    const fechaHoy = new Date().toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <title>Reporte - Transacciones Grandes y Anomalías (Pendientes) - MAYAKI</title>
+        <style>
+          * { box-sizing: border-box; }
+          @media screen {
+            body { background-color: #525659; display: flex; justify-content: center; padding: 16px 8px; margin: 0; font-family: 'Segoe UI', Arial, sans-serif; }
+            .pdf-page { width: 215.9mm; min-height: 279.4mm; background: #ffffff; box-shadow: 0 10px 35px rgba(0, 0, 0, 0.45); padding: 10mm 10mm 10mm 13mm; border-radius: 2px; }
+          }
+          @media print {
+            @page { size: letter portrait; margin-top: 10mm; margin-right: 10mm; margin-bottom: 10mm; margin-left: 13mm; }
+            body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; font-family: 'Segoe UI', Arial, sans-serif; }
+            .pdf-page { width: 100% !important; box-shadow: none !important; padding: 0 !important; }
+          }
+          body { color: #0f172a; line-height: 1.3; font-size: 9.5pt; }
+          .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0f172a; padding-bottom: 6px; margin-bottom: 10px; }
+          .brand-logo-box { display: flex; align-items: center; gap: 10px; }
+          .brand-logo-title { font-size: 11.5pt; font-weight: 800; color: #0f172a; text-transform: uppercase; }
+          .brand-logo-sub { font-size: 8.5pt; color: #475569; margin-top: 1px; }
+          .meta-info { text-align: right; font-size: 8.5pt; color: #475569; line-height: 1.3; }
+          .summary-bar { display: flex; justify-content: space-between; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px 12px; margin-bottom: 12px; font-size: 8.5pt; }
+          .summary-item { text-align: center; }
+          .summary-val { font-weight: 800; font-size: 10pt; margin-top: 2px; }
+          table { width: 100%; border-collapse: collapse; font-size: 9pt; margin-top: 6px; }
+          th { background: #f1f5f9; color: #0f172a; font-weight: 700; text-align: left; padding: 5px 6px; border: 1px solid #94a3b8; }
+          td { padding: 4px 6px; border: 1px solid #cbd5e1; color: #0f172a; }
+          tbody tr:nth-child(even) { background-color: #f8fafc !important; }
+          tbody tr:nth-child(odd) { background-color: #ffffff !important; }
+          .text-right { text-align: right; }
+          .badge { display: inline-block; padding: 2px 5px; border-radius: 3px; font-size: 7.5pt; font-weight: 700; }
+          .badge-ingreso { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+          .badge-egreso { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+          .badge-anomalo { background: #ffedd5; color: #9a3412; border: 1px solid #fdba74; }
+          .footer { margin-top: 16px; border-top: 1px solid #cbd5e1; padding-top: 5px; font-size: 8.5pt; color: #64748b; text-align: center; }
+        </style>
+      </head>
+      <body>
+        <div class="pdf-page">
+          <div class="header">
+            <div class="brand-logo-box">
+              <img src="${LOGO_MAYAKI_BASE64}" alt="MAYAKI" style="height: 42px; width: auto; object-fit: contain;" />
+              <div>
+                <div class="brand-logo-title">REPORTE DE TRANSACCIONES GRANDES Y ANOMALÍAS</div>
+                <div class="brand-logo-sub">Clasificación Rápida por Persona y Banco Origen • Sistema MAYAKI</div>
+              </div>
+            </div>
+            <div class="meta-info">
+              <div><strong>Fecha Emisión:</strong> ${fechaHoy}</div>
+              <div><strong>Pendientes de Clasificar:</strong> ${list.length} registros</div>
+            </div>
+          </div>
+
+          <div class="summary-bar">
+            <div class="summary-item">
+              <div style="color: #64748b; font-weight: 600;">Registros Pendientes</div>
+              <div class="summary-val" style="color: #ea580c;">${list.length}</div>
+            </div>
+            <div class="summary-item">
+              <div style="color: #64748b; font-weight: 600;">Total Ingresos</div>
+              <div class="summary-val" style="color: #166534;">Bs. ${totalIngresos.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</div>
+            </div>
+            <div class="summary-item">
+              <div style="color: #64748b; font-weight: 600;">Total Egresos</div>
+              <div class="summary-val" style="color: #991b1b;">Bs. ${totalEgresos.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</div>
+            </div>
+            <div class="summary-item">
+              <div style="color: #64748b; font-weight: 600;">Anomalías Flag</div>
+              <div class="summary-val" style="color: #0284c7;">${totalAnomalias}</div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Persona / Contraparte</th>
+                <th>Banco Origen</th>
+                <th>Mi Cuenta</th>
+                <th>Tipo</th>
+                <th class="text-right">Monto Total (Bs.)</th>
+                <th class="text-right">Movs</th>
+                <th>Glosa / Motivo de Alerta</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${list.map((item) => `
+                <tr>
+                  <td><strong>${item.contraparteNombre}</strong></td>
+                  <td><span style="color: #0284c7; font-weight: 600;">${item.contraparteBanco || 'Mismo Banco'}</span></td>
+                  <td>${item.banco}</td>
+                  <td><span class="badge ${item.tipo === 'INGRESO' ? 'badge-ingreso' : 'badge-egreso'}">${item.tipo}</span></td>
+                  <td class="text-right" style="font-weight: 800; color: ${item.tipo === 'INGRESO' ? '#166534' : '#991b1b'};">
+                    Bs. ${item.totalMontoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td class="text-right" style="font-weight: 700;">${item.cantidadMovimientos}</td>
+                  <td style="font-size: 8.5pt;">${item.glosaEjemplo || item.motivoEjemplo}</td>
+                </tr>
+              `).join('') || '<tr><td colspan="7" class="text-center">No hay transacciones grandes ni anomalías pendientes.</td></tr>'}
+            </tbody>
+          </table>
+
+          <div class="footer">Reporte de Transacciones Grandes y Anomalías (Pendientes) • MAYAKI • ${fechaHoy}</div>
         </div>
       </body>
       </html>
@@ -810,6 +1093,8 @@ bankRoutes.get('/imprimir-recurrentes-pdf', (c) => {
                 <thead>
                   <tr>
                     <th>Cliente / Originante</th>
+                    <th>Banco Cliente / Origen</th>
+                    <th>Mi Cuenta</th>
                     <th class="text-right">Movs</th>
                     <th class="text-right">Total Acumulado</th>
                   </tr>
@@ -817,7 +1102,9 @@ bankRoutes.get('/imprimir-recurrentes-pdf', (c) => {
                 <tbody>
                   ${recIngresos.map((c) => `
                     <tr>
-                      <td><strong>${c.contraparteNombre}</strong><br><span style="font-size: 8.5pt; color: #475569;">${c.banco}</span></td>
+                      <td><strong>${c.contraparteNombre}</strong></td>
+                      <td><span style="color: #0284c7; font-weight: 600;">${c.contraparteBanco || 'Mismo Banco'}</span></td>
+                      <td>${c.banco}</td>
                       <td class="text-right">${c.cantidadTransacciones}</td>
                       <td class="text-right" style="font-weight: 700;">${c.totalMontoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
                     </tr>
@@ -832,6 +1119,8 @@ bankRoutes.get('/imprimir-recurrentes-pdf', (c) => {
                 <thead>
                   <tr>
                     <th>Proveedor / Beneficiario</th>
+                    <th>Banco Cliente / Destino</th>
+                    <th>Mi Cuenta</th>
                     <th class="text-right">Movs</th>
                     <th class="text-right">Total Acumulado</th>
                   </tr>
@@ -839,7 +1128,9 @@ bankRoutes.get('/imprimir-recurrentes-pdf', (c) => {
                 <tbody>
                   ${recEgresos.map((c) => `
                     <tr>
-                      <td><strong>${c.contraparteNombre}</strong><br><span style="font-size: 8.5pt; color: #475569;">${c.banco}</span></td>
+                      <td><strong>${c.contraparteNombre}</strong></td>
+                      <td><span style="color: #0284c7; font-weight: 600;">${c.contraparteBanco || 'Mismo Banco'}</span></td>
+                      <td>${c.banco}</td>
                       <td class="text-right">${c.cantidadTransacciones}</td>
                       <td class="text-right" style="font-weight: 700;">${c.totalMontoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
                     </tr>
@@ -935,7 +1226,8 @@ bankRoutes.get('/imprimir-movimientos-pdf', (c) => {
             <thead>
               <tr>
                 <th>Fecha / Hora</th>
-                <th>Banco</th>
+                <th>Mi Cuenta</th>
+                <th>Banco Cliente / Receptor</th>
                 <th>Tipo</th>
                 <th>Contraparte / Origen</th>
                 <th>Categoría</th>
@@ -949,6 +1241,7 @@ bankRoutes.get('/imprimir-movimientos-pdf', (c) => {
                 <tr>
                   <td>${m.fechaTexto} ${m.hora !== '00:00:00' ? m.hora : ''}</td>
                   <td><strong>${m.banco}</strong></td>
+                  <td><span style="color: #0284c7; font-weight: 600;">${m.contraparteBanco || 'Traspaso Directo'}</span></td>
                   <td style="font-weight: 700;">${m.tipo}</td>
                   <td><strong>${m.contraparteNombre}</strong></td>
                   <td>${m.categoria}</td>
@@ -956,7 +1249,7 @@ bankRoutes.get('/imprimir-movimientos-pdf', (c) => {
                   <td class="text-right">${m.saldoBs.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
                   <td style="font-size: 8.5pt;">${m.glosaDetalle}</td>
                 </tr>
-              `).join('') || '<tr><td colspan="8" class="text-center">No se encontraron movimientos para los filtros seleccionados.</td></tr>'}
+              `).join('') || '<tr><td colspan="9" class="text-center">No se encontraron movimientos para los filtros seleccionados.</td></tr>'}
             </tbody>
           </table>
 

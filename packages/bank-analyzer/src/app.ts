@@ -4,7 +4,7 @@ import bankRoutes from './routes/bank';
 import path from 'path';
 import fs from 'fs';
 import { parsearExtractoBancarioBuffer } from './services/bankParser.service';
-import { guardarMovimientos, vaciarMovimientos } from './services/bankAnalytics.service';
+import { guardarMovimientos, vaciarMovimientos, reaplicarReglasAMovimientos } from './services/bankAnalytics.service';
 
 const app = new Hono();
 
@@ -61,6 +61,9 @@ function autocargarExtractos() {
           console.error(`  ❌ Error al auto-cargar ${file}:`, e.message);
         }
       });
+
+      // Re-aplicar todas las reglas persistentes de disco a las transacciones auto-cargadas
+      reaplicarReglasAMovimientos();
     } else {
       console.warn('⚠️ No se encontró la carpeta _extractos en ninguna de las rutas posibles.');
     }
